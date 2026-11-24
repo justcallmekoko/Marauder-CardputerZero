@@ -1,11 +1,11 @@
 {
   "app_name": "Marauder",
   "package_name": "marauder_cardputerzero",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Marauder system and radio toolkit for Cardputer Zero",
   "store": {
     "summary": "System diagnostics and radio toolkit for Cardputer Zero",
-    "description": "A native C++ and LVGL Marauder port for Cardputer Zero. The current milestone adds the classic black and multicolor Marauder menu, FN-free WASD/Enter navigation, read-only diagnostics, adapter selection and capability reporting, and managed-mode Wi-Fi scanning; active radio features remain hardware-gated.",
+    "description": "A native C++ and LVGL Marauder port for Cardputer Zero. The current milestone adds the classic black and multicolor Marauder menu, direct use of the keyboard's printed arrow keys without Fn, read-only diagnostics, adapter selection and capability reporting, and managed-mode Wi-Fi scanning; active radio features remain hardware-gated.",
     "categories": [
       "Security",
       "System Tools"

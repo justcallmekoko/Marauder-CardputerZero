@@ -22,9 +22,9 @@ struct HelpRow {
 };
 
 constexpr std::array<HelpRow, 5> kDashboardRows = {{
-    {"W / S", "Move menu selection"},
-    {"ENTER / D", "Open / run"},
-    {"A / ESC", "Back"},
+    {"UP / DOWN KEYS", "Move (no Fn required)"},
+    {"ENTER / RIGHT KEY", "Open / run"},
+    {"LEFT KEY / ESC", "Back"},
     {"5 / 6 / 7 / 8", "Adapter / theme / info / scan"},
     {"HOLD ESC / 4", "Exit from main menu"},
 }};
