@@ -50,7 +50,6 @@ private:
     bool ctrl_active_{false};
     bool alt_active_{false};
     int16_t pressed_key_{-1};
-    uint32_t held_pointer_key_{0};
     Mode mode_{Mode::Base};
 };
 

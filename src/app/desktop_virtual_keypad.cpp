@@ -377,13 +377,6 @@ bool DesktopVirtualKeypad::handle_pointer(int32_t x, int32_t y, bool pressed) {
         if (hit == kEscapeKeyIndex) {
             emit_key_state(LV_KEY_ESC, true);
         }
-        else if (hit >= 0 && static_cast<size_t>(hit) < kMatrixKeyCount &&
-                 kKeys[static_cast<size_t>(hit)].kind == KeyKind::Character &&
-                 kKeys[static_cast<size_t>(hit)].base == '4' && mode_ == Mode::Base &&
-                 !fn_active_ && !ctrl_active_ && !alt_active_) {
-            held_pointer_key_ = '4';
-            emit_key_state(held_pointer_key_, true);
-        }
         return hit >= 0;
     }
 
@@ -392,10 +385,6 @@ bool DesktopVirtualKeypad::handle_pointer(int32_t x, int32_t y, bool pressed) {
     pressed_key_ = -1;
     if (released_key == kEscapeKeyIndex) {
         emit_key_state(LV_KEY_ESC, false);
-    }
-    else if (held_pointer_key_ != 0) {
-        emit_key_state(held_pointer_key_, false);
-        held_pointer_key_ = 0;
     }
     else if (activated) {
         handle_key(static_cast<uint8_t>(hit));
