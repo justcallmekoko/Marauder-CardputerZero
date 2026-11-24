@@ -76,7 +76,7 @@ void NavBar::update_icon_buttons() {
         {ICON_MINUS, previous_adapter_cb},
         {ICON_WIFI_HIGH, select_adapter_cb},
         {ICON_PLUS, next_adapter_cb},
-        {ICON_INFO, refresh_cb},
+        {ICON_INFO, toggle_adapter_details_cb},
     }};
     const std::array<IconSpec, 5> diagnostics = {{
         {ICON_SQUARE_ARROW_LEFT, show_dashboard_cb},
@@ -99,6 +99,7 @@ void NavBar::update_icon_buttons() {
         lv_obj_remove_event_cb(root, previous_adapter_cb);
         lv_obj_remove_event_cb(root, select_adapter_cb);
         lv_obj_remove_event_cb(root, next_adapter_cb);
+        lv_obj_remove_event_cb(root, toggle_adapter_details_cb);
         lv_obj_remove_event_cb(root, refresh_cb);
         lv_obj_remove_event_cb(root, request_quit_cb);
         lv_obj_add_event_cb(root, icons[i].click_cb, LV_EVENT_CLICKED, &view_model_);
@@ -126,6 +127,9 @@ void NavBar::select_adapter_cb(lv_event_t* event) {
 }
 void NavBar::next_adapter_cb(lv_event_t* event) {
     static_cast<viewmodel::BaseViewModel*>(lv_event_get_user_data(event))->next_adapter();
+}
+void NavBar::toggle_adapter_details_cb(lv_event_t* event) {
+    static_cast<viewmodel::BaseViewModel*>(lv_event_get_user_data(event))->toggle_adapter_details();
 }
 void NavBar::refresh_cb(lv_event_t* event) {
     static_cast<viewmodel::BaseViewModel*>(lv_event_get_user_data(event))->refresh_diagnostics();

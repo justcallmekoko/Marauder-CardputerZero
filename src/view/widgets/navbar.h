@@ -32,6 +32,7 @@ private:
     static void previous_adapter_cb(lv_event_t* event);
     static void select_adapter_cb(lv_event_t* event);
     static void next_adapter_cb(lv_event_t* event);
+    static void toggle_adapter_details_cb(lv_event_t* event);
     static void refresh_cb(lv_event_t* event);
     static void request_quit_cb(lv_event_t* event);
     static void update_icons_cb(lv_observer_t* observer, lv_subject_t* subject);

@@ -11,6 +11,7 @@ Native C++17/LVGL 9.5 port of ESP32 Marauder for the ARM64 Linux-based Cardputer
 - Dashboard, wireless-adapter selection, and scrollable diagnostics screens
 - Read-only wireless adapter catalog with interface, driver, PHY, bus, VID/PID, MAC, stable identity, and explicit monitor/injection verification state
 - Keyboard-driven adapter browsing and in-app selection without changing interface state
+- Viewport-safe summary/details paging for adapter information (`8` toggles pages)
 - Read-only inventory of:
   - operating system, kernel, uptime, memory, and storage
   - network interfaces, Linux drivers, state, and wireless classification
@@ -69,7 +70,7 @@ cmake --build --preset linux-x86-64-dbg
 cmake --workflow --preset cp0-cross-package
 ```
 
-The expected artifact is `dist/Marauder_0.2.0_rev1_arm64.deb`. Packaging and deployment remain separate actions.
+The expected artifact is `dist/Marauder_0.2.1_rev1_arm64.deb`. Packaging and deployment remain separate actions.
 
 ## Safety and scope
 

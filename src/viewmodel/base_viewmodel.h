@@ -47,6 +47,7 @@ public:
     void previous_adapter();
     void next_adapter();
     void select_highlighted_adapter();
+    void toggle_adapter_details();
     void request_quit();
 
 private:
@@ -65,6 +66,7 @@ private:
     std::vector<platform::wireless::AdapterInfo> adapters_;
     std::string adapter_error_;
     std::size_t highlighted_adapter_{0};
+    bool adapter_details_expanded_{false};
 };
 
 } // namespace viewmodel

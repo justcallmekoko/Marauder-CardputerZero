@@ -20,7 +20,8 @@ void AdaptersScreen::build_content(lv_obj_t* content) {
     lv_obj_set_size(panel, LV_PCT(100), LV_PCT(100));
     lv_obj_set_style_pad_hor(panel, 8, 0);
     lv_obj_set_style_pad_ver(panel, 3, 0);
-    lv_obj_clear_flag(panel, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_scroll_dir(panel, LV_DIR_VER);
+    lv_obj_set_scrollbar_mode(panel, LV_SCROLLBAR_MODE_ACTIVE);
 
     auto* details = lv_label_create(panel);
     lv_obj_set_width(details, LV_PCT(100));

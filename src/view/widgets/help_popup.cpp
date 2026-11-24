@@ -34,7 +34,7 @@ constexpr std::array<HelpRow, 5> kAdapterRows = {{
     {"5", "Previous adapter"},
     {"6", "Select adapter"},
     {"7", "Next adapter"},
-    {"8", "Refresh adapters"},
+    {"8", "More / summary"},
 }};
 
 constexpr std::array<HelpRow, 5> kDiagnosticsRows = {{
