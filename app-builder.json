@@ -1,0 +1,35 @@
+{
+  "app_name": "Marauder",
+  "package_name": "marauder_cardputerzero",
+  "version": "0.1.0",
+  "description": "Marauder system and radio toolkit for Cardputer Zero",
+  "store": {
+    "summary": "System diagnostics and radio toolkit for Cardputer Zero",
+    "description": "A native C++ and LVGL port of ESP32 Marauder for Cardputer Zero. The initial milestone provides read-only system, interface, USB, and peripheral diagnostics; radio features are added only after hardware capability validation.",
+    "categories": [
+      "Security",
+      "System Tools"
+    ],
+    "screenshots": [
+      "screenshot/app-simulator-dark-darwin.png",
+      "screenshot/app-simulator-light-darwin.png"
+    ],
+    "icon": "assets/images/marauder-cardputerzero.png",
+    "license": "AGPL-3.0-only",
+    "source_repo": "https://github.com/justcallmekoko/Marauder-CardputerZero",
+    "author": {
+      "github": "justcallmekoko",
+      "display_name": "Just Call Me Koko"
+    },
+    "share_code": "MARA",
+    "permissions": {
+      "camera": false,
+      "microphone": false,
+      "imu": false,
+      "network": false,
+      "additional_hardware": true,
+      "background_service": false,
+      "external_display": false
+    }
+  }
+}
