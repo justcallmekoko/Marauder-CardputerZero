@@ -30,8 +30,22 @@ enum class MarauderMenuAction {
     ToggleTheme,
 };
 
+enum class MarauderMenuColor {
+    White,
+    Cyan,
+    Blue,
+    Red,
+    Green,
+    LightGrey,
+    Magenta,
+    Purple,
+    Orange,
+    Yellow,
+};
+
 struct MarauderMenuItem {
     const char* label;
+    MarauderMenuColor color{MarauderMenuColor::White};
     MarauderMenuAction action{MarauderMenuAction::None};
     MarauderMenuId submenu{MarauderMenuId::Main};
     bool opens_submenu{false};

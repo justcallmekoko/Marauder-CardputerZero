@@ -170,19 +170,20 @@ private:
         }
 
         if (view_model_.current_page() == model::AppPage::Dashboard && !long_pressed) {
-            if (key == LV_KEY_UP) {
+            if (key == LV_KEY_UP || key == 'w' || key == 'W') {
                 view_model_.marauder_menu_previous();
                 return true;
             }
-            if (key == LV_KEY_DOWN) {
+            if (key == LV_KEY_DOWN || key == 's' || key == 'S') {
                 view_model_.marauder_menu_next();
                 return true;
             }
-            if (key == LV_KEY_ENTER || key == LV_KEY_RIGHT) {
+            if (key == LV_KEY_ENTER || key == LV_KEY_RIGHT || key == 'd' || key == 'D') {
                 view_model_.marauder_menu_activate();
                 return true;
             }
-            if (key == LV_KEY_LEFT && !view_model_.marauder_menu_at_root()) {
+            if ((key == LV_KEY_LEFT || key == 'a' || key == 'A') &&
+                !view_model_.marauder_menu_at_root()) {
                 view_model_.marauder_menu_back();
                 return true;
             }

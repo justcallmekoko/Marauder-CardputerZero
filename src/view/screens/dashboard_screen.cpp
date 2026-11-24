@@ -12,11 +12,31 @@
 
 namespace screen {
 namespace {
-constexpr uint32_t kMarauderRed = 0xe53935;
-constexpr uint32_t kMarauderDarkRed = 0xb71c1c;
-constexpr uint32_t kMarauderBlack = 0x050505;
-constexpr uint32_t kMarauderWhite = 0xf5f5f5;
-constexpr uint32_t kMarauderGray = 0x777777;
+constexpr uint32_t kMarauderBlack = 0x000000;
+constexpr uint32_t kMarauderWhite = 0xffffff;
+constexpr uint32_t kMarauderDarkGray = 0x303030;
+constexpr uint32_t kMarauderLightGray = 0xd6d3d6;
+
+lv_color_t menu_color(model::MarauderMenuColor color) {
+    switch (color) {
+        case model::MarauderMenuColor::White: return lv_color_hex(0xffffff);
+        case model::MarauderMenuColor::Cyan: return lv_color_hex(0x00ffff);
+        case model::MarauderMenuColor::Blue: return lv_color_hex(0x0000ff);
+        case model::MarauderMenuColor::Red: return lv_color_hex(0xff0000);
+        case model::MarauderMenuColor::Green: return lv_color_hex(0x00ff00);
+        case model::MarauderMenuColor::LightGrey: return lv_color_hex(kMarauderLightGray);
+        case model::MarauderMenuColor::Magenta: return lv_color_hex(0xff00ff);
+        case model::MarauderMenuColor::Purple: return lv_color_hex(0x7b007b);
+        case model::MarauderMenuColor::Orange: return lv_color_hex(0xffb600);
+        case model::MarauderMenuColor::Yellow: return lv_color_hex(0xffff00);
+    }
+    return lv_color_hex(kMarauderWhite);
+}
+
+bool needs_light_label(model::MarauderMenuColor color) {
+    return color == model::MarauderMenuColor::Blue ||
+           color == model::MarauderMenuColor::Purple;
+}
 }
 
 DashboardScreen::DashboardScreen(viewmodel::BaseViewModel& view_model, app::AssetManager& assets)
@@ -26,7 +46,6 @@ DashboardScreen::DashboardScreen(viewmodel::BaseViewModel& view_model, app::Asse
 
 DashboardScreen::~DashboardScreen() {
     if (menu_observer_) lv_observer_remove(menu_observer_);
-    if (theme_observer_) lv_observer_remove(theme_observer_);
 }
 
 void DashboardScreen::build_content(lv_obj_t* content) {
@@ -72,25 +91,18 @@ void DashboardScreen::build_content(lv_obj_t* content) {
                                            view_model().marauder_menu_generation_subject(),
                                            menu_changed_cb,
                                            this);
-    theme_observer_ = reactive::observe_obj(panel_,
-                                            view_model().dark_mode_subject(),
-                                            menu_changed_cb,
-                                            this);
     render_menu();
 }
 
 void DashboardScreen::render_menu() {
     if (!panel_) return;
-    const bool dark = view_model().is_dark_mode();
-    const auto background = lv_color_hex(dark ? kMarauderBlack : 0xf7f7f7);
-    const auto normal_text = lv_color_hex(dark ? kMarauderWhite : 0x161616);
-    const auto muted_text = lv_color_hex(kMarauderGray);
-    const auto accent = lv_color_hex(dark ? kMarauderRed : kMarauderDarkRed);
+    const auto background = lv_color_hex(kMarauderBlack);
+    const auto muted_text = lv_color_hex(kMarauderLightGray);
 
     lv_obj_set_style_bg_color(panel_, background, 0);
     lv_obj_set_style_bg_opa(panel_, LV_OPA_COVER, 0);
     lv_label_set_text(menu_title_, view_model().marauder_menu_title());
-    lv_obj_set_style_text_color(menu_title_, accent, 0);
+    lv_obj_set_style_text_color(menu_title_, muted_text, 0);
 
     const auto count = view_model().marauder_menu_item_count();
     const auto selected = view_model().marauder_menu_selected_index();
@@ -101,6 +113,7 @@ void DashboardScreen::render_menu() {
         }
         lv_obj_remove_flag(rows_[index], LV_OBJ_FLAG_HIDDEN);
         const auto& item = view_model().marauder_menu_item(index);
+        const auto item_color = menu_color(item.color);
         std::string label = index == selected ? "> " : "  ";
         label += item.label;
         if (item.opens_submenu) label += "  >";
@@ -109,20 +122,25 @@ void DashboardScreen::render_menu() {
 
         const bool active = index == selected;
         lv_obj_set_style_bg_opa(rows_[index], active ? LV_OPA_COVER : LV_OPA_TRANSP, 0);
-        lv_obj_set_style_bg_color(rows_[index], accent, 0);
+        lv_obj_set_style_bg_color(rows_[index], item.available ? item_color : lv_color_hex(kMarauderDarkGray), 0);
+        const bool light_label = item.available && needs_light_label(item.color);
+        lv_obj_set_style_border_width(rows_[index], !active && light_label ? 2 : 0, 0);
+        lv_obj_set_style_border_side(rows_[index], LV_BORDER_SIDE_LEFT, 0);
+        lv_obj_set_style_border_color(rows_[index], item_color, 0);
         lv_obj_set_style_text_color(row_labels_[index],
-                                    active ? lv_color_hex(kMarauderWhite) :
-                                    item.available ? normal_text : muted_text,
+                                    active && item.available && !light_label ? lv_color_hex(kMarauderBlack) :
+                                    light_label ? lv_color_hex(kMarauderWhite) :
+                                    item.available ? item_color : muted_text,
                                     0);
     }
 
     const auto& selected_item = view_model().marauder_menu_item(selected);
     if (!selected_item.available) {
-        lv_label_set_text(footer_, "COMING SOON   LEFT / ESC  BACK");
+        lv_label_set_text(footer_, "COMING SOON   A / LEFT / ESC  BACK");
     } else if (view_model().marauder_menu_at_root()) {
-        lv_label_set_text(footer_, "UP/DOWN  ENTER SELECT   HOLD ESC EXIT");
+        lv_label_set_text(footer_, "W/S MOVE   ENTER/D SELECT   HOLD ESC EXIT");
     } else {
-        lv_label_set_text(footer_, "UP/DOWN  ENTER SELECT   LEFT BACK");
+        lv_label_set_text(footer_, "W/S MOVE   ENTER/D SELECT   A BACK");
     }
     lv_obj_set_style_text_color(footer_, muted_text, 0);
 }

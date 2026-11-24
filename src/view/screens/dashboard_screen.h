@@ -26,7 +26,6 @@ private:
     std::array<lv_obj_t*, 5> row_labels_{};
     lv_obj_t* footer_{nullptr};
     lv_observer_t* menu_observer_{nullptr};
-    lv_observer_t* theme_observer_{nullptr};
 };
 
 } // namespace screen

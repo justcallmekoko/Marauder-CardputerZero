@@ -4,7 +4,10 @@
 
 #include "marauder_menu.h"
 
+#include <string>
+
 using model::MarauderMenuAction;
+using model::MarauderMenuColor;
 using model::MarauderMenuModel;
 
 namespace {
@@ -19,6 +22,17 @@ bool select_index(MarauderMenuModel& menu, std::size_t index) {
 int main() {
     MarauderMenuModel menu;
     if (menu.item_count() != 5 || menu.selected_index() != 0 || menu.depth() != 1) return 1;
+    if (std::string(menu.title()) != "MARAUDER") return 21;
+    const MarauderMenuColor root_colors[] = {
+        MarauderMenuColor::Green,
+        MarauderMenuColor::Cyan,
+        MarauderMenuColor::Red,
+        MarauderMenuColor::Blue,
+        MarauderMenuColor::LightGrey,
+    };
+    for (std::size_t index = 0; index < menu.item_count(); ++index) {
+        if (menu.item(index).color != root_colors[index]) return 22;
+    }
     menu.previous();
     if (menu.selected_index() != 4) return 2;
     menu.next();

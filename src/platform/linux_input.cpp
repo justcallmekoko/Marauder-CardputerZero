@@ -198,6 +198,14 @@ uint32_t map_evdev_key(uint16_t code) {
         case KEY_ENTER:
         case KEY_KPENTER:
             return LV_KEY_ENTER;
+        case KEY_W:
+            return 'w';
+        case KEY_A:
+            return 'a';
+        case KEY_S:
+            return 's';
+        case KEY_D:
+            return 'd';
         case KEY_Z:
             return 'z';
         case KEY_C:
@@ -234,6 +242,7 @@ bool has_nav_keys(int fd) {
 
     return has_key(KEY_ESC) || has_key(KEY_LEFT) || has_key(KEY_RIGHT) ||
            has_key(KEY_UP) || has_key(KEY_DOWN) || has_key(KEY_ENTER) || has_key(KEY_KPENTER) ||
+           has_key(KEY_W) || has_key(KEY_A) || has_key(KEY_S) || has_key(KEY_D) ||
            has_key(KEY_Z) || has_key(KEY_C) || has_key(KEY_4) || has_key(KEY_5) || has_key(KEY_6) ||
            has_key(KEY_7) || has_key(KEY_8) || has_key(KEY_SYSRQ) || has_key(KEY_HELP);
 }

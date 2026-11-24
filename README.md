@@ -14,7 +14,7 @@ Native C++17/LVGL 9.5 port of ESP32 Marauder for the ARM64 Linux-based Cardputer
 - Viewport-safe summary/details paging for adapter information (`8` toggles pages)
 - Read-only kernel capability probing for monitor-mode support; injection remains unverified until an explicit hardware test
 - Non-blocking managed-mode Wi-Fi scanning on the selected adapter, with strongest-first paginated results
-- Arrow-key menu navigation (`Up`/`Down`, `Enter`/`Right`, `Left`/`Esc`) while retaining `4`–`8` quick functions
+- FN-free menu navigation (`W`/`S`, `Enter`/`D`, `A`/`Esc`) with arrow-key aliases and retained `4`–`8` quick functions
 - Read-only inventory of:
   - operating system, kernel, uptime, memory, and storage
   - network interfaces, Linux drivers, state, and wireless classification
@@ -37,7 +37,7 @@ The adapter layer enumerates Linux wireless interfaces, correlates USB metadata,
 
 ## Keyboard workflow
 
-The main screen follows the Marauder hierarchy: **WiFi**, **Bluetooth**, **GPS**, **Device**, and **Settings**. Use `Up`/`Down` to move, `Enter` or `Right` to open, and `Left` or `Esc` to go back. Unimplemented functions are visibly marked `soon` rather than silently doing nothing.
+The main screen follows the Marauder hierarchy and classic black/multicolor palette: **WiFi**, **Bluetooth**, **GPS**, **Device**, and **Settings**. Use `W`/`S` to move, `Enter` or `D` to open, and `A` or `Esc` to go back without holding `Fn`. The physical arrow keys remain aliases. Unimplemented functions are visibly marked `soon` rather than silently doing nothing.
 
 Quick functions remain available:
 
@@ -86,7 +86,7 @@ cmake --build --preset linux-x86-64-dbg
 cmake --workflow --preset cp0-cross-package
 ```
 
-The expected artifact is `dist/Marauder_0.5.0_rev1_arm64.deb`. Packaging and deployment remain separate actions.
+The expected artifact is `dist/Marauder_0.5.1_rev1_arm64.deb`. Packaging and deployment remain separate actions.
 
 ## Safety and scope
 

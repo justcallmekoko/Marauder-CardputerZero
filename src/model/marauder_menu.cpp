@@ -10,62 +10,63 @@ namespace model {
 namespace {
 
 using Action = MarauderMenuAction;
+using Color = MarauderMenuColor;
 using Id = MarauderMenuId;
 using Item = MarauderMenuItem;
 
 const std::vector<Item>& items_for(Id menu) {
     static const std::vector<Item> main = {
-        {"WiFi", Action::None, Id::Wifi, true, true},
-        {"Bluetooth", Action::None, Id::Bluetooth, true, true},
-        {"GPS", Action::None, Id::Gps, true, true},
-        {"Device", Action::None, Id::Device, true, true},
-        {"Settings", Action::None, Id::Settings, true, true},
+        {"WiFi", Color::Green, Action::None, Id::Wifi, true, true},
+        {"Bluetooth", Color::Cyan, Action::None, Id::Bluetooth, true, true},
+        {"GPS", Color::Red, Action::None, Id::Gps, true, true},
+        {"Device", Color::Blue, Action::None, Id::Device, true, true},
+        {"Settings", Color::LightGrey, Action::None, Id::Settings, true, true},
     };
     static const std::vector<Item> wifi = {
-        {"Scanners", Action::None, Id::WifiScanners, true, true},
-        {"Sniffers", Action::None, Id::WifiSniffers, true, true},
-        {"Attacks", Action::None, Id::WifiAttacks, true, true},
-        {"General", Action::None, Id::WifiGeneral, true, true},
+        {"Scanners", Color::Orange, Action::None, Id::WifiScanners, true, true},
+        {"Sniffers", Color::Yellow, Action::None, Id::WifiSniffers, true, true},
+        {"Attacks", Color::Red, Action::None, Id::WifiAttacks, true, true},
+        {"General", Color::Purple, Action::None, Id::WifiGeneral, true, true},
     };
     static const std::vector<Item> wifi_scanners = {
-        {"Access Points", Action::OpenWifiScan, Id::Main, false, true},
-        {"Stations", Action::None, Id::Main, false, false},
-        {"Packet Monitor", Action::None, Id::Main, false, false},
+        {"Access Points", Color::Orange, Action::OpenWifiScan, Id::Main, false, true},
+        {"Stations", Color::Cyan, Action::None, Id::Main, false, false},
+        {"Packet Monitor", Color::Blue, Action::None, Id::Main, false, false},
     };
     static const std::vector<Item> wifi_sniffers = {
-        {"Probe Requests", Action::None, Id::Main, false, false},
-        {"Deauth", Action::None, Id::Main, false, false},
-        {"Pwnagotchi", Action::None, Id::Main, false, false},
+        {"Probe Requests", Color::Cyan, Action::None, Id::Main, false, false},
+        {"Deauth", Color::Red, Action::None, Id::Main, false, false},
+        {"Pwnagotchi", Color::Orange, Action::None, Id::Main, false, false},
     };
     static const std::vector<Item> wifi_attacks = {
-        {"Deauth", Action::None, Id::Main, false, false},
-        {"Beacon Spam", Action::None, Id::Main, false, false},
-        {"Evil Portal", Action::None, Id::Main, false, false},
+        {"Deauth", Color::Red, Action::None, Id::Main, false, false},
+        {"Beacon Spam", Color::Orange, Action::None, Id::Main, false, false},
+        {"Evil Portal", Color::Magenta, Action::None, Id::Main, false, false},
     };
     static const std::vector<Item> wifi_general = {
-        {"Adapter Setup", Action::OpenAdapters, Id::Main, false, true},
-        {"Scan Networks", Action::OpenWifiScan, Id::Main, false, true},
-        {"Saved Networks", Action::None, Id::Main, false, false},
+        {"Adapter Setup", Color::Purple, Action::OpenAdapters, Id::Main, false, true},
+        {"Scan Networks", Color::Green, Action::OpenWifiScan, Id::Main, false, true},
+        {"Saved Networks", Color::LightGrey, Action::None, Id::Main, false, false},
     };
     static const std::vector<Item> bluetooth = {
-        {"Scanners", Action::None, Id::Main, false, false},
-        {"Sniffers", Action::None, Id::Main, false, false},
-        {"General", Action::None, Id::Main, false, false},
+        {"Scanners", Color::Cyan, Action::None, Id::Main, false, false},
+        {"Sniffers", Color::Magenta, Action::None, Id::Main, false, false},
+        {"General", Color::LightGrey, Action::None, Id::Main, false, false},
     };
     static const std::vector<Item> gps = {
-        {"GPS Info", Action::None, Id::Main, false, false},
-        {"Wardrive", Action::None, Id::Main, false, false},
-        {"Track", Action::None, Id::Main, false, false},
+        {"GPS Info", Color::Red, Action::None, Id::Main, false, false},
+        {"Wardrive", Color::Green, Action::None, Id::Main, false, false},
+        {"Track", Color::Orange, Action::None, Id::Main, false, false},
     };
     static const std::vector<Item> device = {
-        {"Adapter Setup", Action::OpenAdapters, Id::Main, false, true},
-        {"System Info", Action::OpenDiagnostics, Id::Main, false, true},
-        {"Storage", Action::None, Id::Main, false, false},
+        {"Adapter Setup", Color::Blue, Action::OpenAdapters, Id::Main, false, true},
+        {"System Info", Color::Cyan, Action::OpenDiagnostics, Id::Main, false, true},
+        {"Storage", Color::LightGrey, Action::None, Id::Main, false, false},
     };
     static const std::vector<Item> settings = {
-        {"Light / Dark", Action::ToggleTheme, Id::Main, false, true},
-        {"Adapter Setup", Action::OpenAdapters, Id::Main, false, true},
-        {"System Info", Action::OpenDiagnostics, Id::Main, false, true},
+        {"Light / Dark", Color::LightGrey, Action::ToggleTheme, Id::Main, false, true},
+        {"Adapter Setup", Color::Green, Action::OpenAdapters, Id::Main, false, true},
+        {"System Info", Color::Cyan, Action::OpenDiagnostics, Id::Main, false, true},
     };
 
     switch (menu) {
@@ -85,7 +86,7 @@ const std::vector<Item>& items_for(Id menu) {
 
 const char* title_for(Id menu) {
     switch (menu) {
-        case Id::Main: return "ESP32 MARAUDER";
+        case Id::Main: return "MARAUDER";
         case Id::Wifi: return "WiFi";
         case Id::WifiScanners: return "WiFi > Scanners";
         case Id::WifiSniffers: return "WiFi > Sniffers";
@@ -96,7 +97,7 @@ const char* title_for(Id menu) {
         case Id::Device: return "Device";
         case Id::Settings: return "Settings";
     }
-    return "ESP32 MARAUDER";
+    return "MARAUDER";
 }
 
 } // namespace
