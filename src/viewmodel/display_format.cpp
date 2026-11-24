@@ -171,6 +171,10 @@ std::string clip_for_display(const std::string& value, std::size_t max_columns) 
     return clipped;
 }
 
+std::string menu_row_label(const std::string& label, bool available) {
+    return label + (available ? "" : "  [soon]");
+}
+
 std::string system_info_page(const platform::diagnostics::Snapshot& snapshot,
                              const model::SystemInfoModel& navigation) {
     std::ostringstream out;
@@ -183,7 +187,8 @@ std::string system_info_page(const platform::diagnostics::Snapshot& snapshot,
     for (std::size_t index = begin; index < end; ++index) {
         out << bounded_line(category_item(snapshot, navigation.page(), index, navigation.details_expanded())) << '\n';
     }
-    out << "5/7 PAGE  6 REFRESH  8 " << (navigation.details_expanded() ? "LESS" : "MORE");
+    out << "F/X PAGE  C/ENTER REFRESH\n"
+        << "Z/ESC BACK  D " << (navigation.details_expanded() ? "LESS" : "MORE");
     return out.str();
 }
 
@@ -197,7 +202,7 @@ std::string wifi_scan_page(const std::string& interface_name,
     if (interface_name.empty()) {
         out << "WIFI SCAN\n"
             << bounded_line(error.empty() ? "Select an adapter in Device > Setup" : error)
-            << "\n4 BACK   6 RESCAN   8 DETAILS";
+            << "\nC/ENTER RESCAN  Z/ESC BACK";
         return out.str();
     }
     if (details) {
@@ -215,7 +220,8 @@ std::string wifi_scan_page(const std::string& interface_name,
                 << "FREQ " << network.frequency_mhz << " MHz\n";
         }
         out << bounded_line("IF " + interface_name + "  " + (running ? "scanning" : error.empty() ? "ready" : "error")) << '\n'
-            << "5/7 ITEM  6 SCAN  8 SUMMARY";
+            << "F/X ITEM  C/ENTER SCAN\n"
+            << "Z/ESC BACK  D SUMMARY";
         return out.str();
     }
 
@@ -233,7 +239,8 @@ std::string wifi_scan_page(const std::string& interface_name,
                             network.ssid + " " + network.security) << '\n';
     }
     if (begin == end && !running && error.empty()) out << "No networks found\n";
-    out << "5/7 PAGE  6 RESCAN  8 DETAILS";
+    out << "F/X PAGE  C/ENTER RESCAN\n"
+        << "Z/ESC BACK  D DETAILS";
     return out.str();
 }
 

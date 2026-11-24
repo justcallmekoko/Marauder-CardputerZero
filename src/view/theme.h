@@ -6,14 +6,10 @@
 
 #pragma once
 
+#include "layout_metrics.h"
 #include "lvgl.h"
 
 namespace view {
-
-constexpr int kScreenWidth    = 320;
-constexpr int kScreenHeight   = 170;
-constexpr int kTitleBarHeight = 30;
-constexpr int kNavBarHeight   = 30;
 
 struct ThemePalette {
     lv_color_t background;

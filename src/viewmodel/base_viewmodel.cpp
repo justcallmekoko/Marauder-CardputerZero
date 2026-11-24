@@ -50,7 +50,6 @@ lv_subject_t* BaseViewModel::diagnostics_generation_subject() { return diagnosti
 lv_subject_t* BaseViewModel::adapter_detail_subject() { return adapter_detail_subject_.native(); }
 lv_subject_t* BaseViewModel::wifi_scan_subject() { return wifi_scan_subject_.native(); }
 lv_subject_t* BaseViewModel::quit_requested_subject() { return quit_requested_subject_.native(); }
-lv_subject_t* BaseViewModel::help_request_subject() { return help_request_subject_.native(); }
 bool BaseViewModel::is_dark_mode() const { return model_.dark_mode(); }
 model::AppPage BaseViewModel::current_page() const { return model_.current_page(); }
 void BaseViewModel::show_dashboard_page() { model_.set_current_page(model::AppPage::Dashboard); publish_navigation(); }
@@ -124,7 +123,6 @@ void BaseViewModel::refresh_diagnostics() {
 void BaseViewModel::previous_system_info_page() { system_info_.previous_page(); publish_diagnostics(); }
 void BaseViewModel::next_system_info_page() { system_info_.next_page(); publish_diagnostics(); }
 void BaseViewModel::toggle_system_info_details() { system_info_.toggle_details(); publish_diagnostics(); }
-void BaseViewModel::request_context_help() { help_request_subject_.set(help_request_subject_.value() + 1); }
 
 void BaseViewModel::publish_diagnostics() {
     const auto text = format::system_info_page(diagnostics_snapshot_, system_info_);
@@ -313,7 +311,7 @@ void BaseViewModel::publish_adapter_detail() {
     const bool selected = model_.selected_adapter_id() == adapter.stable_id;
     if (!adapter_details_expanded_) {
         out << "ADAPTER " << (highlighted_adapter_ + 1) << '/' << adapters_.size()
-            << (selected ? "  [SELECTED]" : "  [6 SELECT]") << '\n'
+            << (selected ? "  [SELECTED]" : "  [C/ENTER SELECT]") << '\n'
             << adapter.interface_name << "  " << adapter.bus_type << "  " << adapter.operstate << '\n';
         const auto product = format::clip_for_display(adapter.manufacturer +
                                               (adapter.manufacturer.empty() || adapter.product_name.empty() ? "" : " ") +
@@ -324,7 +322,8 @@ void BaseViewModel::publish_adapter_detail() {
         out << "Driver " << (adapter.driver.empty() ? "unknown" : adapter.driver)
             << "  PHY " << (adapter.phy_name.empty() ? "unknown" : adapter.phy_name) << '\n'
             << "MAC " << (adapter.mac_address.empty() ? "unknown" : adapter.mac_address) << '\n'
-            << "8  MORE DETAILS";
+            << "F/X ITEM C/ENTER SELECT\n"
+            << "Z/ESC BACK D MORE";
     } else {
         out << "ADAPTER " << (highlighted_adapter_ + 1) << '/' << adapters_.size() << "  DETAILS\n"
             << adapter.interface_name << "  ifindex " << (adapter.ifindex.empty() ? "?" : adapter.ifindex) << '\n'
@@ -333,7 +332,8 @@ void BaseViewModel::publish_adapter_detail() {
             << "Monitor " << platform::wireless::capability_label(adapter.monitor_mode) << '\n'
             << "Injection " << platform::wireless::capability_label(adapter.injection) << '\n'
             << adapter.capability_note << '\n'
-            << "8  SUMMARY";
+            << "F/X ITEM C/ENTER SELECT\n"
+            << "Z/ESC BACK D SUMMARY";
     }
     adapter_detail_subject_.set(out.str().c_str());
 }

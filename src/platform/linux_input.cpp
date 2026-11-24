@@ -2,7 +2,6 @@
 
 #include "key_hold_state.h"
 
-#include <array>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -24,15 +23,10 @@
 namespace platform {
 namespace {
 
-std::array<lv_obj_t*, kNavKeyCount> nav_buttons{};
-bool nav_shortcut_mode = false;
 KeyHoldState key_hold_state;
 uint32_t press_started_at = 0;
 bool long_press_sent = false;
-bool pressed_key_consumed = false;
 lv_timer_t* long_press_timer = nullptr;
-KeyReleaseListener key_release_listener = nullptr;
-void* key_release_listener_user_data = nullptr;
 GlobalKeyListener global_key_listener = nullptr;
 void* global_key_listener_user_data = nullptr;
 
@@ -49,55 +43,6 @@ struct EvdevKeypad {
 };
 #endif
 
-size_t nav_key_to_index(uint32_t key) {
-    if (nav_shortcut_mode) {
-        switch (key) {
-            case LV_KEY_ESC:
-                return 4;
-            case 'z':
-            case 'Z':
-            case LV_KEY_LEFT:
-                return 1;
-            case 'c':
-            case 'C':
-            case LV_KEY_RIGHT:
-                return 3;
-            default:
-                return kNavKeyCount;
-        }
-    }
-
-    switch (key) {
-        case '4':
-        case LV_KEY_ESC:
-            return 0;
-        case '5':
-            return 1;
-        case '6':
-            return 2;
-        case '7':
-            return 3;
-        case '8':
-            return 4;
-        default:
-            return kNavKeyCount;
-    }
-}
-
-void dispatch_nav_key(uint32_t key) {
-    const auto index = nav_key_to_index(key);
-    if (index >= nav_buttons.size()) {
-        return;
-    }
-
-    auto* button = nav_buttons[index];
-    if (!button || !lv_obj_is_valid(button) || !lv_obj_has_flag(button, LV_OBJ_FLAG_CLICKABLE)) {
-        return;
-    }
-
-    lv_obj_send_event(button, LV_EVENT_CLICKED, nullptr);
-}
-
 bool emit_global_key(uint32_t key, bool long_pressed) {
     return global_key_listener &&
            global_key_listener(key, describe_key(key), long_pressed, global_key_listener_user_data);
@@ -109,9 +54,7 @@ void long_press_timer_cb(lv_timer_t*) {
     }
 
     long_press_sent = true;
-    if (emit_global_key(key_hold_state.active_key(), true)) {
-        pressed_key_consumed = true;
-    }
+    emit_global_key(key_hold_state.active_key(), true);
 }
 
 void ensure_long_press_timer() {
@@ -125,13 +68,7 @@ void ensure_long_press_timer() {
 }
 
 void release_active_key_hold() {
-    const auto released_key = key_hold_state.reset();
-    if (released_key && key_release_listener) {
-        key_release_listener(released_key,
-                             describe_key(released_key),
-                             key_release_listener_user_data);
-    }
-    pressed_key_consumed = false;
+    key_hold_state.reset();
     long_press_sent = false;
     if (long_press_timer) {
         lv_timer_pause(long_press_timer);
@@ -140,22 +77,13 @@ void release_active_key_hold() {
 
 void route_key_state(uint32_t key, bool pressed) {
     const auto transition = key_hold_state.update(key, pressed);
-    if (transition.released_key && key_release_listener) {
-        key_release_listener(transition.released_key,
-                             describe_key(transition.released_key),
-                             key_release_listener_user_data);
-    }
     if (transition.started_press) {
         press_started_at = lv_tick_get();
         long_press_sent = false;
-        pressed_key_consumed = emit_global_key(key, false);
+        emit_global_key(key, false);
         ensure_long_press_timer();
-        if (!pressed_key_consumed) {
-            dispatch_nav_key(key);
-        }
     }
     else if (transition.released_key) {
-        pressed_key_consumed = false;
         if (long_press_timer) {
             lv_timer_pause(long_press_timer);
         }
@@ -219,16 +147,8 @@ uint32_t map_evdev_key(uint16_t code) {
             return 'z';
         case KEY_C:
             return 'c';
-        case KEY_4:
-            return '4';
-        case KEY_5:
-            return '5';
-        case KEY_6:
-            return '6';
-        case KEY_7:
-            return '7';
-        case KEY_8:
-            return '8';
+        case KEY_D:
+            return 'd';
         case KEY_SYSRQ:
             return kKeyPrintScreen;
         case KEY_HELP:
@@ -238,7 +158,7 @@ uint32_t map_evdev_key(uint16_t code) {
     }
 }
 
-bool has_nav_keys(int fd) {
+bool has_supported_keys(int fd) {
     unsigned long key_bits[(KEY_MAX / (sizeof(unsigned long) * 8)) + 1] = {};
     if (ioctl(fd, EVIOCGBIT(EV_KEY, sizeof(key_bits)), key_bits) < 0) {
         return false;
@@ -252,8 +172,7 @@ bool has_nav_keys(int fd) {
     return has_key(KEY_ESC) || has_key(KEY_LEFT) || has_key(KEY_RIGHT) ||
            has_key(KEY_UP) || has_key(KEY_DOWN) || has_key(KEY_ENTER) || has_key(KEY_KPENTER) ||
            has_key(KEY_F) || has_key(KEY_X) || has_key(KEY_Z) || has_key(KEY_C) ||
-           has_key(KEY_4) || has_key(KEY_5) || has_key(KEY_6) ||
-           has_key(KEY_7) || has_key(KEY_8) || has_key(KEY_SYSRQ) || has_key(KEY_HELP);
+           has_key(KEY_D) || has_key(KEY_SYSRQ) || has_key(KEY_HELP);
 }
 
 void evdev_read_cb(lv_indev_t* indev, lv_indev_data_t* data) {
@@ -357,7 +276,7 @@ lv_indev_t* try_create_keypad(const char* path) {
         return nullptr;
     }
 
-    if (!has_nav_keys(fd)) {
+    if (!has_supported_keys(fd)) {
         close(fd);
         return nullptr;
     }
@@ -420,40 +339,6 @@ void attach_key_router(lv_indev_t* indev) {
     }
 
     lv_indev_add_event_cb(indev, key_event_cb, LV_EVENT_KEY, nullptr);
-}
-
-void set_nav_shortcut_mode(bool enabled) {
-    nav_shortcut_mode = enabled;
-}
-
-void register_nav_button(size_t index, lv_obj_t* button) {
-    if (index >= nav_buttons.size()) {
-        return;
-    }
-
-    nav_buttons[index] = button;
-}
-
-void unregister_nav_button(size_t index, lv_obj_t* button) {
-    if (index >= nav_buttons.size()) {
-        return;
-    }
-
-    if (!button || nav_buttons[index] == button) {
-        nav_buttons[index] = nullptr;
-    }
-}
-
-void set_key_release_listener(KeyReleaseListener listener, void* user_data) {
-    key_release_listener = listener;
-    key_release_listener_user_data = user_data;
-}
-
-void clear_key_release_listener(KeyReleaseListener listener, void* user_data) {
-    if (key_release_listener == listener && key_release_listener_user_data == user_data) {
-        key_release_listener = nullptr;
-        key_release_listener_user_data = nullptr;
-    }
 }
 
 void set_global_key_listener(GlobalKeyListener listener, void* user_data) {

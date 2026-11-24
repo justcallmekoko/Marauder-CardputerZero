@@ -6,6 +6,7 @@
 
 #include "asset_manager.h"
 #include "bindings.h"
+#include "display_format.h"
 #include "theme.h"
 
 #include <string>
@@ -82,8 +83,8 @@ void DashboardScreen::build_content(lv_obj_t* content) {
     }
 
     footer_ = lv_label_create(panel_);
-    lv_obj_set_size(footer_, LV_PCT(100), 11);
-    lv_label_set_long_mode(footer_, LV_LABEL_LONG_CLIP);
+    lv_obj_set_size(footer_, LV_PCT(100), 22);
+    lv_label_set_long_mode(footer_, LV_LABEL_LONG_WRAP);
     auto* footer_font = assets().load_standard_font(9, app::StandardFontWeight::Regular);
     lv_obj_set_style_text_font(footer_, footer_font ? footer_font : &lv_font_montserrat_10, 0);
 
@@ -114,10 +115,7 @@ void DashboardScreen::render_menu() {
         lv_obj_remove_flag(rows_[index], LV_OBJ_FLAG_HIDDEN);
         const auto& item = view_model().marauder_menu_item(index);
         const auto item_color = menu_color(item.color);
-        std::string label = index == selected ? "> " : "  ";
-        label += item.label;
-        if (item.opens_submenu) label += "  >";
-        if (!item.available) label += "  [soon]";
+        const auto label = viewmodel::format::menu_row_label(item.label, item.available);
         lv_label_set_text(row_labels_[index], label.c_str());
 
         const bool active = index == selected;
@@ -134,14 +132,9 @@ void DashboardScreen::render_menu() {
                                     0);
     }
 
-    const auto& selected_item = view_model().marauder_menu_item(selected);
-    if (!selected_item.available) {
-        lv_label_set_text(footer_, "SOON   4 BACK   5/7 MOVE   8 HELP");
-    } else if (view_model().marauder_menu_at_root()) {
-        lv_label_set_text(footer_, "5/7 MOVE   6 SELECT   8 HELP");
-    } else {
-        lv_label_set_text(footer_, "4 BACK   5/7 MOVE   6 SELECT   8 HELP");
-    }
+    lv_label_set_text(footer_, view_model().marauder_menu_at_root()
+        ? "F/X MOVE  C/ENTER SELECT\nESC EXIT"
+        : "F/X MOVE  C/ENTER SELECT\nZ/ESC BACK");
     lv_obj_set_style_text_color(footer_, muted_text, 0);
 }
 

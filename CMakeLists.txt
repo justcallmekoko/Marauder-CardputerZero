@@ -6,7 +6,7 @@
 
 cmake_minimum_required(VERSION 3.31)
 
-project(marauder_cardputerzero VERSION 0.6.1 LANGUAGES C CXX)
+project(marauder_cardputerzero VERSION 0.6.2 LANGUAGES C CXX)
 
 include(CTest)
 find_package(Threads REQUIRED)
@@ -657,6 +657,7 @@ if(BUILD_TESTING AND USE_DESKTOP)
     target_include_directories(shortcut_policy_test PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/src/app"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/model"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/view"
     )
     add_test(NAME shortcut_policy_test COMMAND shortcut_policy_test)
 

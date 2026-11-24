@@ -15,6 +15,7 @@ namespace viewmodel::format {
 
 std::string clip_for_display(const std::string& value, std::size_t max_columns);
 std::size_t display_width(const std::string& value);
+std::string menu_row_label(const std::string& label, bool available);
 
 std::string system_info_page(const platform::diagnostics::Snapshot& snapshot,
                              const model::SystemInfoModel& navigation);

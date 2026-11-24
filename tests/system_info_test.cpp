@@ -84,12 +84,12 @@ bool system_pages_are_bounded_and_exhaustive() {
     for (;;) {
         route.emplace_back(navigation.page_index(), navigation.subpage_index());
         const auto compact = viewmodel::format::system_info_page(snapshot, navigation);
-        if (!bounded(compact, 6)) return false;
+        if (!bounded(compact, 7)) return false;
         seen.insert(compact);
 
         navigation.toggle_details();
         const auto expanded = viewmodel::format::system_info_page(snapshot, navigation);
-        if (!bounded(expanded, 6)) return false;
+        if (!bounded(expanded, 7)) return false;
         if (!expect(compact != expanded, "System Info More view must change visible detail")) return false;
         navigation.toggle_details();
 
@@ -135,7 +135,7 @@ bool wifi_details_are_single_record_and_bounded() {
     };
     for (std::size_t index = 0; index < networks.size(); ++index) {
         const auto text = viewmodel::format::wifi_scan_page("wlan0", networks, "", false, true, index);
-        if (!bounded(text, 8)) return false;
+        if (!bounded(text, 9)) return false;
         if (!expect(text.find("WIFI DETAILS " + std::to_string(index + 1) + "/3") != std::string::npos,
                     "Wi-Fi detail index is incorrect")) return false;
         if (!expect(text.find(networks[index].ssid) != std::string::npos &&
@@ -145,12 +145,23 @@ bool wifi_details_are_single_record_and_bounded() {
             if (other != index && !expect(text.find(networks[other].ssid) == std::string::npos,
                                          "Wi-Fi details leaked another record")) return false;
         }
-        if (!expect(text.find("5/7 ITEM  6 SCAN  8 SUMMARY") != std::string::npos,
+        if (!expect(text.find("F/X ITEM  C/ENTER SCAN") != std::string::npos &&
+                    text.find("Z/ESC BACK  D SUMMARY") != std::string::npos,
                     "Wi-Fi detail controls are incorrect")) return false;
     }
     const auto summary = viewmodel::format::wifi_scan_page("wlan0", networks, "", false, false, 0);
-    return bounded(summary, 8) && expect(summary.find("8 DETAILS") != std::string::npos,
+    return bounded(summary, 9) && expect(summary.find("Z/ESC BACK  D DETAILS") != std::string::npos,
                                          "Wi-Fi summary return state is incorrect");
+}
+
+bool menu_rows_have_no_arrow_markers() {
+    const auto available = viewmodel::format::menu_row_label("WiFi", true);
+    const auto unavailable = viewmodel::format::menu_row_label("Stations", false);
+    return expect(available == "WiFi" && unavailable == "Stations  [soon]",
+                  "menu row formatting changed unexpectedly") &&
+           expect(available.find('>') == std::string::npos &&
+                      unavailable.find('>') == std::string::npos,
+                  "menu rows must not contain arrow markers");
 }
 
 bool clipping_is_utf8_safe_and_conservative() {
@@ -170,5 +181,6 @@ int main() {
     if (!system_pages_are_bounded_and_exhaustive()) return 1;
     if (!wifi_details_are_single_record_and_bounded()) return 2;
     if (!clipping_is_utf8_safe_and_conservative()) return 3;
+    if (!menu_rows_have_no_arrow_markers()) return 4;
     return 0;
 }

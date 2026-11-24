@@ -11,10 +11,10 @@ Native C++17/LVGL 9.5 port of ESP32 Marauder for the ARM64 Linux-based Cardputer
 - Dashboard, wireless-adapter selection, and five bounded keyboard-reachable System Info pages
 - Read-only wireless adapter catalog with interface, driver, PHY, bus, VID/PID, MAC, stable identity, and explicit monitor/injection verification state
 - Keyboard-driven adapter browsing and in-app selection without changing interface state
-- Viewport-safe summary/details paging for adapter information (`8` toggles pages)
+- Viewport-safe summary/details paging for adapter information (`D` toggles pages)
 - Read-only kernel capability probing for monitor-mode support; injection remains unverified until an explicit hardware test
 - Non-blocking managed-mode Wi-Fi scanning on the selected adapter, with strongest-first paginated results
-- Direct menu navigation with the printed `Z`/`X`/`C`/`F` arrow cluster plus a stable contextual soft-key contract: `4` Back, `5` Previous, `6` Primary, `7` Next, `8` More/Details
+- Direct menu navigation with the printed `Z`/`X`/`C`/`F` arrow cluster, `Enter` for the primary action, and `D` for details on supported screens
 - APPLaunch icon uses the white JCMK LLC mark on a black background
 - Read-only inventory of:
   - operating system, kernel, uptime, memory, and storage
@@ -40,7 +40,7 @@ The adapter layer enumerates Linux wireless interfaces, correlates USB metadata,
 
 The main screen follows the Marauder hierarchy and classic black/multicolor palette: **WiFi**, **Bluetooth**, **GPS**, **Device**, and **Settings**. Use the printed arrow cluster directly: `F` is Up, `X` is Down, `Z` is Left, and `C` is Right. No `Fn`, `Sym`, `Caps`, or other modifier is required. Use `Enter` to activate. `Esc` backs out of submenus and secondary screens, and exits immediately from the main-menu root. Unimplemented functions are visibly marked `soon` rather than silently doing nothing.
 
-Contextual soft keys are available everywhere: `4` goes back (`4` is idle at the root; hold it to exit), `5`/`7` move, `6` opens or activates, and `8` shows help or details. The `F`/`X`/`Z`/`C` cluster and `Enter` remain equivalent controls. System Info is canonically located at **Device > System Info** and exposes Summary, System, Interfaces, USB/Peripherals, and Tools pages. On System Info, `F`/`X` or `5`/`7` changes page, `C`/`Enter`/`6` refreshes, and `Z`/`4` returns to Device with its selection retained.
+There is no on-screen quick-action strip. System Info is canonically located at **Device > System Info** and exposes Summary, System, Interfaces, USB/Peripherals, and Tools pages. On Adapters, Wi-Fi results, and System Info, `D` toggles details/summary. On System Info, `F`/`X` changes page, `C`/`Enter` refreshes, and `Z`/`Esc` returns to Device with its selection retained.
 
 Managed-mode scans use the target’s existing NetworkManager service when available; the Cardputer Zero base image has been validated with it. Scans do not enable monitor mode and do not test injection.
 
@@ -82,7 +82,7 @@ cmake --build --preset linux-x86-64-dbg
 cmake --workflow --preset cp0-cross-package
 ```
 
-The expected artifact is `dist/Marauder_0.6.1_rev1_arm64.deb`. Packaging and deployment remain separate actions.
+The expected artifact is `dist/Marauder_0.6.2_rev1_arm64.deb`. Packaging and deployment remain separate actions.
 
 ## Safety and scope
 

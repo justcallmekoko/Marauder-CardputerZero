@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include "navbar.h"
 #include "base_viewmodel.h"
 #include "titlebar.h"
 #include "lvgl.h"
@@ -42,7 +41,6 @@ private:
     lv_obj_t* root_{nullptr};
     lv_obj_t* content_{nullptr};
     std::unique_ptr<view::widgets::TitleBar> title_bar_;
-    std::unique_ptr<view::widgets::NavBar> nav_bar_;
 };
 
 } // namespace screen

@@ -62,11 +62,9 @@ public:
         toast_->build();
         help_popup_->build();
         platform::set_global_key_listener(global_key_listener, this);
-        platform::set_key_release_listener(key_release_listener, this);
     }
 
     ~ShortcutController() {
-        platform::clear_key_release_listener(key_release_listener, this);
         platform::clear_global_key_listener(global_key_listener, this);
     }
 
@@ -131,88 +129,49 @@ private:
             return true;
         }
 
+        if (long_pressed) return false;
+
+        const auto action = key == LV_KEY_UP ? NavigationAction::Previous :
+                            key == LV_KEY_DOWN ? NavigationAction::Next :
+                            (key == LV_KEY_ENTER || key == LV_KEY_RIGHT) ? NavigationAction::Primary :
+                            key == LV_KEY_LEFT ? NavigationAction::Back : navigation_action(key);
         if (view_model_.current_page() == model::AppPage::Dashboard) {
-            if (long_pressed && key == '4') {
-                if (exit_key_pressed_ == key && exit_armed_) {
-                    toast_->hide();
-                    view_model_.request_quit();
-                }
-                return true;
-            }
-            if (long_pressed) return false;
-            if (key == LV_KEY_UP || key == 'f' || key == 'F' || key == '5') {
-                view_model_.marauder_menu_previous();
-                return true;
-            }
-            if (key == LV_KEY_DOWN || key == 'x' || key == 'X' || key == '7') {
-                view_model_.marauder_menu_next();
-                return true;
-            }
-            if (key == LV_KEY_ENTER || key == LV_KEY_RIGHT || key == 'c' || key == 'C' || key == '6') {
-                view_model_.marauder_menu_activate();
-                return true;
-            }
-            if (key == '8') {
-                view_model_.request_context_help();
-                return true;
-            }
-            if (key == '4') {
-                exit_key_pressed_ = key;
-                exit_armed_ = view_model_.marauder_menu_at_root();
-                if (exit_armed_) {
-                    toast_->show_persistent_highlighted("Hold ",
-                                                        "4",
-                                                        " to exit",
-                                                        view::widgets::ToastTone::Warning);
-                }
-                else {
-                    view_model_.marauder_menu_back();
-                }
-                return true;
-            }
-            if (key == LV_KEY_LEFT || key == 'z' || key == 'Z') {
+            if (action == NavigationAction::Previous) { view_model_.marauder_menu_previous(); return true; }
+            if (action == NavigationAction::Next) { view_model_.marauder_menu_next(); return true; }
+            if (action == NavigationAction::Primary) { view_model_.marauder_menu_activate(); return true; }
+            if (action == NavigationAction::Back) {
                 if (!view_model_.marauder_menu_at_root()) view_model_.marauder_menu_back();
                 return true;
             }
         }
 
-        if (view_model_.current_page() == model::AppPage::Diagnostics && !long_pressed) {
-            if (key == LV_KEY_UP || key == 'f' || key == 'F') { view_model_.previous_system_info_page(); return true; }
-            if (key == LV_KEY_DOWN || key == 'x' || key == 'X') { view_model_.next_system_info_page(); return true; }
-            if (key == LV_KEY_ENTER || key == LV_KEY_RIGHT || key == 'c' || key == 'C') { view_model_.refresh_diagnostics(); return true; }
+        if (view_model_.current_page() == model::AppPage::Diagnostics) {
+            if (action == NavigationAction::Previous) { view_model_.previous_system_info_page(); return true; }
+            if (action == NavigationAction::Next) { view_model_.next_system_info_page(); return true; }
+            if (action == NavigationAction::Primary) { view_model_.refresh_diagnostics(); return true; }
+            if (action == NavigationAction::Details) { view_model_.toggle_system_info_details(); return true; }
         }
 
-        if (view_model_.current_page() == model::AppPage::Adapters && !long_pressed) {
-            if (key == LV_KEY_UP || key == 'f' || key == 'F') { view_model_.previous_adapter(); return true; }
-            if (key == LV_KEY_DOWN || key == 'x' || key == 'X') { view_model_.next_adapter(); return true; }
-            if (key == LV_KEY_ENTER || key == LV_KEY_RIGHT || key == 'c' || key == 'C') { view_model_.select_highlighted_adapter(); return true; }
+        if (view_model_.current_page() == model::AppPage::Adapters) {
+            if (action == NavigationAction::Previous) { view_model_.previous_adapter(); return true; }
+            if (action == NavigationAction::Next) { view_model_.next_adapter(); return true; }
+            if (action == NavigationAction::Primary) { view_model_.select_highlighted_adapter(); return true; }
+            if (action == NavigationAction::Details) { view_model_.toggle_adapter_details(); return true; }
         }
 
-        if (view_model_.current_page() == model::AppPage::WifiScan && !long_pressed) {
-            if (key == LV_KEY_UP || key == 'f' || key == 'F') { view_model_.previous_wifi_scan_page(); return true; }
-            if (key == LV_KEY_DOWN || key == 'x' || key == 'X') { view_model_.next_wifi_scan_page(); return true; }
-            if (key == LV_KEY_ENTER || key == LV_KEY_RIGHT || key == 'c' || key == 'C') { view_model_.start_wifi_scan(); return true; }
+        if (view_model_.current_page() == model::AppPage::WifiScan) {
+            if (action == NavigationAction::Previous) { view_model_.previous_wifi_scan_page(); return true; }
+            if (action == NavigationAction::Next) { view_model_.next_wifi_scan_page(); return true; }
+            if (action == NavigationAction::Primary) { view_model_.start_wifi_scan(); return true; }
+            if (action == NavigationAction::Details) { view_model_.toggle_wifi_scan_details(); return true; }
         }
 
-        if (view_model_.current_page() != model::AppPage::Dashboard && !long_pressed &&
-            (key == LV_KEY_LEFT || key == 'z' || key == 'Z')) {
+        if (view_model_.current_page() != model::AppPage::Dashboard && action == NavigationAction::Back) {
             view_model_.show_dashboard_page();
             return true;
         }
 
         return false;
-    }
-
-    void handle_release(uint32_t key) {
-        if (key != exit_key_pressed_) {
-            return;
-        }
-
-        if (exit_armed_) {
-            toast_->hide();
-        }
-        exit_key_pressed_ = 0;
-        exit_armed_ = false;
     }
 
     static bool global_key_listener(uint32_t key,
@@ -223,18 +182,9 @@ private:
         return controller && controller->handle_key(key, long_pressed);
     }
 
-    static void key_release_listener(uint32_t key, const char*, void* user_data) {
-        auto* controller = static_cast<ShortcutController*>(user_data);
-        if (controller) {
-            controller->handle_release(key);
-        }
-    }
-
     viewmodel::BaseViewModel& view_model_;
     std::unique_ptr<view::widgets::Toast> toast_;
     std::unique_ptr<view::widgets::HelpPopup> help_popup_;
-    uint32_t exit_key_pressed_{0};
-    bool exit_armed_{false};
 };
 
 #if !USE_DESKTOP

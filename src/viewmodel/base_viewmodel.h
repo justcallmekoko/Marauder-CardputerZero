@@ -42,7 +42,6 @@ public:
     lv_subject_t* adapter_detail_subject();
     lv_subject_t* wifi_scan_subject();
     lv_subject_t* quit_requested_subject();
-    lv_subject_t* help_request_subject();
 
     bool is_dark_mode() const;
     model::AppPage current_page() const;
@@ -65,7 +64,6 @@ public:
     void previous_system_info_page();
     void next_system_info_page();
     void toggle_system_info_details();
-    void request_context_help();
     void refresh_adapters();
     void previous_adapter();
     void next_adapter();
@@ -97,7 +95,6 @@ private:
     reactive::StringSubject<2048> adapter_detail_subject_;
     reactive::StringSubject<2048> wifi_scan_subject_;
     reactive::BoolSubject quit_requested_subject_;
-    reactive::IntSubject help_request_subject_;
     model::SystemInfoModel system_info_;
     platform::diagnostics::Snapshot diagnostics_snapshot_;
     std::vector<platform::wireless::AdapterInfo> adapters_;

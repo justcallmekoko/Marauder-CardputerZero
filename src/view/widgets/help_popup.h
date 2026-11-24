@@ -43,7 +43,6 @@ private:
     void apply_theme();
     static void backdrop_clicked_cb(lv_event_t* event);
     static void theme_observer_cb(lv_observer_t* observer, lv_subject_t* subject);
-    static void help_request_observer_cb(lv_observer_t* observer, lv_subject_t* subject);
 
     viewmodel::BaseViewModel& view_model_;
     app::AssetManager& assets_;
