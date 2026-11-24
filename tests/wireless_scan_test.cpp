@@ -12,7 +12,7 @@ int main() {
     if (escaped.size() != 6 || escaped[0] != "AA:BB:CC:DD:EE:FF" || escaped[1] != "Cafe:Guest") return 1;
 
     const auto result = parse_nmcli_wifi_scan(R"(00\:11\:22\:33\:44\:55:Weak:6:2437:20:WPA2
-AA\:BB\:CC\:DD\:EE\:FF:Cafe\:Guest:11:2462:83:WPA2 WPA3
+AA\:BB\:CC\:DD\:EE\:FF:Cafe\:Guest:11:2462 MHz:83:WPA2 WPA3
 12\:34\:56\:78\:9A\:BC::1:2412:55:
 )");
     if (!result.error.empty() || result.networks.size() != 3) return 2;

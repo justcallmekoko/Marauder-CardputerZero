@@ -25,11 +25,15 @@ bool safe_interface_name(const std::string& value) {
            });
 }
 
-bool parse_int(const std::string& value, int minimum, int maximum, int& parsed) {
+bool parse_int(const std::string& value, int minimum, int maximum, int& parsed, bool allow_mhz = false) {
     if (value.empty()) return false;
     const auto result = std::from_chars(value.data(), value.data() + value.size(), parsed);
-    return result.ec == std::errc{} && result.ptr == value.data() + value.size() &&
-           parsed >= minimum && parsed <= maximum;
+    if (result.ec != std::errc{} || parsed < minimum || parsed > maximum) return false;
+    std::string_view suffix(result.ptr, static_cast<std::size_t>(value.data() + value.size() - result.ptr));
+    while (!suffix.empty() && std::isspace(static_cast<unsigned char>(suffix.front())) != 0) {
+        suffix.remove_prefix(1);
+    }
+    return suffix.empty() || (allow_mhz && suffix == "MHz");
 }
 
 std::string sanitize_text(std::string_view value) {
@@ -104,7 +108,7 @@ WifiScanResult parse_nmcli_wifi_scan(std::string_view output) {
             WifiNetwork network;
             if (fields.size() == 6 &&
                 parse_int(fields[2], 0, 1000, network.channel) &&
-                parse_int(fields[3], 0, 100000, network.frequency_mhz) &&
+                parse_int(fields[3], 0, 100000, network.frequency_mhz, true) &&
                 parse_int(fields[4], 0, 100, network.signal_percent)) {
                 network.bssid = sanitize_text(fields[0]);
                 network.ssid = fields[1].empty() ? "<hidden>" : sanitize_text(fields[1]);
