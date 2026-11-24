@@ -7,10 +7,23 @@
 #include "application_config.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cctype>
+#include <cerrno>
 #include <filesystem>
 #include <fstream>
+#include <system_error>
 #include <vector>
+
+#if defined(_WIN32)
+#define WIN32_LEAN_AND_MEAN
+#include <fcntl.h>
+#include <io.h>
+#include <windows.h>
+#else
+#include <fcntl.h>
+#include <unistd.h>
+#endif
 
 namespace app {
 namespace {
@@ -44,6 +57,69 @@ bool parse_bool(const std::string& value, bool& result) {
     }
     return false;
 }
+
+std::filesystem::path unique_temporary_path(const std::filesystem::path& destination) {
+    static std::atomic<unsigned long> sequence{0};
+#if defined(_WIN32)
+    const auto process_id = static_cast<unsigned long>(GetCurrentProcessId());
+#else
+    const auto process_id = static_cast<unsigned long>(getpid());
+#endif
+    auto temporary = destination;
+    temporary += ".tmp." + std::to_string(process_id) + "." +
+                 std::to_string(sequence.fetch_add(1, std::memory_order_relaxed));
+    return temporary;
+}
+
+bool sync_file(const std::filesystem::path& path, std::string& error) {
+#if defined(_WIN32)
+    const int descriptor = _wopen(path.c_str(), _O_WRONLY | _O_BINARY);
+    if (descriptor < 0) {
+        error = "could not reopen temporary config for sync";
+        return false;
+    }
+    const int result = _commit(descriptor);
+    const int sync_error = errno;
+    _close(descriptor);
+#else
+    const int descriptor = open(path.c_str(), O_WRONLY | O_CLOEXEC);
+    if (descriptor < 0) {
+        error = "could not reopen temporary config for sync: " +
+                std::error_code(errno, std::generic_category()).message();
+        return false;
+    }
+    const int result = fsync(descriptor);
+    const int sync_error = errno;
+    close(descriptor);
+#endif
+    if (result != 0) {
+        error = "could not sync temporary config: " +
+                std::error_code(sync_error, std::generic_category()).message();
+        return false;
+    }
+    return true;
+}
+
+#if !defined(_WIN32)
+bool sync_parent_directory(const std::filesystem::path& parent, std::string& error) {
+    const auto directory = parent.empty() ? std::filesystem::path(".") : parent;
+    const int descriptor = open(directory.c_str(), O_RDONLY | O_CLOEXEC | O_DIRECTORY);
+    if (descriptor < 0) {
+        error = "could not open config directory for sync: " +
+                std::error_code(errno, std::generic_category()).message();
+        return false;
+    }
+    const int result = fsync(descriptor);
+    const int sync_error = errno;
+    close(descriptor);
+    if (result != 0) {
+        error = "could not sync config directory: " +
+                std::error_code(sync_error, std::generic_category()).message();
+        return false;
+    }
+    return true;
+}
+#endif
 
 bool is_section(const std::string& line, const std::string& expected) {
     const auto normalized = trim(line);
@@ -163,19 +239,59 @@ bool save_application_config(const std::string& path,
         updated.push_back(dark_mode_line);
     }
 
-    std::ofstream output(path, std::ios::trunc);
-    if (!output) {
-        error = "could not open file for writing";
-        return false;
+    const auto temporary_path = unique_temporary_path(config_path);
+    {
+        std::ofstream output(temporary_path, std::ios::trunc);
+        if (!output) {
+            error = "could not open temporary file for writing";
+            return false;
+        }
+        for (const auto& updated_line : updated) {
+            output << updated_line << '\n';
+        }
+        output.flush();
+        if (!output) {
+            error = "failed while writing temporary file";
+            output.close();
+            std::error_code cleanup_error;
+            std::filesystem::remove(temporary_path, cleanup_error);
+            return false;
+        }
     }
-    for (const auto& updated_line : updated) {
-        output << updated_line << '\n';
-    }
-    if (!output) {
-        error = "failed while writing file";
+
+    if (!sync_file(temporary_path, error)) {
+        std::error_code cleanup_error;
+        std::filesystem::remove(temporary_path, cleanup_error);
         return false;
     }
 
+#if defined(_WIN32)
+    if (!MoveFileExW(temporary_path.c_str(),
+                     config_path.c_str(),
+                     MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+        const auto windows_error = GetLastError();
+        std::error_code cleanup_error;
+        std::filesystem::remove(temporary_path, cleanup_error);
+        error = "could not atomically replace config: Windows error " +
+                std::to_string(windows_error);
+        return false;
+    }
+#else
+    std::error_code replace_error;
+    std::filesystem::rename(temporary_path, config_path, replace_error);
+    if (replace_error) {
+        std::error_code cleanup_error;
+        std::filesystem::remove(temporary_path, cleanup_error);
+        error = "could not atomically replace config: " + replace_error.message();
+        return false;
+    }
+#endif
+
+#if !defined(_WIN32)
+    if (!sync_parent_directory(parent, error)) {
+        return false;
+    }
+#endif
     return true;
 }
 

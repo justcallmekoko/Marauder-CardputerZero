@@ -18,6 +18,7 @@ set(_CP0_DEFAULT_SYSROOT "${_CP0_CACHE_DIR}/sdk_bsp-src")
 set(CM0_SDK_ROOT "${_CP0_DEFAULT_SYSROOT}" CACHE PATH "Path to CM0/CardputerZero BSP sysroot")
 set(CM0_SDK_VERSION "v0.0.4" CACHE STRING "CM0/CardputerZero BSP release version")
 set(CM0_SDK_URL "https://github.com/CardputerZero/M5CardputerZero-UserDemo/releases/download/${CM0_SDK_VERSION}/sdk_bsp.tar.gz" CACHE STRING "CM0/CardputerZero BSP archive URL")
+set(CM0_SDK_SHA256 "e51b6eb803ed08f450e459efbfe62dd0341440846f3be9d01da861fe6cfdebb0" CACHE STRING "SHA-256 of the pinned CM0 BSP archive")
 set(CM0_ALLOW_FETCH_DEPS ON CACHE BOOL "Allow downloading the CM0/CardputerZero BSP when the sysroot is missing")
 
 # CMAKE_SYSROOT must exist before project() runs, otherwise CMake's compiler ABI
@@ -40,6 +41,7 @@ if(NOT EXISTS "${CM0_SDK_ROOT}")
         "${CM0_SDK_URL}"
         "${_CP0_SDK_ARCHIVE}"
         SHOW_PROGRESS
+        EXPECTED_HASH "SHA256=${CM0_SDK_SHA256}"
         STATUS _CP0_DOWNLOAD_STATUS
         TIMEOUT 300
     )

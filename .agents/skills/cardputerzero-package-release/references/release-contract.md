@@ -22,7 +22,8 @@ the store's CI validates.
 | Field | Release rule |
 | --- | --- |
 | `app_name` | User-facing app name; becomes the store display title. |
-| `package_name` | Stable upload/application identifier; currently expected to match the CMake project name. Must be a valid Debian package name when published (lowercase letters, digits, `.+-`). |
+| `package_name` | Stable upload/package identifier; must match the Debian `Package` control field and use only lowercase letters, digits, `.+-`. |
+| `bin_name` | Installed executable basename; must match the CMake project/executable target and `/usr/bin/<bin_name>` in the Debian package. |
 | `version` | Must match `project(... VERSION ...)`. |
 | `store.summary` | One-line store summary (required). |
 | `store.description` | Longer store description (optional). |

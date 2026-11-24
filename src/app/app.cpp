@@ -66,9 +66,14 @@ struct DarkModePersistence {
 };
 
 std::string writable_config_path() {
-#if USE_DESKTOP
-    return APP_CONFIG_FILE;
-#else
+#if defined(_WIN32)
+    if (const char* local_app_data = std::getenv("LOCALAPPDATA")) {
+        const std::filesystem::path root(local_app_data);
+        if (!root.empty() && root.is_absolute()) {
+            return (root / "marauder-cardputerzero" / "marauder-cardputerzero.conf").string();
+        }
+    }
+#endif
     if (const char* xdg_config_home = std::getenv("XDG_CONFIG_HOME")) {
         const std::filesystem::path root(xdg_config_home);
         if (!root.empty() && root.is_absolute()) {
@@ -81,8 +86,10 @@ std::string writable_config_path() {
             return (root / ".config" / "marauder-cardputerzero" / "marauder-cardputerzero.conf").string();
         }
     }
-    return APP_CONFIG_FILE;
-#endif
+    std::error_code error;
+    const auto temporary = std::filesystem::temp_directory_path(error);
+    return error ? "marauder-cardputerzero.conf"
+                 : (temporary / "marauder-cardputerzero.conf").string();
 }
 
 void persist_dark_mode_observer(lv_observer_t* observer, lv_subject_t* subject) {
@@ -368,6 +375,8 @@ int Application::run() {
         lv_timer_handler();
         lv_delay_ms(5);
     }
+
+    platform::reset_key_input_state();
 
     if (quit_observer) {
         lv_observer_remove(quit_observer);

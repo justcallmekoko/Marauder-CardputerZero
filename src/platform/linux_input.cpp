@@ -1,5 +1,7 @@
 #include "linux_input.h"
 
+#include "key_hold_state.h"
+
 #include <array>
 #include <cstdint>
 #include <cstdio>
@@ -23,10 +25,8 @@ namespace platform {
 namespace {
 
 std::array<lv_obj_t*, kNavKeyCount> nav_buttons{};
-uint32_t last_key = 0;
-bool last_key_pressed = false;
 bool nav_shortcut_mode = false;
-uint32_t pressed_key = 0;
+KeyHoldState key_hold_state;
 uint32_t press_started_at = 0;
 bool long_press_sent = false;
 bool pressed_key_consumed = false;
@@ -104,12 +104,12 @@ bool emit_global_key(uint32_t key, bool long_pressed) {
 }
 
 void long_press_timer_cb(lv_timer_t*) {
-    if (!pressed_key || long_press_sent || lv_tick_elaps(press_started_at) < kLongPressMs) {
+    if (!key_hold_state.active_key() || long_press_sent || lv_tick_elaps(press_started_at) < kLongPressMs) {
         return;
     }
 
     long_press_sent = true;
-    if (emit_global_key(pressed_key, true)) {
+    if (emit_global_key(key_hold_state.active_key(), true)) {
         pressed_key_consumed = true;
     }
 }
@@ -124,10 +124,28 @@ void ensure_long_press_timer() {
     }
 }
 
+void release_active_key_hold() {
+    const auto released_key = key_hold_state.reset();
+    if (released_key && key_release_listener) {
+        key_release_listener(released_key,
+                             describe_key(released_key),
+                             key_release_listener_user_data);
+    }
+    pressed_key_consumed = false;
+    long_press_sent = false;
+    if (long_press_timer) {
+        lv_timer_pause(long_press_timer);
+    }
+}
+
 void route_key_state(uint32_t key, bool pressed) {
-    const bool new_hold = pressed && (!last_key_pressed || pressed_key != key);
-    if (new_hold) {
-        pressed_key = key;
+    const auto transition = key_hold_state.update(key, pressed);
+    if (transition.released_key && key_release_listener) {
+        key_release_listener(transition.released_key,
+                             describe_key(transition.released_key),
+                             key_release_listener_user_data);
+    }
+    if (transition.started_press) {
         press_started_at = lv_tick_get();
         long_press_sent = false;
         pressed_key_consumed = emit_global_key(key, false);
@@ -136,19 +154,12 @@ void route_key_state(uint32_t key, bool pressed) {
             dispatch_nav_key(key);
         }
     }
-    else if (!pressed && last_key_pressed && pressed_key == key) {
-        if (key_release_listener) {
-            key_release_listener(key, describe_key(key), key_release_listener_user_data);
-        }
-        pressed_key = 0;
+    else if (transition.released_key) {
         pressed_key_consumed = false;
         if (long_press_timer) {
             lv_timer_pause(long_press_timer);
         }
     }
-
-    last_key = key;
-    last_key_pressed = pressed;
 }
 
 void key_event_cb(lv_event_t* event) {
@@ -253,8 +264,18 @@ void evdev_read_cb(lv_indev_t* indev, lv_indev_data_t* data) {
         return;
     }
 
+    if (keypad->fd < 0) {
+        release_active_key_hold();
+        keypad->key = 0;
+        keypad->state = LV_INDEV_STATE_RELEASED;
+        data->key = 0;
+        data->state = LV_INDEV_STATE_RELEASED;
+        return;
+    }
+
     input_event input{};
-    while (read(keypad->fd, &input, sizeof(input)) == sizeof(input)) {
+    ssize_t bytes_read = 0;
+    while ((bytes_read = read(keypad->fd, &input, sizeof(input))) == sizeof(input)) {
         if (input.type != EV_KEY) {
             continue;
         }
@@ -273,6 +294,20 @@ void evdev_read_cb(lv_indev_t* indev, lv_indev_data_t* data) {
         break;
     }
 
+    const bool terminal_read =
+        bytes_read == 0 ||
+        (bytes_read < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) ||
+        (bytes_read > 0 && bytes_read != static_cast<ssize_t>(sizeof(input)));
+    if (terminal_read) {
+        LV_LOG_WARN("evdev input lost: %s", bytes_read < 0 ? strerror(errno) : "end of stream");
+        release_active_key_hold();
+        close(keypad->fd);
+        keypad->fd = -1;
+        keypad->key = 0;
+        keypad->state = LV_INDEV_STATE_RELEASED;
+        keypad->router_event_pending = false;
+    }
+
     data->key = keypad->key;
     data->state = keypad->state;
 }
@@ -284,8 +319,10 @@ void evdev_delete_cb(lv_event_t* event) {
         return;
     }
 
+    release_active_key_hold();
     if (keypad->fd >= 0) {
         close(keypad->fd);
+        keypad->fd = -1;
     }
     delete keypad;
 }
@@ -365,11 +402,16 @@ void discover_keypads(lv_display_t* display) {
 } // namespace
 
 void init_key_input(lv_display_t* display) {
+    release_active_key_hold();
 #if !USE_DESKTOP
     discover_keypads(display);
 #else
     LV_UNUSED(display);
 #endif
+}
+
+void reset_key_input_state() {
+    release_active_key_hold();
 }
 
 void attach_key_router(lv_indev_t* indev) {

@@ -1,7 +1,8 @@
 {
   "app_name": "Marauder",
-  "package_name": "marauder_cardputerzero",
-  "version": "0.5.4",
+  "package_name": "marauder",
+  "bin_name": "marauder_cardputerzero",
+  "version": "0.5.5",
   "description": "Marauder system and radio toolkit for Cardputer Zero",
   "store": {
     "summary": "System diagnostics and radio toolkit for Cardputer Zero",
@@ -11,8 +12,8 @@
       "System Tools"
     ],
     "screenshots": [
-      "screenshot/app-simulator-dark-darwin.png",
-      "screenshot/app-simulator-light-darwin.png"
+      "screenshot/marauder-dashboard.png",
+      "screenshot/marauder-wifi-scan.png"
     ],
     "icon": "assets/images/jcmk-marauder-icon-v2.png",
     "license": "AGPL-3.0-only",
@@ -26,7 +27,7 @@
       "camera": false,
       "microphone": false,
       "imu": false,
-      "network": false,
+      "network": true,
       "additional_hardware": true,
       "background_service": false,
       "external_display": false

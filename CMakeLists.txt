@@ -6,7 +6,7 @@
 
 cmake_minimum_required(VERSION 3.31)
 
-project(marauder_cardputerzero VERSION 0.5.4 LANGUAGES C CXX)
+project(marauder_cardputerzero VERSION 0.5.5 LANGUAGES C CXX)
 
 include(CTest)
 find_package(Threads REQUIRED)
@@ -23,7 +23,7 @@ set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 set(USE_DESKTOP ON CACHE BOOL "Build the desktop emulator target with LVGL SDL support")
 set(APP_NAME "${PROJECT_NAME}" CACHE STRING "Application name used for installed asset lookup")
 set(APP_ASSETS_ROOT "" CACHE PATH "Optional runtime assets root. Expected subdirectories include fonts/")
-set(APP_CONFIG_FILE "" CACHE FILEPATH "Application config file; defaults to the repository file on desktop and /etc/marauder-cardputerzero.conf on device")
+set(APP_CONFIG_FILE "" CACHE FILEPATH "Read-only default config; user changes are stored under XDG_CONFIG_HOME or HOME")
 set(APP_KEY_INPUT_DEVICE "" CACHE STRING "Optional Linux evdev keyboard/keypad device path, e.g. /dev/input/event0")
 set(APP_FRAMEBUFFER_DEVICE "/dev/fb0" CACHE STRING "Linux framebuffer device path used by embedded builds")
 set(APP_DRM_DEVICE "/dev/dri/card0" CACHE STRING "Linux DRM device path used when APP_USE_DRM=ON")
@@ -661,6 +661,21 @@ if(BUILD_TESTING AND USE_DESKTOP)
         "${CMAKE_CURRENT_SOURCE_DIR}/src/model"
     )
     add_test(NAME marauder_menu_test COMMAND marauder_menu_test)
+
+    add_executable(application_config_test
+        tests/application_config_test.cpp
+        src/app/application_config.cpp
+    )
+    target_include_directories(application_config_test PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/app"
+    )
+    add_test(NAME application_config_test COMMAND application_config_test)
+
+    add_executable(key_hold_state_test tests/key_hold_state_test.cpp)
+    target_include_directories(key_hold_state_test PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/platform"
+    )
+    add_test(NAME key_hold_state_test COMMAND key_hold_state_test)
 endif()
 
 # Package deb

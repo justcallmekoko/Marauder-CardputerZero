@@ -35,7 +35,10 @@
                 "FETCHCONTENT_BASE_DIR": "${sourceDir}/.cache/cp0-deps",
                 "CMAKE_INSTALL_PREFIX": "${sourceDir}/build/${presetName}/install",
                 "USE_DESKTOP": "OFF",
-                "APP_USE_DRM": "OFF"
+                "APP_USE_DRM": "OFF",
+                "CM0_SDK_ROOT": "/",
+                "CM0_MULTIARCH": "aarch64-linux-gnu",
+                "CM0_ALLOW_FETCH_DEPS": "OFF"
             }
         },
         {

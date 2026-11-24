@@ -57,6 +57,7 @@ endif()
 foreach(required_field IN ITEMS
         app_name
         package_name
+        bin_name
         version
         store)
     string(JSON field_type ERROR_VARIABLE field_error TYPE "${app_builder_json}" "${required_field}")
@@ -87,13 +88,26 @@ if(NOT author_name_error STREQUAL "NOTFOUND")
 endif()
 
 json_get(manifest_package_name package_name)
+json_get(manifest_bin_name bin_name)
 json_get(manifest_version version)
 json_get(manifest_icon store icon)
 
-if(DEFINED cmake_project_name AND
-   NOT manifest_package_name STREQUAL cmake_project_name)
+if(NOT manifest_package_name MATCHES "^[a-z0-9][a-z0-9.+-]*$")
     add_validation_error(
-        "package_name '${manifest_package_name}' does not match CMake project '${cmake_project_name}'"
+        "package_name '${manifest_package_name}' is not a valid Debian/store identifier"
+    )
+endif()
+
+if(NOT manifest_bin_name MATCHES "^[A-Za-z0-9][A-Za-z0-9._+-]*$")
+    add_validation_error(
+        "bin_name '${manifest_bin_name}' is not a valid executable basename"
+    )
+endif()
+
+if(DEFINED cmake_project_name AND
+   NOT manifest_bin_name STREQUAL cmake_project_name)
+    add_validation_error(
+        "bin_name '${manifest_bin_name}' does not match CMake executable '${cmake_project_name}'"
     )
 endif()
 
@@ -129,6 +143,16 @@ else()
         endif()
         if(screenshot_path STREQUAL "" OR NOT EXISTS "${screenshot_absolute}")
             add_validation_error("Screenshot does not exist: ${screenshot_path}")
+        else()
+            file(READ "${screenshot_absolute}" screenshot_header LIMIT 24 HEX)
+            string(TOLOWER "${screenshot_header}" screenshot_header)
+            # PNG signature + IHDR length/type + 320x170 dimensions.
+            if(NOT screenshot_header MATCHES
+               "^89504e470d0a1a0a0000000d4948445200000140000000aa")
+                add_validation_error(
+                    "Screenshot must be a 320x170 PNG: ${screenshot_path}"
+                )
+            endif()
         endif()
     endforeach()
 endif()
@@ -180,6 +204,13 @@ if(DEFINED PACKAGE_FILE AND NOT PACKAGE_FILE STREQUAL "")
         find_program(DPKG_DEB_EXECUTABLE dpkg-deb)
         if(DPKG_DEB_EXECUTABLE)
             execute_process(
+                COMMAND "${DPKG_DEB_EXECUTABLE}" -f "${package_path}" Package
+                RESULT_VARIABLE package_name_result
+                OUTPUT_VARIABLE package_control_name
+                ERROR_VARIABLE package_name_error
+                OUTPUT_STRIP_TRAILING_WHITESPACE
+            )
+            execute_process(
                 COMMAND "${DPKG_DEB_EXECUTABLE}" -f "${package_path}" Version
                 RESULT_VARIABLE version_result
                 OUTPUT_VARIABLE package_version
@@ -193,6 +224,28 @@ if(DEFINED PACKAGE_FILE AND NOT PACKAGE_FILE STREQUAL "")
                 ERROR_VARIABLE architecture_error
                 OUTPUT_STRIP_TRAILING_WHITESPACE
             )
+            if(NOT package_name_result EQUAL 0)
+                add_validation_error(
+                    "dpkg-deb could not read package name: ${package_name_error}"
+                )
+            elseif(NOT package_control_name STREQUAL manifest_package_name)
+                add_validation_error(
+                    "Debian Package '${package_control_name}' does not match manifest '${manifest_package_name}'"
+                )
+            endif()
+            execute_process(
+                COMMAND "${DPKG_DEB_EXECUTABLE}" -c "${package_path}"
+                RESULT_VARIABLE contents_result
+                OUTPUT_VARIABLE package_contents
+                ERROR_VARIABLE contents_error
+            )
+            if(NOT contents_result EQUAL 0)
+                add_validation_error("dpkg-deb could not list package contents: ${contents_error}")
+            elseif(NOT package_contents MATCHES "[.]?/usr/bin/${manifest_bin_name}([ \n]|$)")
+                add_validation_error(
+                    "Package does not contain /usr/bin/${manifest_bin_name}"
+                )
+            endif()
             if(NOT version_result EQUAL 0)
                 add_validation_error("dpkg-deb could not read package version: ${version_error}")
             else()

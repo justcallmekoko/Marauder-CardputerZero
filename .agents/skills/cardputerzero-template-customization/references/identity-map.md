@@ -5,8 +5,8 @@ Treat these values as related but distinct:
 | Value | Typical form | Purpose |
 | --- | --- | --- |
 | Display name | `Marauder` | Launcher and package filename. |
-| Project/executable name | `marauder_cardputerzero` | CMake target and installed binary. |
-| Upload package name | `marauder_cardputerzero` | `app-builder.json` upload identifier. |
+| Project/executable name | `marauder_cardputerzero` | CMake target and `app-builder.json` `bin_name`. |
+| Debian/upload package name | `marauder` | Debian `Package` field and `app-builder.json` `package_name`. |
 | Config identity | `marauder-cardputerzero` | Config filename and per-user directory. |
 | Icon basename | `template` | Runtime and APPLaunch images. |
 
