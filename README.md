@@ -41,6 +41,10 @@ The project follows the official Cardputer Zero template:
 
 Hardware discovery stays in the platform layer. Blocking scans and packet processing must not run on the LVGL event thread.
 
+## UI direction
+
+The Cardputer Zero application should maintain a similar look and feel to the Cardputer ADV version of ESP32Marauder. Preserve its compact information hierarchy, high-contrast Marauder visual identity, familiar terminology, and keyboard-first interaction patterns where practical, while adapting layouts to Linux/LVGL and the Cardputer Zero display rather than forcing a pixel-for-pixel copy.
+
 ## Build
 
 Use the repository's existing CMake presets.
