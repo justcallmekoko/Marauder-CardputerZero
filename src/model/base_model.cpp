@@ -19,6 +19,9 @@ void BaseModel::toggle_page() {
             current_page_ = AppPage::Adapters;
             break;
         case AppPage::Adapters:
+            current_page_ = AppPage::WifiScan;
+            break;
+        case AppPage::WifiScan:
             current_page_ = AppPage::Diagnostics;
             break;
         case AppPage::Diagnostics:

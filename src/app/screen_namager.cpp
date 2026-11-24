@@ -9,6 +9,7 @@
 #include "dashboard_screen.h"
 #include "adapters_screen.h"
 #include "diagnostics_screen.h"
+#include "wifi_scan_screen.h"
 
 namespace app {
 namespace {
@@ -66,6 +67,12 @@ void ScreenManager::show_adapters_screen() {
     has_loaded_page_ = true;
 }
 
+void ScreenManager::show_wifi_scan_screen() {
+    load_screen(std::make_unique<screen::WifiScanScreen>(view_model_, assets_));
+    loaded_page_ = model::AppPage::WifiScan;
+    has_loaded_page_ = true;
+}
+
 void ScreenManager::show_diagnostics_screen() {
     load_screen(std::make_unique<screen::DiagnosticsScreen>(view_model_, assets_));
     loaded_page_ = model::AppPage::Diagnostics;
@@ -92,6 +99,9 @@ void ScreenManager::flush_requested_page() {
     switch (requested_page_) {
         case model::AppPage::Adapters:
             show_adapters_screen();
+            return;
+        case model::AppPage::WifiScan:
+            show_wifi_scan_screen();
             return;
         case model::AppPage::Diagnostics:
             show_diagnostics_screen();

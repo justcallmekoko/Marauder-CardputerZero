@@ -26,7 +26,7 @@ constexpr std::array<HelpRow, 5> kDashboardRows = {{
     {"5", "Open adapters"},
     {"6", "Light / dark"},
     {"7", "Open diagnostics"},
-    {"8", "Refresh"},
+    {"8", "Wi-Fi scan"},
 }};
 
 constexpr std::array<HelpRow, 5> kAdapterRows = {{
@@ -35,6 +35,14 @@ constexpr std::array<HelpRow, 5> kAdapterRows = {{
     {"6", "Select adapter"},
     {"7", "Next adapter"},
     {"8", "More / summary"},
+}};
+
+constexpr std::array<HelpRow, 5> kWifiScanRows = {{
+    {"ESC / 4", "Back to dashboard"},
+    {"5", "Previous results page"},
+    {"6", "Rescan selected adapter"},
+    {"7", "Next results page"},
+    {"8", "Open adapters"},
 }};
 
 constexpr std::array<HelpRow, 5> kDiagnosticsRows = {{
@@ -167,11 +175,12 @@ bool HelpPopup::visible() const {
 
 void HelpPopup::update_rows(model::AppPage page) {
     const bool adapters = page == model::AppPage::Adapters;
+    const bool wifi_scan = page == model::AppPage::WifiScan;
     const bool diagnostics = page == model::AppPage::Diagnostics;
-    lv_label_set_text(page_badge_, adapters ? "ADAPTERS" : diagnostics ? "DIAGNOSTICS" : "DASHBOARD");
+    lv_label_set_text(page_badge_, adapters ? "ADAPTERS" : wifi_scan ? "WIFI SCAN" : diagnostics ? "DIAGNOSTICS" : "DASHBOARD");
     for (std::size_t i = 0; i < rows_.size(); ++i) {
         lv_obj_remove_flag(rows_[i].row, LV_OBJ_FLAG_HIDDEN);
-        const auto& row = adapters ? kAdapterRows[i] : diagnostics ? kDiagnosticsRows[i] : kDashboardRows[i];
+        const auto& row = adapters ? kAdapterRows[i] : wifi_scan ? kWifiScanRows[i] : diagnostics ? kDiagnosticsRows[i] : kDashboardRows[i];
         lv_label_set_text(rows_[i].key, row.key);
         lv_label_set_text(rows_[i].action, row.action);
     }

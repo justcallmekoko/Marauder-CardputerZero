@@ -6,9 +6,10 @@
 
 cmake_minimum_required(VERSION 3.31)
 
-project(marauder_cardputerzero VERSION 0.3.0 LANGUAGES C CXX)
+project(marauder_cardputerzero VERSION 0.4.0 LANGUAGES C CXX)
 
 include(CTest)
+find_package(Threads REQUIRED)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -428,6 +429,8 @@ target_compile_definitions(${PROJECT_NAME}_platform
 target_link_libraries(${PROJECT_NAME}_platform
     PUBLIC
         lvgl
+    PRIVATE
+        Threads::Threads
 )
 
 # ====================================================
@@ -640,6 +643,15 @@ if(BUILD_TESTING AND USE_DESKTOP)
         "${CMAKE_CURRENT_SOURCE_DIR}/src/platform"
     )
     add_test(NAME wireless_capabilities_test COMMAND wireless_capabilities_test)
+
+    add_executable(wireless_scan_test
+        tests/wireless_scan_test.cpp
+        src/platform/wireless_scan.cpp
+    )
+    target_include_directories(wireless_scan_test PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/platform"
+    )
+    add_test(NAME wireless_scan_test COMMAND wireless_scan_test)
 endif()
 
 # Package deb

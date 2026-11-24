@@ -2,7 +2,7 @@
 
 Native C++17/LVGL 9.5 port of ESP32 Marauder for the ARM64 Linux-based Cardputer Zero.
 
-> Status: early development. The current milestone contains the application scaffold and read-only system diagnostics. Wi-Fi, Bluetooth, LoRa, GNSS logging, and packet operations are not implemented yet.
+> Status: early development. The current milestone includes read-only diagnostics, adapter selection and capability reporting, plus managed-mode Wi-Fi scanning. Bluetooth, LoRa, GNSS logging, monitor-mode capture, and packet operations are not implemented yet.
 
 ## Current milestone
 
@@ -13,6 +13,7 @@ Native C++17/LVGL 9.5 port of ESP32 Marauder for the ARM64 Linux-based Cardputer
 - Keyboard-driven adapter browsing and in-app selection without changing interface state
 - Viewport-safe summary/details paging for adapter information (`8` toggles pages)
 - Read-only kernel capability probing for monitor-mode support; injection remains unverified until an explicit hardware test
+- Non-blocking managed-mode Wi-Fi scanning on the selected adapter, with strongest-first paginated results
 - Read-only inventory of:
   - operating system, kernel, uptime, memory, and storage
   - network interfaces, Linux drivers, state, and wireless classification
@@ -31,7 +32,16 @@ The first validation platform currently includes:
 - CardputerZero CAP LoRa1262/GNSS module on the GPIO expansion
 - Alfa AWUS036ACM USB Wi-Fi adapter (MediaTek MT7612U / `mt76x2u`)
 
-The adapter layer enumerates Linux wireless interfaces, correlates USB metadata, identifies backing drivers and PHYs, and lets the user choose an adapter without changing radio state. Monitor mode remains `UNKNOWN` until a read-only nl80211 capability query is available, and injection remains `UNVERIFIED` until a later safe, reversible runtime validation; a USB device name or driver alone is not proof of injection support.
+The adapter layer enumerates Linux wireless interfaces, correlates USB metadata, identifies backing drivers and PHYs, and lets the user choose an adapter without changing radio state. It queries kernel-advertised monitor-mode support through nl80211/`iw` without changing interface state. Injection remains `UNVERIFIED` until a later safe, reversible runtime validation; a USB device name or driver alone is not proof of injection support.
+
+## Keyboard workflow
+
+1. Press `5` on the dashboard to open Adapters.
+2. Use `5`/`7` to choose an adapter and `6` to select it.
+3. Return to the dashboard and press `8` for Wi-Fi Scan.
+4. On the scan page, use `5`/`7` for result pages, `6` to rescan, and `8` to return to Adapters.
+
+Managed-mode scans use the target’s existing NetworkManager service when available; the Cardputer Zero base image has been validated with it. Scans do not enable monitor mode and do not test injection.
 
 ## Architecture
 
@@ -71,7 +81,7 @@ cmake --build --preset linux-x86-64-dbg
 cmake --workflow --preset cp0-cross-package
 ```
 
-The expected artifact is `dist/Marauder_0.3.0_rev1_arm64.deb`. Packaging and deployment remain separate actions.
+The expected artifact is `dist/Marauder_0.4.0_rev1_arm64.deb`. Packaging and deployment remain separate actions.
 
 ## Safety and scope
 

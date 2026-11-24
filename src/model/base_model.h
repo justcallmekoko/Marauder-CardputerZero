@@ -12,7 +12,8 @@ namespace model {
 enum class AppPage {
     Dashboard = 0,
     Adapters = 1,
-    Diagnostics = 2,
+    WifiScan = 2,
+    Diagnostics = 3,
 };
 
 class BaseModel {

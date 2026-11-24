@@ -7,16 +7,30 @@
 
 #include "system_diagnostics.h"
 
+#include <algorithm>
 #include <sstream>
+#include <system_error>
 
 namespace viewmodel {
 namespace {
 int page_to_int(model::AppPage page) { return static_cast<int>(page); }
 
 std::string clip_for_display(const std::string& value, std::size_t max_length) {
-    if (value.size() <= max_length) return value;
-    if (max_length < 4) return value.substr(0, max_length);
-    return value.substr(0, max_length - 3) + "...";
+    auto next_codepoint = [&](std::size_t index) {
+        const auto byte = static_cast<unsigned char>(value[index]);
+        std::size_t length = byte < 0x80 ? 1 :
+                             (byte & 0xe0) == 0xc0 ? 2 :
+                             (byte & 0xf0) == 0xe0 ? 3 :
+                             (byte & 0xf8) == 0xf0 ? 4 : 1;
+        return std::min(value.size(), index + length);
+    };
+    std::size_t count = 0;
+    for (std::size_t index = 0; index < value.size(); index = next_codepoint(index)) ++count;
+    if (count <= max_length) return value;
+    const std::size_t keep = max_length < 4 ? max_length : max_length - 3;
+    std::size_t end = 0;
+    for (std::size_t index = 0; index < keep && end < value.size(); ++index) end = next_codepoint(end);
+    return value.substr(0, end) + (max_length < 4 ? "" : "...");
 }
 }
 
@@ -28,11 +42,19 @@ BaseViewModel::BaseViewModel()
       diagnostics_detail_subject_("Collecting system information..."),
       diagnostics_generation_subject_(0),
       adapter_detail_subject_("Collecting wireless adapters..."),
+      wifi_scan_subject_("SELECT AN ADAPTER FIRST"),
       quit_requested_subject_(false) {
+    wifi_scan_timer_ = lv_timer_create(wifi_scan_timer_cb, 100, this);
     refresh_diagnostics();
 }
 
-BaseViewModel::~BaseViewModel() = default;
+BaseViewModel::~BaseViewModel() {
+    if (wifi_scan_timer_) {
+        lv_timer_delete(wifi_scan_timer_);
+        wifi_scan_timer_ = nullptr;
+    }
+    if (wifi_scan_thread_.joinable()) wifi_scan_thread_.join();
+}
 lv_subject_t* BaseViewModel::title_subject() { return title_subject_.native(); }
 lv_subject_t* BaseViewModel::dark_mode_subject() { return dark_mode_subject_.native(); }
 lv_subject_t* BaseViewModel::current_page_subject() { return current_page_subject_.native(); }
@@ -40,17 +62,27 @@ lv_subject_t* BaseViewModel::dashboard_summary_subject() { return dashboard_summ
 lv_subject_t* BaseViewModel::diagnostics_detail_subject() { return diagnostics_detail_subject_.native(); }
 lv_subject_t* BaseViewModel::diagnostics_generation_subject() { return diagnostics_generation_subject_.native(); }
 lv_subject_t* BaseViewModel::adapter_detail_subject() { return adapter_detail_subject_.native(); }
+lv_subject_t* BaseViewModel::wifi_scan_subject() { return wifi_scan_subject_.native(); }
 lv_subject_t* BaseViewModel::quit_requested_subject() { return quit_requested_subject_.native(); }
 bool BaseViewModel::is_dark_mode() const { return model_.dark_mode(); }
 void BaseViewModel::set_dark_mode(bool enabled) { model_.set_dark_mode(enabled); publish_navigation(); }
 void BaseViewModel::toggle_dark_mode() { model_.toggle_dark_mode(); publish_navigation(); }
 model::AppPage BaseViewModel::current_page() const { return model_.current_page(); }
 void BaseViewModel::show_dashboard_page() { model_.set_current_page(model::AppPage::Dashboard); publish_navigation(); }
-void BaseViewModel::show_diagnostics_page() { model_.set_current_page(model::AppPage::Diagnostics); publish_navigation(); }
+void BaseViewModel::show_diagnostics_page() {
+    refresh_diagnostics();
+    model_.set_current_page(model::AppPage::Diagnostics);
+    publish_navigation();
+}
 void BaseViewModel::show_adapters_page() {
     refresh_adapters();
     model_.set_current_page(model::AppPage::Adapters);
     publish_navigation();
+}
+void BaseViewModel::show_wifi_scan_page() {
+    model_.set_current_page(model::AppPage::WifiScan);
+    publish_navigation();
+    if (wifi_networks_.empty() && !wifi_scan_running_) start_wifi_scan();
 }
 void BaseViewModel::toggle_page() { model_.toggle_page(); publish_navigation(); }
 
@@ -93,8 +125,16 @@ void BaseViewModel::next_adapter() {
 
 void BaseViewModel::select_highlighted_adapter() {
     if (adapters_.empty()) return;
-    model_.set_selected_adapter_id(adapters_[highlighted_adapter_].stable_id);
+    const auto& adapter = adapters_[highlighted_adapter_];
+    if (model_.selected_adapter_id() != adapter.stable_id) {
+        wifi_networks_.clear();
+        wifi_scan_interface_.clear();
+        wifi_scan_error_.clear();
+        wifi_scan_page_ = 0;
+    }
+    model_.set_selected_adapter_id(adapter.stable_id);
     publish_adapter_detail();
+    publish_wifi_scan();
 }
 
 void BaseViewModel::toggle_adapter_details() {
@@ -102,12 +142,125 @@ void BaseViewModel::toggle_adapter_details() {
     publish_adapter_detail();
 }
 
+void BaseViewModel::start_wifi_scan() {
+    if (wifi_scan_running_) return;
+    const auto selected = std::find_if(adapters_.begin(), adapters_.end(), [&](const auto& adapter) {
+        return adapter.stable_id == model_.selected_adapter_id();
+    });
+    if (selected == adapters_.end()) {
+        wifi_scan_error_ = "Select an adapter on the Adapters page";
+        publish_wifi_scan();
+        return;
+    }
+    if (wifi_scan_thread_.joinable()) wifi_scan_thread_.join();
+    wifi_scan_interface_ = selected->interface_name;
+    wifi_scan_error_.clear();
+    wifi_scan_running_ = true;
+    wifi_scan_ready_ = false;
+    publish_wifi_scan();
+    const auto interface_name = wifi_scan_interface_;
+    try {
+        wifi_scan_thread_ = std::thread([this, interface_name] {
+            platform::wireless::WifiScanResult result;
+            try {
+                result = platform::wireless::scan_wifi_networks(interface_name);
+            } catch (...) {
+                result.error = "Unexpected Wi-Fi scan failure";
+            }
+            {
+                std::lock_guard<std::mutex> lock(wifi_scan_mutex_);
+                pending_wifi_scan_ = std::move(result);
+                pending_wifi_scan_interface_ = interface_name;
+            }
+            wifi_scan_ready_ = true;
+        });
+    } catch (const std::system_error&) {
+        wifi_scan_running_ = false;
+        wifi_scan_error_ = "Unable to start background scan";
+        publish_wifi_scan();
+    }
+}
+
+void BaseViewModel::previous_wifi_scan_page() {
+    const std::size_t pages = std::max<std::size_t>(1, (wifi_networks_.size() + 4) / 5);
+    wifi_scan_page_ = wifi_scan_page_ == 0 ? pages - 1 : wifi_scan_page_ - 1;
+    publish_wifi_scan();
+}
+
+void BaseViewModel::next_wifi_scan_page() {
+    const std::size_t pages = std::max<std::size_t>(1, (wifi_networks_.size() + 4) / 5);
+    wifi_scan_page_ = (wifi_scan_page_ + 1) % pages;
+    publish_wifi_scan();
+}
+
 void BaseViewModel::request_quit() { quit_requested_subject_.set(true); }
+
+void BaseViewModel::wifi_scan_timer_cb(lv_timer_t* timer) {
+    auto* self = static_cast<BaseViewModel*>(lv_timer_get_user_data(timer));
+    if (self) self->finish_wifi_scan_if_ready();
+}
+
+void BaseViewModel::finish_wifi_scan_if_ready() {
+    if (!wifi_scan_ready_.exchange(false)) return;
+    if (wifi_scan_thread_.joinable()) wifi_scan_thread_.join();
+    platform::wireless::WifiScanResult completed;
+    std::string completed_interface;
+    {
+        std::lock_guard<std::mutex> lock(wifi_scan_mutex_);
+        completed = std::move(pending_wifi_scan_);
+        completed_interface = std::move(pending_wifi_scan_interface_);
+        pending_wifi_scan_ = {};
+    }
+    const auto selected = std::find_if(adapters_.begin(), adapters_.end(), [&](const auto& adapter) {
+        return adapter.stable_id == model_.selected_adapter_id();
+    });
+    if (selected != adapters_.end() && selected->interface_name == completed_interface) {
+        wifi_scan_interface_ = completed_interface;
+        wifi_networks_ = std::move(completed.networks);
+        wifi_scan_error_ = std::move(completed.error);
+        wifi_scan_page_ = 0;
+    }
+    wifi_scan_running_ = false;
+    publish_wifi_scan();
+}
 
 void BaseViewModel::publish_navigation() {
     title_subject_.set(model_.app_title());
     dark_mode_subject_.set(model_.dark_mode());
     current_page_subject_.set(page_to_int(model_.current_page()));
+}
+
+void BaseViewModel::publish_wifi_scan() {
+    std::ostringstream out;
+    if (wifi_scan_interface_.empty()) {
+        out << "WIFI SCAN\n"
+            << (wifi_scan_error_.empty() ? "Select an adapter on the Adapters page" : wifi_scan_error_) << "\n"
+            << "4 BACK   8 ADAPTERS";
+        wifi_scan_subject_.set(out.str().c_str());
+        return;
+    }
+
+    const std::size_t pages = std::max<std::size_t>(1, (wifi_networks_.size() + 4) / 5);
+    wifi_scan_page_ = std::min(wifi_scan_page_, pages - 1);
+    out << "WIFI SCAN " << wifi_scan_interface_ << "  " << (wifi_scan_page_ + 1) << '/' << pages << '\n';
+    if (wifi_scan_running_) {
+        out << "SCANNING... previous results below\n";
+    } else if (!wifi_scan_error_.empty()) {
+        out << wifi_scan_error_ << "\n";
+    } else {
+        out << wifi_networks_.size() << " NETWORKS  strongest first\n";
+    }
+
+    const std::size_t begin = wifi_scan_page_ * 5;
+    const std::size_t end = std::min(begin + 5, wifi_networks_.size());
+    for (std::size_t index = begin; index < end; ++index) {
+        const auto& network = wifi_networks_[index];
+        out << network.signal_percent << "% C" << network.channel << ' '
+            << clip_for_display(network.ssid, 22) << ' '
+            << clip_for_display(network.security, 8) << '\n';
+    }
+    if (begin == end && !wifi_scan_running_ && wifi_scan_error_.empty()) out << "No networks found\n";
+    wifi_scan_subject_.set(out.str().c_str());
 }
 
 void BaseViewModel::publish_adapter_detail() {
