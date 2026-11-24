@@ -6,7 +6,7 @@
 
 cmake_minimum_required(VERSION 3.31)
 
-project(marauder_cardputerzero VERSION 0.5.3 LANGUAGES C CXX)
+project(marauder_cardputerzero VERSION 0.5.4 LANGUAGES C CXX)
 
 include(CTest)
 find_package(Threads REQUIRED)
