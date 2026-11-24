@@ -25,6 +25,7 @@ public:
 
     void start();
     void show_dashboard_screen();
+    void show_adapters_screen();
     void show_diagnostics_screen();
     void request_page(model::AppPage page);
     void flush_requested_page();

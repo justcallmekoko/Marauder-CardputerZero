@@ -1,11 +1,11 @@
 {
   "app_name": "Marauder",
   "package_name": "marauder_cardputerzero",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Marauder system and radio toolkit for Cardputer Zero",
   "store": {
     "summary": "System diagnostics and radio toolkit for Cardputer Zero",
-    "description": "A native C++ and LVGL port of ESP32 Marauder for Cardputer Zero. The initial milestone provides read-only system, interface, USB, and peripheral diagnostics; radio features are added only after hardware capability validation.",
+    "description": "A native C++ and LVGL port of ESP32 Marauder for Cardputer Zero. The current milestone provides read-only system diagnostics plus wireless adapter discovery and selection; radio features are added only after hardware capability validation.",
     "categories": [
       "Security",
       "System Tools"

@@ -205,7 +205,7 @@ private:
         if (exit_armed_) {
             toast_->hide();
         } else if (key == LV_KEY_ESC &&
-                   view_model_.current_page() == model::AppPage::Diagnostics) {
+                   view_model_.current_page() != model::AppPage::Dashboard) {
             view_model_.show_dashboard_page();
         }
         exit_key_pressed_ = 0;

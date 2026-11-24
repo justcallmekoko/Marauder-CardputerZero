@@ -7,6 +7,7 @@
 #include "screen_manager.h"
 
 #include "dashboard_screen.h"
+#include "adapters_screen.h"
 #include "diagnostics_screen.h"
 
 namespace app {
@@ -59,6 +60,12 @@ void ScreenManager::show_dashboard_screen() {
     has_loaded_page_ = true;
 }
 
+void ScreenManager::show_adapters_screen() {
+    load_screen(std::make_unique<screen::AdaptersScreen>(view_model_, assets_));
+    loaded_page_ = model::AppPage::Adapters;
+    has_loaded_page_ = true;
+}
+
 void ScreenManager::show_diagnostics_screen() {
     load_screen(std::make_unique<screen::DiagnosticsScreen>(view_model_, assets_));
     loaded_page_ = model::AppPage::Diagnostics;
@@ -82,12 +89,17 @@ void ScreenManager::flush_requested_page() {
         return;
     }
 
-    if (requested_page_ == model::AppPage::Diagnostics) {
-        show_diagnostics_screen();
-        return;
+    switch (requested_page_) {
+        case model::AppPage::Adapters:
+            show_adapters_screen();
+            return;
+        case model::AppPage::Diagnostics:
+            show_diagnostics_screen();
+            return;
+        case model::AppPage::Dashboard:
+            show_dashboard_screen();
+            return;
     }
-
-    show_dashboard_screen();
 }
 
 lv_obj_t* ScreenManager::current_screen() const {

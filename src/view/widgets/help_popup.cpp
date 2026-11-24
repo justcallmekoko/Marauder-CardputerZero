@@ -23,15 +23,23 @@ struct HelpRow {
 
 constexpr std::array<HelpRow, 5> kDashboardRows = {{
     {"HOLD ESC / 4", "Exit"},
-    {"5", "Open diagnostics"},
+    {"5", "Open adapters"},
     {"6", "Light / dark"},
     {"7", "Open diagnostics"},
     {"8", "Refresh"},
 }};
 
+constexpr std::array<HelpRow, 5> kAdapterRows = {{
+    {"ESC / 4", "Back to dashboard"},
+    {"5", "Previous adapter"},
+    {"6", "Select adapter"},
+    {"7", "Next adapter"},
+    {"8", "Refresh adapters"},
+}};
+
 constexpr std::array<HelpRow, 5> kDiagnosticsRows = {{
     {"ESC / 4", "Back to dashboard"},
-    {"5", "Refresh"},
+    {"5", "Open adapters"},
     {"6", "Light / dark"},
     {"7", "Back to dashboard"},
     {"8", "Exit"},
@@ -158,16 +166,12 @@ bool HelpPopup::visible() const {
 }
 
 void HelpPopup::update_rows(model::AppPage page) {
+    const bool adapters = page == model::AppPage::Adapters;
     const bool diagnostics = page == model::AppPage::Diagnostics;
-    lv_label_set_text(page_badge_, diagnostics ? "DIAGNOSTICS" : "DASHBOARD");
+    lv_label_set_text(page_badge_, adapters ? "ADAPTERS" : diagnostics ? "DIAGNOSTICS" : "DASHBOARD");
     for (std::size_t i = 0; i < rows_.size(); ++i) {
-        const bool row_visible = diagnostics ? i < kDiagnosticsRows.size() : i < kDashboardRows.size();
-        if (!row_visible) {
-            lv_obj_add_flag(rows_[i].row, LV_OBJ_FLAG_HIDDEN);
-            continue;
-        }
         lv_obj_remove_flag(rows_[i].row, LV_OBJ_FLAG_HIDDEN);
-        const auto& row = diagnostics ? kDiagnosticsRows[i] : kDashboardRows[i];
+        const auto& row = adapters ? kAdapterRows[i] : diagnostics ? kDiagnosticsRows[i] : kDashboardRows[i];
         lv_label_set_text(rows_[i].key, row.key);
         lv_label_set_text(rows_[i].action, row.action);
     }

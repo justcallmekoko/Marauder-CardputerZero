@@ -63,29 +63,42 @@ void NavBar::create_icon_buttons() {
 }
 
 void NavBar::update_icon_buttons() {
-    const bool details = view_model_.current_page() == model::AppPage::Diagnostics;
     const char* theme_icon = view_model_.is_dark_mode() ? ICON_SUN : ICON_MOON;
     const std::array<IconSpec, 5> dashboard = {{
         {ICON_SIGN_OUT, request_quit_cb},
-        {ICON_INFO, toggle_page_cb},
+        {ICON_WIFI_HIGH, show_adapters_cb},
         {theme_icon, toggle_theme_cb},
-        {ICON_SQUARE_ARROW_RIGHT, toggle_page_cb},
+        {ICON_INFO, show_diagnostics_cb},
+        {ICON_SQUARE_ARROW_RIGHT, refresh_cb},
+    }};
+    const std::array<IconSpec, 5> adapters = {{
+        {ICON_SQUARE_ARROW_LEFT, show_dashboard_cb},
+        {ICON_MINUS, previous_adapter_cb},
+        {ICON_WIFI_HIGH, select_adapter_cb},
+        {ICON_PLUS, next_adapter_cb},
         {ICON_INFO, refresh_cb},
     }};
     const std::array<IconSpec, 5> diagnostics = {{
-        {ICON_SQUARE_ARROW_LEFT, toggle_page_cb},
-        {ICON_INFO, refresh_cb},
+        {ICON_SQUARE_ARROW_LEFT, show_dashboard_cb},
+        {ICON_WIFI_HIGH, show_adapters_cb},
         {theme_icon, toggle_theme_cb},
-        {ICON_SQUARE_ARROW_LEFT, toggle_page_cb},
+        {ICON_SQUARE_ARROW_LEFT, show_dashboard_cb},
         {ICON_SIGN_OUT, request_quit_cb},
     }};
-    const auto& icons = details ? diagnostics : dashboard;
+    const auto page = view_model_.current_page();
+    const auto& icons = page == model::AppPage::Adapters ? adapters :
+                        page == model::AppPage::Diagnostics ? diagnostics : dashboard;
     for (size_t i = 0; i < icon_buttons_.size(); ++i) {
         auto& button = icon_buttons_[i];
         button->set_text(icons[i].text);
         auto* root = button->root();
         lv_obj_remove_event_cb(root, toggle_theme_cb);
-        lv_obj_remove_event_cb(root, toggle_page_cb);
+        lv_obj_remove_event_cb(root, show_dashboard_cb);
+        lv_obj_remove_event_cb(root, show_adapters_cb);
+        lv_obj_remove_event_cb(root, show_diagnostics_cb);
+        lv_obj_remove_event_cb(root, previous_adapter_cb);
+        lv_obj_remove_event_cb(root, select_adapter_cb);
+        lv_obj_remove_event_cb(root, next_adapter_cb);
         lv_obj_remove_event_cb(root, refresh_cb);
         lv_obj_remove_event_cb(root, request_quit_cb);
         lv_obj_add_event_cb(root, icons[i].click_cb, LV_EVENT_CLICKED, &view_model_);
@@ -96,8 +109,23 @@ void NavBar::update_icon_buttons() {
 void NavBar::toggle_theme_cb(lv_event_t* event) {
     static_cast<viewmodel::BaseViewModel*>(lv_event_get_user_data(event))->toggle_dark_mode();
 }
-void NavBar::toggle_page_cb(lv_event_t* event) {
-    static_cast<viewmodel::BaseViewModel*>(lv_event_get_user_data(event))->toggle_page();
+void NavBar::show_dashboard_cb(lv_event_t* event) {
+    static_cast<viewmodel::BaseViewModel*>(lv_event_get_user_data(event))->show_dashboard_page();
+}
+void NavBar::show_adapters_cb(lv_event_t* event) {
+    static_cast<viewmodel::BaseViewModel*>(lv_event_get_user_data(event))->show_adapters_page();
+}
+void NavBar::show_diagnostics_cb(lv_event_t* event) {
+    static_cast<viewmodel::BaseViewModel*>(lv_event_get_user_data(event))->show_diagnostics_page();
+}
+void NavBar::previous_adapter_cb(lv_event_t* event) {
+    static_cast<viewmodel::BaseViewModel*>(lv_event_get_user_data(event))->previous_adapter();
+}
+void NavBar::select_adapter_cb(lv_event_t* event) {
+    static_cast<viewmodel::BaseViewModel*>(lv_event_get_user_data(event))->select_highlighted_adapter();
+}
+void NavBar::next_adapter_cb(lv_event_t* event) {
+    static_cast<viewmodel::BaseViewModel*>(lv_event_get_user_data(event))->next_adapter();
 }
 void NavBar::refresh_cb(lv_event_t* event) {
     static_cast<viewmodel::BaseViewModel*>(lv_event_get_user_data(event))->refresh_diagnostics();

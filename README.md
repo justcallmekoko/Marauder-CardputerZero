@@ -8,7 +8,9 @@ Native C++17/LVGL 9.5 port of ESP32 Marauder for the ARM64 Linux-based Cardputer
 
 - Cardputer Zero APPLaunch integration and Debian packaging scaffold
 - 320x170 LVGL interface with keyboard-only navigation
-- Dashboard and scrollable diagnostics screens
+- Dashboard, wireless-adapter selection, and scrollable diagnostics screens
+- Read-only wireless adapter catalog with interface, driver, PHY, bus, VID/PID, MAC, stable identity, and explicit monitor/injection verification state
+- Keyboard-driven adapter browsing and in-app selection without changing interface state
 - Read-only inventory of:
   - operating system, kernel, uptime, memory, and storage
   - network interfaces, Linux drivers, state, and wireless classification
@@ -27,7 +29,7 @@ The first validation platform currently includes:
 - CardputerZero CAP LoRa1262/GNSS module on the GPIO expansion
 - Alfa AWUS036ACM USB Wi-Fi adapter (MediaTek MT7612U / `mt76x2u`)
 
-The future adapter layer will enumerate Linux wireless interfaces, identify their backing drivers and PHY capabilities, and let the user choose an adapter. Monitor mode and injection will be reported only after safe, reversible runtime validation; a USB device name or driver alone is not proof of injection support.
+The adapter layer enumerates Linux wireless interfaces, correlates USB metadata, identifies backing drivers and PHYs, and lets the user choose an adapter without changing radio state. Monitor mode remains `UNKNOWN` until a read-only nl80211 capability query is available, and injection remains `UNVERIFIED` until a later safe, reversible runtime validation; a USB device name or driver alone is not proof of injection support.
 
 ## Architecture
 
@@ -67,7 +69,7 @@ cmake --build --preset linux-x86-64-dbg
 cmake --workflow --preset cp0-cross-package
 ```
 
-The expected artifact is `dist/Marauder_0.1.0_rev1_arm64.deb`. Packaging and deployment remain separate actions.
+The expected artifact is `dist/Marauder_0.2.0_rev1_arm64.deb`. Packaging and deployment remain separate actions.
 
 ## Safety and scope
 

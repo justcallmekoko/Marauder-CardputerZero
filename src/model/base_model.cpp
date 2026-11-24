@@ -14,7 +14,21 @@ void BaseModel::toggle_dark_mode() { dark_mode_ = !dark_mode_; }
 AppPage BaseModel::current_page() const { return current_page_; }
 void BaseModel::set_current_page(AppPage page) { current_page_ = page; }
 void BaseModel::toggle_page() {
-    current_page_ = current_page_ == AppPage::Dashboard ? AppPage::Diagnostics : AppPage::Dashboard;
+    switch (current_page_) {
+        case AppPage::Dashboard:
+            current_page_ = AppPage::Adapters;
+            break;
+        case AppPage::Adapters:
+            current_page_ = AppPage::Diagnostics;
+            break;
+        case AppPage::Diagnostics:
+            current_page_ = AppPage::Dashboard;
+            break;
+    }
+}
+const std::string& BaseModel::selected_adapter_id() const { return selected_adapter_id_; }
+void BaseModel::set_selected_adapter_id(std::string stable_id) {
+    selected_adapter_id_ = std::move(stable_id);
 }
 
 } // namespace model
