@@ -4,17 +4,12 @@
 
 #pragma once
 
+#include "wireless_capabilities.h"
+
 #include <string>
 #include <vector>
 
 namespace platform::wireless {
-
-enum class CapabilityState {
-    Supported,
-    Unsupported,
-    Unknown,
-    Unverified,
-};
 
 struct AdapterInfo {
     std::string interface_name;

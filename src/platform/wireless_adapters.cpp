@@ -109,9 +109,10 @@ Catalog enumerate() {
         }
 
         adapter.stable_id = stable_identity(adapter);
-        adapter.monitor_mode = CapabilityState::Unknown;
+        const auto monitor_probe = probe_monitor_mode(adapter.phy_name);
+        adapter.monitor_mode = monitor_probe.state;
         adapter.injection = CapabilityState::Unverified;
-        adapter.capability_note = "Read-only PHY mode query pending; no interface state changed";
+        adapter.capability_note = monitor_probe.note;
         catalog.adapters.push_back(std::move(adapter));
     }
 

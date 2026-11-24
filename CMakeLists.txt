@@ -6,7 +6,9 @@
 
 cmake_minimum_required(VERSION 3.31)
 
-project(marauder_cardputerzero VERSION 0.2.1 LANGUAGES C CXX)
+project(marauder_cardputerzero VERSION 0.3.0 LANGUAGES C CXX)
+
+include(CTest)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -628,6 +630,17 @@ target_link_libraries(${PROJECT_NAME}
         ${PROJECT_NAME}_view
         ${PROJECT_NAME}_viewmodel
 )
+
+if(BUILD_TESTING AND USE_DESKTOP)
+    add_executable(wireless_capabilities_test
+        tests/wireless_capabilities_test.cpp
+        src/platform/wireless_capabilities.cpp
+    )
+    target_include_directories(wireless_capabilities_test PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/platform"
+    )
+    add_test(NAME wireless_capabilities_test COMMAND wireless_capabilities_test)
+endif()
 
 # Package deb
 include(cmake/cm0-package.cmake)

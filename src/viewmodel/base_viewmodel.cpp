@@ -142,7 +142,7 @@ void BaseViewModel::publish_adapter_detail() {
             << "MAC " << (adapter.permanent_mac ? "PERMANENT" : "ASSIGNED") << '\n'
             << "Monitor " << platform::wireless::capability_label(adapter.monitor_mode) << '\n'
             << "Injection " << platform::wireless::capability_label(adapter.injection) << '\n'
-            << "Read-only; radio state unchanged\n"
+            << adapter.capability_note << '\n'
             << "8  SUMMARY";
     }
     adapter_detail_subject_.set(out.str().c_str());
