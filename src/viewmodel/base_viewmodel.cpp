@@ -38,6 +38,7 @@ BaseViewModel::BaseViewModel()
     : title_subject_(model_.app_title()),
       dark_mode_subject_(model_.dark_mode()),
       current_page_subject_(page_to_int(model_.current_page())),
+      marauder_menu_generation_subject_(0),
       dashboard_summary_subject_("Collecting system information..."),
       diagnostics_detail_subject_("Collecting system information..."),
       diagnostics_generation_subject_(0),
@@ -58,6 +59,7 @@ BaseViewModel::~BaseViewModel() {
 lv_subject_t* BaseViewModel::title_subject() { return title_subject_.native(); }
 lv_subject_t* BaseViewModel::dark_mode_subject() { return dark_mode_subject_.native(); }
 lv_subject_t* BaseViewModel::current_page_subject() { return current_page_subject_.native(); }
+lv_subject_t* BaseViewModel::marauder_menu_generation_subject() { return marauder_menu_generation_subject_.native(); }
 lv_subject_t* BaseViewModel::dashboard_summary_subject() { return dashboard_summary_subject_.native(); }
 lv_subject_t* BaseViewModel::diagnostics_detail_subject() { return diagnostics_detail_subject_.native(); }
 lv_subject_t* BaseViewModel::diagnostics_generation_subject() { return diagnostics_generation_subject_.native(); }
@@ -85,6 +87,46 @@ void BaseViewModel::show_wifi_scan_page() {
     if (wifi_networks_.empty() && !wifi_scan_running_) start_wifi_scan();
 }
 void BaseViewModel::toggle_page() { model_.toggle_page(); publish_navigation(); }
+const char* BaseViewModel::marauder_menu_title() const { return marauder_menu_.title(); }
+std::size_t BaseViewModel::marauder_menu_item_count() const { return marauder_menu_.item_count(); }
+const model::MarauderMenuItem& BaseViewModel::marauder_menu_item(std::size_t index) const {
+    return marauder_menu_.item(index);
+}
+std::size_t BaseViewModel::marauder_menu_selected_index() const { return marauder_menu_.selected_index(); }
+bool BaseViewModel::marauder_menu_at_root() const { return marauder_menu_.depth() == 1; }
+void BaseViewModel::marauder_menu_previous() {
+    marauder_menu_.previous();
+    marauder_menu_generation_subject_.set(marauder_menu_generation_subject_.value() + 1);
+}
+void BaseViewModel::marauder_menu_next() {
+    marauder_menu_.next();
+    marauder_menu_generation_subject_.set(marauder_menu_generation_subject_.value() + 1);
+}
+void BaseViewModel::marauder_menu_activate() {
+    const auto action = marauder_menu_.activate();
+    marauder_menu_generation_subject_.set(marauder_menu_generation_subject_.value() + 1);
+    switch (action) {
+        case model::MarauderMenuAction::OpenWifiScan:
+            show_wifi_scan_page();
+            break;
+        case model::MarauderMenuAction::OpenAdapters:
+            show_adapters_page();
+            break;
+        case model::MarauderMenuAction::OpenDiagnostics:
+            show_diagnostics_page();
+            break;
+        case model::MarauderMenuAction::ToggleTheme:
+            toggle_dark_mode();
+            break;
+        case model::MarauderMenuAction::None:
+            break;
+    }
+}
+bool BaseViewModel::marauder_menu_back() {
+    if (!marauder_menu_.back()) return false;
+    marauder_menu_generation_subject_.set(marauder_menu_generation_subject_.value() + 1);
+    return true;
+}
 
 void BaseViewModel::refresh_diagnostics() {
     const auto snapshot = platform::diagnostics::collect();

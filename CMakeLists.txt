@@ -6,7 +6,7 @@
 
 cmake_minimum_required(VERSION 3.31)
 
-project(marauder_cardputerzero VERSION 0.4.0 LANGUAGES C CXX)
+project(marauder_cardputerzero VERSION 0.5.0 LANGUAGES C CXX)
 
 include(CTest)
 find_package(Threads REQUIRED)
@@ -652,6 +652,15 @@ if(BUILD_TESTING AND USE_DESKTOP)
         "${CMAKE_CURRENT_SOURCE_DIR}/src/platform"
     )
     add_test(NAME wireless_scan_test COMMAND wireless_scan_test)
+
+    add_executable(marauder_menu_test
+        tests/marauder_menu_test.cpp
+        src/model/marauder_menu.cpp
+    )
+    target_include_directories(marauder_menu_test PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/model"
+    )
+    add_test(NAME marauder_menu_test COMMAND marauder_menu_test)
 endif()
 
 # Package deb

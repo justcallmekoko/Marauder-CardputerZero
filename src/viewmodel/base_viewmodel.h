@@ -6,6 +6,7 @@
 #pragma once
 
 #include "base_model.h"
+#include "marauder_menu.h"
 #include "subjects.h"
 
 #include "lvgl.h"
@@ -32,6 +33,7 @@ public:
     lv_subject_t* title_subject();
     lv_subject_t* dark_mode_subject();
     lv_subject_t* current_page_subject();
+    lv_subject_t* marauder_menu_generation_subject();
     lv_subject_t* dashboard_summary_subject();
     lv_subject_t* diagnostics_detail_subject();
     lv_subject_t* diagnostics_generation_subject();
@@ -48,6 +50,15 @@ public:
     void show_adapters_page();
     void show_wifi_scan_page();
     void toggle_page();
+    const char* marauder_menu_title() const;
+    std::size_t marauder_menu_item_count() const;
+    const model::MarauderMenuItem& marauder_menu_item(std::size_t index) const;
+    std::size_t marauder_menu_selected_index() const;
+    bool marauder_menu_at_root() const;
+    void marauder_menu_previous();
+    void marauder_menu_next();
+    void marauder_menu_activate();
+    bool marauder_menu_back();
     void refresh_diagnostics();
     void refresh_adapters();
     void previous_adapter();
@@ -67,9 +78,11 @@ private:
     static void wifi_scan_timer_cb(lv_timer_t* timer);
 
     model::BaseModel model_;
+    model::MarauderMenuModel marauder_menu_;
     reactive::StringSubject<32> title_subject_;
     reactive::BoolSubject dark_mode_subject_;
     reactive::IntSubject current_page_subject_;
+    reactive::IntSubject marauder_menu_generation_subject_;
     reactive::StringSubject<768> dashboard_summary_subject_;
     reactive::StringSubject<6144> diagnostics_detail_subject_;
     reactive::IntSubject diagnostics_generation_subject_;

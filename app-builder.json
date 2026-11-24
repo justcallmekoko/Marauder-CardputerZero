@@ -1,11 +1,11 @@
 {
   "app_name": "Marauder",
   "package_name": "marauder_cardputerzero",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Marauder system and radio toolkit for Cardputer Zero",
   "store": {
     "summary": "System diagnostics and radio toolkit for Cardputer Zero",
-    "description": "A native C++ and LVGL port of ESP32 Marauder for Cardputer Zero. The current milestone provides read-only system diagnostics, wireless adapter discovery and selection, capability reporting, and managed-mode Wi-Fi scanning; active radio features are added only after hardware validation.",
+    "description": "A native C++ and LVGL port of ESP32 Marauder for Cardputer Zero. The current milestone adds a classic Marauder-style hierarchical menu with arrow/Enter navigation, read-only diagnostics, adapter selection and capability reporting, and managed-mode Wi-Fi scanning; active radio features remain hardware-gated.",
     "categories": [
       "Security",
       "System Tools"

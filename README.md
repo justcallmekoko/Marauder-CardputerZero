@@ -7,13 +7,14 @@ Native C++17/LVGL 9.5 port of ESP32 Marauder for the ARM64 Linux-based Cardputer
 ## Current milestone
 
 - Cardputer Zero APPLaunch integration and Debian packaging scaffold
-- 320x170 LVGL interface with keyboard-only navigation
+- 320x170 LVGL interface with a classic Marauder-style hierarchical menu
 - Dashboard, wireless-adapter selection, and scrollable diagnostics screens
 - Read-only wireless adapter catalog with interface, driver, PHY, bus, VID/PID, MAC, stable identity, and explicit monitor/injection verification state
 - Keyboard-driven adapter browsing and in-app selection without changing interface state
 - Viewport-safe summary/details paging for adapter information (`8` toggles pages)
 - Read-only kernel capability probing for monitor-mode support; injection remains unverified until an explicit hardware test
 - Non-blocking managed-mode Wi-Fi scanning on the selected adapter, with strongest-first paginated results
+- Arrow-key menu navigation (`Up`/`Down`, `Enter`/`Right`, `Left`/`Esc`) while retaining `4`–`8` quick functions
 - Read-only inventory of:
   - operating system, kernel, uptime, memory, and storage
   - network interfaces, Linux drivers, state, and wireless classification
@@ -36,7 +37,11 @@ The adapter layer enumerates Linux wireless interfaces, correlates USB metadata,
 
 ## Keyboard workflow
 
-1. Press `5` on the dashboard to open Adapters.
+The main screen follows the Marauder hierarchy: **WiFi**, **Bluetooth**, **GPS**, **Device**, and **Settings**. Use `Up`/`Down` to move, `Enter` or `Right` to open, and `Left` or `Esc` to go back. Unimplemented functions are visibly marked `soon` rather than silently doing nothing.
+
+Quick functions remain available:
+
+1. Press `5` on the main menu to open Adapters.
 2. Use `5`/`7` to choose an adapter and `6` to select it.
 3. Return to the dashboard and press `8` for Wi-Fi Scan.
 4. On the scan page, use `5`/`7` for result pages, `6` to rescan, and `8` to return to Adapters.
@@ -81,7 +86,7 @@ cmake --build --preset linux-x86-64-dbg
 cmake --workflow --preset cp0-cross-package
 ```
 
-The expected artifact is `dist/Marauder_0.4.0_rev1_arm64.deb`. Packaging and deployment remain separate actions.
+The expected artifact is `dist/Marauder_0.5.0_rev1_arm64.deb`. Packaging and deployment remain separate actions.
 
 ## Safety and scope
 
