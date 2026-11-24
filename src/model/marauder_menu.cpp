@@ -66,7 +66,6 @@ const std::vector<Item>& items_for(Id menu) {
     static const std::vector<Item> settings = {
         {"Light / Dark", Color::LightGrey, Action::ToggleTheme, Id::Main, false, true},
         {"Adapter Setup", Color::Green, Action::OpenAdapters, Id::Main, false, true},
-        {"System Info", Color::Cyan, Action::OpenDiagnostics, Id::Main, false, true},
     };
 
     switch (menu) {
@@ -106,6 +105,7 @@ MarauderMenuModel::MarauderMenuModel() : stack_{{MarauderMenuId::Main, 0}} {}
 const char* MarauderMenuModel::title() const { return title_for(current_menu()); }
 MarauderMenuId MarauderMenuModel::current_menu() const { return stack_.back().menu; }
 std::size_t MarauderMenuModel::depth() const { return stack_.size(); }
+bool MarauderMenuModel::can_go_back() const { return stack_.size() > 1; }
 std::size_t MarauderMenuModel::selected_index() const { return stack_.back().selected; }
 std::size_t MarauderMenuModel::item_count() const { return items_for(current_menu()).size(); }
 const MarauderMenuItem& MarauderMenuModel::item(std::size_t index) const {

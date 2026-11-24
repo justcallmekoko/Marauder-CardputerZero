@@ -7,6 +7,8 @@
 
 #include "base_model.h"
 #include "marauder_menu.h"
+#include "system_info_model.h"
+#include "system_diagnostics.h"
 #include "subjects.h"
 
 #include "lvgl.h"
@@ -40,6 +42,7 @@ public:
     lv_subject_t* adapter_detail_subject();
     lv_subject_t* wifi_scan_subject();
     lv_subject_t* quit_requested_subject();
+    lv_subject_t* help_request_subject();
 
     bool is_dark_mode() const;
     void set_dark_mode(bool enabled);
@@ -55,11 +58,16 @@ public:
     const model::MarauderMenuItem& marauder_menu_item(std::size_t index) const;
     std::size_t marauder_menu_selected_index() const;
     bool marauder_menu_at_root() const;
+    bool marauder_menu_can_go_back() const;
     void marauder_menu_previous();
     void marauder_menu_next();
     void marauder_menu_activate();
     bool marauder_menu_back();
     void refresh_diagnostics();
+    void previous_system_info_page();
+    void next_system_info_page();
+    void toggle_system_info_details();
+    void request_context_help();
     void refresh_adapters();
     void previous_adapter();
     void next_adapter();
@@ -68,11 +76,13 @@ public:
     void start_wifi_scan();
     void previous_wifi_scan_page();
     void next_wifi_scan_page();
+    void toggle_wifi_scan_details();
     void request_quit();
 
 private:
     void publish_navigation();
     void publish_adapter_detail();
+    void publish_diagnostics();
     void publish_wifi_scan();
     void finish_wifi_scan_if_ready();
     static void wifi_scan_timer_cb(lv_timer_t* timer);
@@ -89,6 +99,9 @@ private:
     reactive::StringSubject<2048> adapter_detail_subject_;
     reactive::StringSubject<2048> wifi_scan_subject_;
     reactive::BoolSubject quit_requested_subject_;
+    reactive::IntSubject help_request_subject_;
+    model::SystemInfoModel system_info_;
+    platform::diagnostics::Snapshot diagnostics_snapshot_;
     std::vector<platform::wireless::AdapterInfo> adapters_;
     std::string adapter_error_;
     std::size_t highlighted_adapter_{0};
@@ -97,6 +110,8 @@ private:
     std::string wifi_scan_interface_;
     std::string wifi_scan_error_;
     std::size_t wifi_scan_page_{0};
+    std::size_t wifi_scan_detail_index_{0};
+    bool wifi_scan_details_expanded_{false};
     std::atomic<bool> wifi_scan_running_{false};
     std::atomic<bool> wifi_scan_ready_{false};
     std::mutex wifi_scan_mutex_;

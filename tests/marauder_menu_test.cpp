@@ -75,7 +75,7 @@ int main() {
     menu.next();
     if (menu.activate() != MarauderMenuAction::OpenAdapters) return 19;
     menu.next();
-    if (menu.activate() != MarauderMenuAction::OpenDiagnostics) return 20;
+    if (menu.selected_index() != 0 || menu.item_count() != 2) return 20;
 
     return 0;
 }

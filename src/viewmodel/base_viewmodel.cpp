@@ -5,6 +5,7 @@
 
 #include "base_viewmodel.h"
 
+#include "display_format.h"
 #include "system_diagnostics.h"
 
 #include <algorithm>
@@ -14,24 +15,6 @@
 namespace viewmodel {
 namespace {
 int page_to_int(model::AppPage page) { return static_cast<int>(page); }
-
-std::string clip_for_display(const std::string& value, std::size_t max_length) {
-    auto next_codepoint = [&](std::size_t index) {
-        const auto byte = static_cast<unsigned char>(value[index]);
-        std::size_t length = byte < 0x80 ? 1 :
-                             (byte & 0xe0) == 0xc0 ? 2 :
-                             (byte & 0xf0) == 0xe0 ? 3 :
-                             (byte & 0xf8) == 0xf0 ? 4 : 1;
-        return std::min(value.size(), index + length);
-    };
-    std::size_t count = 0;
-    for (std::size_t index = 0; index < value.size(); index = next_codepoint(index)) ++count;
-    if (count <= max_length) return value;
-    const std::size_t keep = max_length < 4 ? max_length : max_length - 3;
-    std::size_t end = 0;
-    for (std::size_t index = 0; index < keep && end < value.size(); ++index) end = next_codepoint(end);
-    return value.substr(0, end) + (max_length < 4 ? "" : "...");
-}
 }
 
 BaseViewModel::BaseViewModel()
@@ -44,7 +27,8 @@ BaseViewModel::BaseViewModel()
       diagnostics_generation_subject_(0),
       adapter_detail_subject_("Collecting wireless adapters..."),
       wifi_scan_subject_("SELECT AN ADAPTER FIRST"),
-      quit_requested_subject_(false) {
+      quit_requested_subject_(false),
+      help_request_subject_(0) {
     wifi_scan_timer_ = lv_timer_create(wifi_scan_timer_cb, 100, this);
     refresh_diagnostics();
 }
@@ -66,6 +50,7 @@ lv_subject_t* BaseViewModel::diagnostics_generation_subject() { return diagnosti
 lv_subject_t* BaseViewModel::adapter_detail_subject() { return adapter_detail_subject_.native(); }
 lv_subject_t* BaseViewModel::wifi_scan_subject() { return wifi_scan_subject_.native(); }
 lv_subject_t* BaseViewModel::quit_requested_subject() { return quit_requested_subject_.native(); }
+lv_subject_t* BaseViewModel::help_request_subject() { return help_request_subject_.native(); }
 bool BaseViewModel::is_dark_mode() const { return model_.dark_mode(); }
 void BaseViewModel::set_dark_mode(bool enabled) { model_.set_dark_mode(enabled); publish_navigation(); }
 void BaseViewModel::toggle_dark_mode() { model_.toggle_dark_mode(); publish_navigation(); }
@@ -93,7 +78,8 @@ const model::MarauderMenuItem& BaseViewModel::marauder_menu_item(std::size_t ind
     return marauder_menu_.item(index);
 }
 std::size_t BaseViewModel::marauder_menu_selected_index() const { return marauder_menu_.selected_index(); }
-bool BaseViewModel::marauder_menu_at_root() const { return marauder_menu_.depth() == 1; }
+bool BaseViewModel::marauder_menu_at_root() const { return !marauder_menu_.can_go_back(); }
+bool BaseViewModel::marauder_menu_can_go_back() const { return marauder_menu_.can_go_back(); }
 void BaseViewModel::marauder_menu_previous() {
     marauder_menu_.previous();
     marauder_menu_generation_subject_.set(marauder_menu_generation_subject_.value() + 1);
@@ -129,13 +115,26 @@ bool BaseViewModel::marauder_menu_back() {
 }
 
 void BaseViewModel::refresh_diagnostics() {
-    const auto snapshot = platform::diagnostics::collect();
-    const auto summary = platform::diagnostics::dashboard_summary(snapshot);
-    const auto details = platform::diagnostics::detail_text(snapshot);
+    diagnostics_snapshot_ = platform::diagnostics::collect();
+    system_info_.refresh_counts(diagnostics_snapshot_.network_interfaces.size(),
+                                diagnostics_snapshot_.usb_devices.size(),
+                                diagnostics_snapshot_.peripheral_nodes.size(),
+                                diagnostics_snapshot_.tools.size());
+    const auto summary = platform::diagnostics::dashboard_summary(diagnostics_snapshot_);
     dashboard_summary_subject_.set(summary.c_str());
-    diagnostics_detail_subject_.set(details.c_str());
-    diagnostics_generation_subject_.set(diagnostics_generation_subject_.value() + 1);
+    publish_diagnostics();
     refresh_adapters();
+}
+
+void BaseViewModel::previous_system_info_page() { system_info_.previous_page(); publish_diagnostics(); }
+void BaseViewModel::next_system_info_page() { system_info_.next_page(); publish_diagnostics(); }
+void BaseViewModel::toggle_system_info_details() { system_info_.toggle_details(); publish_diagnostics(); }
+void BaseViewModel::request_context_help() { help_request_subject_.set(help_request_subject_.value() + 1); }
+
+void BaseViewModel::publish_diagnostics() {
+    const auto text = format::system_info_page(diagnostics_snapshot_, system_info_);
+    diagnostics_detail_subject_.set(text.c_str());
+    diagnostics_generation_subject_.set(diagnostics_generation_subject_.value() + 1);
 }
 
 void BaseViewModel::refresh_adapters() {
@@ -173,6 +172,8 @@ void BaseViewModel::select_highlighted_adapter() {
         wifi_scan_interface_.clear();
         wifi_scan_error_.clear();
         wifi_scan_page_ = 0;
+        wifi_scan_detail_index_ = 0;
+        wifi_scan_details_expanded_ = false;
     }
     model_.set_selected_adapter_id(adapter.stable_id);
     publish_adapter_detail();
@@ -224,14 +225,33 @@ void BaseViewModel::start_wifi_scan() {
 }
 
 void BaseViewModel::previous_wifi_scan_page() {
-    const std::size_t pages = std::max<std::size_t>(1, (wifi_networks_.size() + 4) / 5);
-    wifi_scan_page_ = wifi_scan_page_ == 0 ? pages - 1 : wifi_scan_page_ - 1;
+    if (wifi_scan_details_expanded_) {
+        if (wifi_scan_detail_index_ > 0) --wifi_scan_detail_index_;
+    } else {
+        const std::size_t pages = std::max<std::size_t>(1, (wifi_networks_.size() + 4) / 5);
+        wifi_scan_page_ = wifi_scan_page_ == 0 ? pages - 1 : wifi_scan_page_ - 1;
+    }
     publish_wifi_scan();
 }
 
 void BaseViewModel::next_wifi_scan_page() {
-    const std::size_t pages = std::max<std::size_t>(1, (wifi_networks_.size() + 4) / 5);
-    wifi_scan_page_ = (wifi_scan_page_ + 1) % pages;
+    if (wifi_scan_details_expanded_) {
+        if (wifi_scan_detail_index_ + 1 < std::max<std::size_t>(1, wifi_networks_.size())) ++wifi_scan_detail_index_;
+    } else {
+        const std::size_t pages = std::max<std::size_t>(1, (wifi_networks_.size() + 4) / 5);
+        wifi_scan_page_ = (wifi_scan_page_ + 1) % pages;
+    }
+    publish_wifi_scan();
+}
+
+void BaseViewModel::toggle_wifi_scan_details() {
+    if (!wifi_scan_details_expanded_) {
+        wifi_scan_detail_index_ = std::min(wifi_scan_page_ * 5, wifi_networks_.empty() ? std::size_t{0} : wifi_networks_.size() - 1);
+        wifi_scan_details_expanded_ = true;
+    } else {
+        wifi_scan_page_ = wifi_scan_detail_index_ / 5;
+        wifi_scan_details_expanded_ = false;
+    }
     publish_wifi_scan();
 }
 
@@ -261,6 +281,8 @@ void BaseViewModel::finish_wifi_scan_if_ready() {
         wifi_networks_ = std::move(completed.networks);
         wifi_scan_error_ = std::move(completed.error);
         wifi_scan_page_ = 0;
+        wifi_scan_detail_index_ = 0;
+        wifi_scan_details_expanded_ = false;
     }
     wifi_scan_running_ = false;
     publish_wifi_scan();
@@ -273,36 +295,14 @@ void BaseViewModel::publish_navigation() {
 }
 
 void BaseViewModel::publish_wifi_scan() {
-    std::ostringstream out;
-    if (wifi_scan_interface_.empty()) {
-        out << "WIFI SCAN\n"
-            << (wifi_scan_error_.empty() ? "Select an adapter on the Adapters page" : wifi_scan_error_) << "\n"
-            << "4 BACK   8 ADAPTERS";
-        wifi_scan_subject_.set(out.str().c_str());
-        return;
-    }
-
-    const std::size_t pages = std::max<std::size_t>(1, (wifi_networks_.size() + 4) / 5);
-    wifi_scan_page_ = std::min(wifi_scan_page_, pages - 1);
-    out << "WIFI SCAN " << wifi_scan_interface_ << "  " << (wifi_scan_page_ + 1) << '/' << pages << '\n';
-    if (wifi_scan_running_) {
-        out << "SCANNING... previous results below\n";
-    } else if (!wifi_scan_error_.empty()) {
-        out << wifi_scan_error_ << "\n";
-    } else {
-        out << wifi_networks_.size() << " NETWORKS  strongest first\n";
-    }
-
-    const std::size_t begin = wifi_scan_page_ * 5;
-    const std::size_t end = std::min(begin + 5, wifi_networks_.size());
-    for (std::size_t index = begin; index < end; ++index) {
-        const auto& network = wifi_networks_[index];
-        out << network.signal_percent << "% C" << network.channel << ' '
-            << clip_for_display(network.ssid, 22) << ' '
-            << clip_for_display(network.security, 8) << '\n';
-    }
-    if (begin == end && !wifi_scan_running_ && wifi_scan_error_.empty()) out << "No networks found\n";
-    wifi_scan_subject_.set(out.str().c_str());
+    const auto index = wifi_scan_details_expanded_ ? wifi_scan_detail_index_ : wifi_scan_page_;
+    const auto text = format::wifi_scan_page(wifi_scan_interface_,
+                                             wifi_networks_,
+                                             wifi_scan_error_,
+                                             wifi_scan_running_,
+                                             wifi_scan_details_expanded_,
+                                             index);
+    wifi_scan_subject_.set(text.c_str());
 }
 
 void BaseViewModel::publish_adapter_detail() {
@@ -320,7 +320,7 @@ void BaseViewModel::publish_adapter_detail() {
         out << "ADAPTER " << (highlighted_adapter_ + 1) << '/' << adapters_.size()
             << (selected ? "  [SELECTED]" : "  [6 SELECT]") << '\n'
             << adapter.interface_name << "  " << adapter.bus_type << "  " << adapter.operstate << '\n';
-        const auto product = clip_for_display(adapter.manufacturer +
+        const auto product = format::clip_for_display(adapter.manufacturer +
                                               (adapter.manufacturer.empty() || adapter.product_name.empty() ? "" : " ") +
                                               adapter.product_name,
                                               42);
@@ -333,7 +333,7 @@ void BaseViewModel::publish_adapter_detail() {
     } else {
         out << "ADAPTER " << (highlighted_adapter_ + 1) << '/' << adapters_.size() << "  DETAILS\n"
             << adapter.interface_name << "  ifindex " << (adapter.ifindex.empty() ? "?" : adapter.ifindex) << '\n'
-            << "ID " << clip_for_display(adapter.stable_id, 42) << '\n'
+            << "ID " << format::clip_for_display(adapter.stable_id, 30) << '\n'
             << "MAC " << (adapter.permanent_mac ? "PERMANENT" : "ASSIGNED") << '\n'
             << "Monitor " << platform::wireless::capability_label(adapter.monitor_mode) << '\n'
             << "Injection " << platform::wireless::capability_label(adapter.injection) << '\n'

@@ -22,35 +22,35 @@ struct HelpRow {
 };
 
 constexpr std::array<HelpRow, 5> kDashboardRows = {{
-    {"F / X ARROWS", "Move up / down"},
-    {"ENTER / C ARROW", "Open / run"},
-    {"Z ARROW / ESC", "Back"},
-    {"5 / 6 / 7 / 8", "Adapter / theme / info / scan"},
-    {"HOLD ESC / 4", "Exit from main menu"},
+    {"F/X OR 5/7", "Previous / next item"},
+    {"ENTER/C OR 6", "Open / run"},
+    {"Z / 4", "Back (4 idle at root)"},
+    {"8", "Context help"},
+    {"HOLD 4", "Exit from main menu"},
 }};
 
 constexpr std::array<HelpRow, 5> kAdapterRows = {{
-    {"ESC / 4", "Back to dashboard"},
-    {"5", "Previous adapter"},
-    {"6", "Select adapter"},
-    {"7", "Next adapter"},
+    {"Z / ESC / 4", "Back to originating menu"},
+    {"F / 5", "Previous adapter"},
+    {"C / ENTER / 6", "Select adapter"},
+    {"X / 7", "Next adapter"},
     {"8", "More / summary"},
 }};
 
 constexpr std::array<HelpRow, 5> kWifiScanRows = {{
-    {"ESC / 4", "Back to dashboard"},
-    {"5", "Previous results page"},
-    {"6", "Rescan selected adapter"},
-    {"7", "Next results page"},
-    {"8", "Open adapters"},
+    {"Z / ESC / 4", "Back to originating menu"},
+    {"F / 5", "Previous results page"},
+    {"C / ENTER / 6", "Rescan selected adapter"},
+    {"X / 7", "Next results page"},
+    {"8", "Details / summary"},
 }};
 
 constexpr std::array<HelpRow, 5> kDiagnosticsRows = {{
-    {"ESC / 4", "Back to dashboard"},
-    {"5", "Open adapters"},
-    {"6", "Light / dark"},
-    {"7", "Back to dashboard"},
-    {"8", "Exit"},
+    {"Z / ESC / 4", "Back to Device menu"},
+    {"F / 5", "Previous page (clamped)"},
+    {"C / ENTER / 6", "Refresh diagnostics"},
+    {"X / 7", "Next page (clamped)"},
+    {"8", "Details / summary"},
 }};
 
 } // namespace
@@ -145,6 +145,10 @@ void HelpPopup::build() {
                                 theme_observer_cb,
                                 core_obj_,
                                 this);
+    lv_subject_add_observer_obj(view_model_.help_request_subject(),
+                                help_request_observer_cb,
+                                core_obj_,
+                                this);
     apply_theme();
     hide();
 }
@@ -177,12 +181,15 @@ void HelpPopup::update_rows(model::AppPage page) {
     const bool adapters = page == model::AppPage::Adapters;
     const bool wifi_scan = page == model::AppPage::WifiScan;
     const bool diagnostics = page == model::AppPage::Diagnostics;
-    lv_label_set_text(page_badge_, adapters ? "ADAPTERS" : wifi_scan ? "WIFI SCAN" : diagnostics ? "DIAGNOSTICS" : "DASHBOARD");
+    lv_label_set_text(page_badge_, adapters ? "ADAPTERS" : wifi_scan ? "WIFI SCAN" : diagnostics ? "SYSTEM INFO" : "MENU");
     for (std::size_t i = 0; i < rows_.size(); ++i) {
         lv_obj_remove_flag(rows_[i].row, LV_OBJ_FLAG_HIDDEN);
         const auto& row = adapters ? kAdapterRows[i] : wifi_scan ? kWifiScanRows[i] : diagnostics ? kDiagnosticsRows[i] : kDashboardRows[i];
         lv_label_set_text(rows_[i].key, row.key);
         lv_label_set_text(rows_[i].action, row.action);
+        if (page == model::AppPage::Dashboard && i == 2) {
+            lv_label_set_text(rows_[i].action, view_model_.marauder_menu_at_root() ? "4 idle at root" : "Back one menu");
+        }
     }
 }
 
@@ -210,6 +217,13 @@ void HelpPopup::backdrop_clicked_cb(lv_event_t* event) {
     if (popup && lv_event_get_target(event) == popup->core_obj_) {
         popup->hide();
     }
+}
+
+void HelpPopup::help_request_observer_cb(lv_observer_t* observer, lv_subject_t*) {
+    auto* popup = static_cast<HelpPopup*>(lv_observer_get_user_data(observer));
+    if (!popup) return;
+    if (popup->visible()) popup->hide();
+    else popup->show(popup->view_model_.current_page());
 }
 
 void HelpPopup::theme_observer_cb(lv_observer_t* observer, lv_subject_t*) {

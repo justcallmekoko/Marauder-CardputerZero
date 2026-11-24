@@ -136,11 +136,11 @@ void DashboardScreen::render_menu() {
 
     const auto& selected_item = view_model().marauder_menu_item(selected);
     if (!selected_item.available) {
-        lv_label_set_text(footer_, "COMING SOON   Z / ESC  BACK");
+        lv_label_set_text(footer_, "SOON   4 BACK   5/7 MOVE   8 HELP");
     } else if (view_model().marauder_menu_at_root()) {
-        lv_label_set_text(footer_, "F/X MOVE   ENTER/C SELECT");
+        lv_label_set_text(footer_, "5/7 MOVE   6 SELECT   8 HELP");
     } else {
-        lv_label_set_text(footer_, "F/X MOVE   C SELECT   Z BACK");
+        lv_label_set_text(footer_, "4 BACK   5/7 MOVE   6 SELECT   8 HELP");
     }
     lv_obj_set_style_text_color(footer_, muted_text, 0);
 }

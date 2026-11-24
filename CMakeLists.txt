@@ -6,7 +6,7 @@
 
 cmake_minimum_required(VERSION 3.31)
 
-project(marauder_cardputerzero VERSION 0.5.5 LANGUAGES C CXX)
+project(marauder_cardputerzero VERSION 0.6.0 LANGUAGES C CXX)
 
 include(CTest)
 find_package(Threads REQUIRED)
@@ -670,6 +670,18 @@ if(BUILD_TESTING AND USE_DESKTOP)
         "${CMAKE_CURRENT_SOURCE_DIR}/src/app"
     )
     add_test(NAME application_config_test COMMAND application_config_test)
+
+    add_executable(system_info_test
+        tests/system_info_test.cpp
+        src/model/system_info_model.cpp
+        src/viewmodel/display_format.cpp
+    )
+    target_include_directories(system_info_test PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/model"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/platform"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/viewmodel"
+    )
+    add_test(NAME system_info_test COMMAND system_info_test)
 
     add_executable(key_hold_state_test tests/key_hold_state_test.cpp)
     target_include_directories(key_hold_state_test PRIVATE

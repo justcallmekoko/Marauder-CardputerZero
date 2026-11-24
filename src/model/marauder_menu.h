@@ -59,6 +59,7 @@ public:
     const char* title() const;
     MarauderMenuId current_menu() const;
     std::size_t depth() const;
+    bool can_go_back() const;
     std::size_t selected_index() const;
     std::size_t item_count() const;
     const MarauderMenuItem& item(std::size_t index) const;

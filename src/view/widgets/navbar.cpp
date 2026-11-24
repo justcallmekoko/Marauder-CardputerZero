@@ -28,6 +28,7 @@ NavBar::~NavBar() {
     }
     if (page_observer_) lv_observer_remove(page_observer_);
     if (theme_observer_) lv_observer_remove(theme_observer_);
+    if (menu_observer_) lv_observer_remove(menu_observer_);
 }
 
 void NavBar::build() {
@@ -45,6 +46,7 @@ void NavBar::build() {
     create_icon_buttons();
     page_observer_ = reactive::observe_obj(core_obj_, view_model_.current_page_subject(), update_icons_cb, this);
     theme_observer_ = reactive::observe_obj(core_obj_, view_model_.dark_mode_subject(), update_icons_cb, this);
+    menu_observer_ = reactive::observe_obj(core_obj_, view_model_.marauder_menu_generation_subject(), update_icons_cb, this);
     platform::set_nav_shortcut_mode(false);
     update_icon_buttons();
 }
@@ -63,13 +65,12 @@ void NavBar::create_icon_buttons() {
 }
 
 void NavBar::update_icon_buttons() {
-    const char* theme_icon = view_model_.is_dark_mode() ? ICON_SUN : ICON_MOON;
     const std::array<IconSpec, 5> dashboard = {{
-        {ICON_SIGN_OUT, request_quit_cb},
-        {ICON_WIFI_HIGH, show_adapters_cb},
-        {theme_icon, toggle_theme_cb},
-        {ICON_INFO, show_diagnostics_cb},
-        {ICON_WIFI_NONE, show_wifi_scan_cb},
+        {ICON_SQUARE_ARROW_LEFT, menu_back_cb},
+        {ICON_MINUS, menu_previous_cb},
+        {ICON_SQUARE_ARROW_RIGHT, menu_activate_cb},
+        {ICON_PLUS, menu_next_cb},
+        {ICON_INFO, context_help_cb},
     }};
     const std::array<IconSpec, 5> adapters = {{
         {ICON_SQUARE_ARROW_LEFT, show_dashboard_cb},
@@ -83,14 +84,14 @@ void NavBar::update_icon_buttons() {
         {ICON_MINUS, previous_wifi_scan_page_cb},
         {ICON_WIFI_HIGH, rescan_wifi_cb},
         {ICON_PLUS, next_wifi_scan_page_cb},
-        {ICON_INFO, show_adapters_cb},
+        {ICON_INFO, toggle_wifi_scan_details_cb},
     }};
     const std::array<IconSpec, 5> diagnostics = {{
         {ICON_SQUARE_ARROW_LEFT, show_dashboard_cb},
-        {ICON_WIFI_HIGH, show_adapters_cb},
-        {theme_icon, toggle_theme_cb},
-        {ICON_SQUARE_ARROW_LEFT, show_dashboard_cb},
-        {ICON_SIGN_OUT, request_quit_cb},
+        {ICON_MINUS, previous_system_info_page_cb},
+        {ICON_TEXT_BOLD, refresh_cb},
+        {ICON_PLUS, next_system_info_page_cb},
+        {ICON_INFO, toggle_system_info_details_cb},
     }};
     const auto page = view_model_.current_page();
     const auto& icons = page == model::AppPage::Adapters ? adapters :
@@ -101,6 +102,11 @@ void NavBar::update_icon_buttons() {
         button->set_text(icons[i].text);
         auto* root = button->root();
         lv_obj_remove_event_cb(root, toggle_theme_cb);
+        lv_obj_remove_event_cb(root, menu_previous_cb);
+        lv_obj_remove_event_cb(root, menu_activate_cb);
+        lv_obj_remove_event_cb(root, menu_next_cb);
+        lv_obj_remove_event_cb(root, context_help_cb);
+        lv_obj_remove_event_cb(root, menu_back_cb);
         lv_obj_remove_event_cb(root, show_dashboard_cb);
         lv_obj_remove_event_cb(root, show_adapters_cb);
         lv_obj_remove_event_cb(root, show_wifi_scan_cb);
@@ -112,16 +118,27 @@ void NavBar::update_icon_buttons() {
         lv_obj_remove_event_cb(root, previous_wifi_scan_page_cb);
         lv_obj_remove_event_cb(root, rescan_wifi_cb);
         lv_obj_remove_event_cb(root, next_wifi_scan_page_cb);
+        lv_obj_remove_event_cb(root, toggle_wifi_scan_details_cb);
+        lv_obj_remove_event_cb(root, previous_system_info_page_cb);
+        lv_obj_remove_event_cb(root, next_system_info_page_cb);
+        lv_obj_remove_event_cb(root, toggle_system_info_details_cb);
         lv_obj_remove_event_cb(root, refresh_cb);
         lv_obj_remove_event_cb(root, request_quit_cb);
         lv_obj_add_event_cb(root, icons[i].click_cb, LV_EVENT_CLICKED, &view_model_);
-        button->set_enabled(true);
+        const bool dashboard_root_back = page == model::AppPage::Dashboard && i == 0 &&
+                                         !view_model_.marauder_menu_can_go_back();
+        button->set_enabled(!dashboard_root_back);
     }
 }
 
 void NavBar::toggle_theme_cb(lv_event_t* event) {
     static_cast<viewmodel::BaseViewModel*>(lv_event_get_user_data(event))->toggle_dark_mode();
 }
+void NavBar::menu_previous_cb(lv_event_t* event) { static_cast<viewmodel::BaseViewModel*>(lv_event_get_user_data(event))->marauder_menu_previous(); }
+void NavBar::menu_activate_cb(lv_event_t* event) { static_cast<viewmodel::BaseViewModel*>(lv_event_get_user_data(event))->marauder_menu_activate(); }
+void NavBar::menu_next_cb(lv_event_t* event) { static_cast<viewmodel::BaseViewModel*>(lv_event_get_user_data(event))->marauder_menu_next(); }
+void NavBar::context_help_cb(lv_event_t* event) { static_cast<viewmodel::BaseViewModel*>(lv_event_get_user_data(event))->request_context_help(); }
+void NavBar::menu_back_cb(lv_event_t* event) { static_cast<viewmodel::BaseViewModel*>(lv_event_get_user_data(event))->marauder_menu_back(); }
 void NavBar::show_dashboard_cb(lv_event_t* event) {
     static_cast<viewmodel::BaseViewModel*>(lv_event_get_user_data(event))->show_dashboard_page();
 }
@@ -155,6 +172,10 @@ void NavBar::rescan_wifi_cb(lv_event_t* event) {
 void NavBar::next_wifi_scan_page_cb(lv_event_t* event) {
     static_cast<viewmodel::BaseViewModel*>(lv_event_get_user_data(event))->next_wifi_scan_page();
 }
+void NavBar::toggle_wifi_scan_details_cb(lv_event_t* event) { static_cast<viewmodel::BaseViewModel*>(lv_event_get_user_data(event))->toggle_wifi_scan_details(); }
+void NavBar::previous_system_info_page_cb(lv_event_t* event) { static_cast<viewmodel::BaseViewModel*>(lv_event_get_user_data(event))->previous_system_info_page(); }
+void NavBar::next_system_info_page_cb(lv_event_t* event) { static_cast<viewmodel::BaseViewModel*>(lv_event_get_user_data(event))->next_system_info_page(); }
+void NavBar::toggle_system_info_details_cb(lv_event_t* event) { static_cast<viewmodel::BaseViewModel*>(lv_event_get_user_data(event))->toggle_system_info_details(); }
 void NavBar::refresh_cb(lv_event_t* event) {
     static_cast<viewmodel::BaseViewModel*>(lv_event_get_user_data(event))->refresh_diagnostics();
 }

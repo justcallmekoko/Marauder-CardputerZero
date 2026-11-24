@@ -176,36 +176,77 @@ private:
             return true;
         }
 
-        if (view_model_.current_page() == model::AppPage::Dashboard && !long_pressed) {
-            if (key == LV_KEY_UP || key == 'f' || key == 'F') {
+        if (view_model_.current_page() == model::AppPage::Dashboard) {
+            if (long_pressed && key == '4') {
+                if (exit_key_pressed_ == key && exit_armed_) {
+                    toast_->hide();
+                    view_model_.request_quit();
+                }
+                return true;
+            }
+            if (long_pressed) return false;
+            if (key == LV_KEY_UP || key == 'f' || key == 'F' || key == '5') {
                 view_model_.marauder_menu_previous();
                 return true;
             }
-            if (key == LV_KEY_DOWN || key == 'x' || key == 'X') {
+            if (key == LV_KEY_DOWN || key == 'x' || key == 'X' || key == '7') {
                 view_model_.marauder_menu_next();
                 return true;
             }
-            if (key == LV_KEY_ENTER || key == LV_KEY_RIGHT || key == 'c' || key == 'C') {
+            if (key == LV_KEY_ENTER || key == LV_KEY_RIGHT || key == 'c' || key == 'C' || key == '6') {
                 view_model_.marauder_menu_activate();
                 return true;
             }
-            if ((key == LV_KEY_LEFT || key == 'z' || key == 'Z') &&
-                !view_model_.marauder_menu_at_root()) {
-                view_model_.marauder_menu_back();
+            if (key == '8') {
+                view_model_.request_context_help();
                 return true;
             }
-            if ((key == LV_KEY_ESC || key == '4') && !view_model_.marauder_menu_at_root()) {
-                view_model_.marauder_menu_back();
+            if (key == '4') {
+                exit_key_pressed_ = key;
+                exit_armed_ = view_model_.marauder_menu_at_root();
+                if (exit_armed_) {
+                    toast_->show_persistent_highlighted("Hold ",
+                                                        "4",
+                                                        " to exit",
+                                                        view::widgets::ToastTone::Warning);
+                }
+                else {
+                    view_model_.marauder_menu_back();
+                }
+                return true;
+            }
+            if (key == LV_KEY_LEFT || key == 'z' || key == 'Z' || key == LV_KEY_ESC) {
+                if (!view_model_.marauder_menu_at_root()) view_model_.marauder_menu_back();
                 return true;
             }
         }
 
+        if (view_model_.current_page() == model::AppPage::Diagnostics && !long_pressed) {
+            if (key == LV_KEY_UP || key == 'f' || key == 'F') { view_model_.previous_system_info_page(); return true; }
+            if (key == LV_KEY_DOWN || key == 'x' || key == 'X') { view_model_.next_system_info_page(); return true; }
+            if (key == LV_KEY_ENTER || key == LV_KEY_RIGHT || key == 'c' || key == 'C') { view_model_.refresh_diagnostics(); return true; }
+        }
+
+        if (view_model_.current_page() == model::AppPage::Adapters && !long_pressed) {
+            if (key == LV_KEY_UP || key == 'f' || key == 'F') { view_model_.previous_adapter(); return true; }
+            if (key == LV_KEY_DOWN || key == 'x' || key == 'X') { view_model_.next_adapter(); return true; }
+            if (key == LV_KEY_ENTER || key == LV_KEY_RIGHT || key == 'c' || key == 'C') { view_model_.select_highlighted_adapter(); return true; }
+        }
+
+        if (view_model_.current_page() == model::AppPage::WifiScan && !long_pressed) {
+            if (key == LV_KEY_UP || key == 'f' || key == 'F') { view_model_.previous_wifi_scan_page(); return true; }
+            if (key == LV_KEY_DOWN || key == 'x' || key == 'X') { view_model_.next_wifi_scan_page(); return true; }
+            if (key == LV_KEY_ENTER || key == LV_KEY_RIGHT || key == 'c' || key == 'C') { view_model_.start_wifi_scan(); return true; }
+        }
+
+        if (view_model_.current_page() != model::AppPage::Dashboard && !long_pressed &&
+            (key == LV_KEY_LEFT || key == 'z' || key == 'Z' || key == LV_KEY_ESC)) {
+            view_model_.show_dashboard_page();
+            return true;
+        }
+
         const bool is_escape = key == LV_KEY_ESC;
-        const bool is_home_exit_key =
-            key == '4' &&
-            ((!long_pressed && view_model_.current_page() == model::AppPage::Dashboard) ||
-             (long_pressed && exit_key_pressed_ == key));
-        if (!is_escape && !is_home_exit_key) {
+        if (!is_escape) {
             return false;
         }
 

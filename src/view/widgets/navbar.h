@@ -26,6 +26,11 @@ private:
     void create_icon_buttons();
     void update_icon_buttons();
     static void toggle_theme_cb(lv_event_t* event);
+    static void menu_previous_cb(lv_event_t* event);
+    static void menu_activate_cb(lv_event_t* event);
+    static void menu_next_cb(lv_event_t* event);
+    static void context_help_cb(lv_event_t* event);
+    static void menu_back_cb(lv_event_t* event);
     static void show_dashboard_cb(lv_event_t* event);
     static void show_adapters_cb(lv_event_t* event);
     static void show_wifi_scan_cb(lv_event_t* event);
@@ -37,6 +42,10 @@ private:
     static void previous_wifi_scan_page_cb(lv_event_t* event);
     static void rescan_wifi_cb(lv_event_t* event);
     static void next_wifi_scan_page_cb(lv_event_t* event);
+    static void toggle_wifi_scan_details_cb(lv_event_t* event);
+    static void previous_system_info_page_cb(lv_event_t* event);
+    static void next_system_info_page_cb(lv_event_t* event);
+    static void toggle_system_info_details_cb(lv_event_t* event);
     static void refresh_cb(lv_event_t* event);
     static void request_quit_cb(lv_event_t* event);
     static void update_icons_cb(lv_observer_t* observer, lv_subject_t* subject);
@@ -47,6 +56,7 @@ private:
     lv_font_t* icon_font_{nullptr};
     lv_observer_t* page_observer_{nullptr};
     lv_observer_t* theme_observer_{nullptr};
+    lv_observer_t* menu_observer_{nullptr};
 };
 
 } // namespace view::widgets
