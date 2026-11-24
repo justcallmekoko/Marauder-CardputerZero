@@ -41,3 +41,48 @@ jobs:
 
       - name: Validate store manifest
         run: cmake -P .agents/skills/cardputerzero-package-release/scripts/validate_app_builder.cmake
+
+  arm64-package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install cross-build dependencies
+        timeout-minutes: 12
+        env:
+          DEBIAN_FRONTEND: noninteractive
+          NEEDRESTART_MODE: a
+        run: |
+          sudo -E apt-get update -qq -o Dpkg::Use-Pty=0
+          sudo -E apt-get install -y -qq --no-install-recommends -o Dpkg::Use-Pty=0 \
+            ninja-build \
+            gcc-aarch64-linux-gnu \
+            g++-aarch64-linux-gnu
+          python3 -m pip install --user --break-system-packages cmake==4.1.2
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Build ARM64 Debian package
+        run: cmake --workflow --preset cp0-cross-package
+
+      - name: Validate package and manifest
+        run: |
+          package="$(find dist -maxdepth 1 -type f -name 'Marauder_*_arm64.deb' -print -quit)"
+          test -n "$package"
+          test "$(dpkg-deb -f "$package" Architecture)" = arm64
+          cmake -DPACKAGE_FILE="$package" \
+            -P .agents/skills/cardputerzero-package-release/scripts/validate_app_builder.cmake
+          dpkg-deb -f "$package"
+          dpkg-deb -c "$package"
+          sha256sum "$package" > "$package.sha256"
+
+      - name: Upload test package
+        uses: actions/upload-artifact@v4
+        with:
+          name: marauder-cardputerzero-arm64-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            dist/*.deb
+            dist/*.sha256
+          if-no-files-found: error
+          retention-days: 14
