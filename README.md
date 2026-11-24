@@ -23,7 +23,7 @@ Native C++17/LVGL 9.5 port of ESP32 Marauder for the ARM64 Linux-based Cardputer
   - serial, I2C, SPI, and GPIO device nodes
   - availability of radio and diagnostic command-line tools
   - gpsd socket presence
-- Light and dark themes
+- Fixed classic Marauder dark/multicolor appearance
 - No background service and no permanent root process
 
 ## Hardware contract under evaluation
@@ -38,7 +38,7 @@ The adapter layer enumerates Linux wireless interfaces, correlates USB metadata,
 
 ## Keyboard workflow
 
-The main screen follows the Marauder hierarchy and classic black/multicolor palette: **WiFi**, **Bluetooth**, **GPS**, **Device**, and **Settings**. Use the printed arrow cluster directly: `F` is Up, `X` is Down, `Z` is Left, and `C` is Right. No `Fn`, `Sym`, `Caps`, or other modifier is required. Use `Enter` to activate; `Esc` also goes back. Unimplemented functions are visibly marked `soon` rather than silently doing nothing.
+The main screen follows the Marauder hierarchy and classic black/multicolor palette: **WiFi**, **Bluetooth**, **GPS**, **Device**, and **Settings**. Use the printed arrow cluster directly: `F` is Up, `X` is Down, `Z` is Left, and `C` is Right. No `Fn`, `Sym`, `Caps`, or other modifier is required. Use `Enter` to activate. `Esc` backs out of submenus and secondary screens, and exits immediately from the main-menu root. Unimplemented functions are visibly marked `soon` rather than silently doing nothing.
 
 Contextual soft keys are available everywhere: `4` goes back (`4` is idle at the root; hold it to exit), `5`/`7` move, `6` opens or activates, and `8` shows help or details. The `F`/`X`/`Z`/`C` cluster and `Enter` remain equivalent controls. System Info is canonically located at **Device > System Info** and exposes Summary, System, Interfaces, USB/Peripherals, and Tools pages. On System Info, `F`/`X` or `5`/`7` changes page, `C`/`Enter`/`6` refreshes, and `Z`/`4` returns to Device with its selection retained.
 
@@ -82,7 +82,7 @@ cmake --build --preset linux-x86-64-dbg
 cmake --workflow --preset cp0-cross-package
 ```
 
-The expected artifact is `dist/Marauder_0.6.0_rev1_arm64.deb`. Packaging and deployment remain separate actions.
+The expected artifact is `dist/Marauder_0.6.1_rev1_arm64.deb`. Packaging and deployment remain separate actions.
 
 ## Safety and scope
 

@@ -25,7 +25,6 @@ public:
 private:
     void create_icon_buttons();
     void update_icon_buttons();
-    static void toggle_theme_cb(lv_event_t* event);
     static void menu_previous_cb(lv_event_t* event);
     static void menu_activate_cb(lv_event_t* event);
     static void menu_next_cb(lv_event_t* event);

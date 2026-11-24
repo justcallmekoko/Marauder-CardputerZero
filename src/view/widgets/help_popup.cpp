@@ -26,7 +26,7 @@ constexpr std::array<HelpRow, 5> kDashboardRows = {{
     {"ENTER/C OR 6", "Open / run"},
     {"Z / 4", "Back (4 idle at root)"},
     {"8", "Context help"},
-    {"HOLD 4", "Exit from main menu"},
+    {"ESC / HOLD 4", "Exit from main menu"},
 }};
 
 constexpr std::array<HelpRow, 5> kAdapterRows = {{

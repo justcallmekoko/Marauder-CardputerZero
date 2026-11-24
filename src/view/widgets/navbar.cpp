@@ -101,7 +101,6 @@ void NavBar::update_icon_buttons() {
         auto& button = icon_buttons_[i];
         button->set_text(icons[i].text);
         auto* root = button->root();
-        lv_obj_remove_event_cb(root, toggle_theme_cb);
         lv_obj_remove_event_cb(root, menu_previous_cb);
         lv_obj_remove_event_cb(root, menu_activate_cb);
         lv_obj_remove_event_cb(root, menu_next_cb);
@@ -131,9 +130,6 @@ void NavBar::update_icon_buttons() {
     }
 }
 
-void NavBar::toggle_theme_cb(lv_event_t* event) {
-    static_cast<viewmodel::BaseViewModel*>(lv_event_get_user_data(event))->toggle_dark_mode();
-}
 void NavBar::menu_previous_cb(lv_event_t* event) { static_cast<viewmodel::BaseViewModel*>(lv_event_get_user_data(event))->marauder_menu_previous(); }
 void NavBar::menu_activate_cb(lv_event_t* event) { static_cast<viewmodel::BaseViewModel*>(lv_event_get_user_data(event))->marauder_menu_activate(); }
 void NavBar::menu_next_cb(lv_event_t* event) { static_cast<viewmodel::BaseViewModel*>(lv_event_get_user_data(event))->marauder_menu_next(); }

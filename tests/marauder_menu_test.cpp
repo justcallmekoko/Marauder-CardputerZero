@@ -71,11 +71,9 @@ int main() {
 
     select_index(menu, 4);
     menu.activate();
-    if (menu.activate() != MarauderMenuAction::ToggleTheme) return 18;
+    if (menu.activate() != MarauderMenuAction::OpenAdapters) return 18;
     menu.next();
-    if (menu.activate() != MarauderMenuAction::OpenAdapters) return 19;
-    menu.next();
-    if (menu.selected_index() != 0 || menu.item_count() != 2) return 20;
+    if (menu.selected_index() != 0 || menu.item_count() != 1) return 19;
 
     return 0;
 }

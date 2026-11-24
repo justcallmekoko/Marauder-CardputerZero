@@ -6,21 +6,18 @@
 
 #include "app.h"
 
-#include "application_config.h"
 #include "asset_manager.h"
 #include "help_popup.h"
 #include "logger.h"
 #include "linux_input.h"
 #include "screenshot_service.h"
 #include "screen_manager.h"
+#include "shortcut_policy.h"
 #include "base_viewmodel.h"
 #include "theme.h"
 #include "toast.h"
 
-#include <cstdlib>
-#include <filesystem>
 #include <memory>
-#include <string>
 
 #if USE_DESKTOP
 #include "desktop_simulator_frame.h"
@@ -46,10 +43,6 @@
 #define APP_DRM_CONNECTOR_ID -1
 #endif
 
-#ifndef APP_CONFIG_FILE
-#define APP_CONFIG_FILE "marauder-cardputerzero.conf"
-#endif
-
 namespace app {
 namespace {
 
@@ -57,61 +50,6 @@ void quit_requested_observer(lv_observer_t* observer, lv_subject_t* subject) {
     auto* running = static_cast<bool*>(lv_observer_get_user_data(observer));
     if (running && lv_subject_get_int(subject)) {
         *running = false;
-    }
-}
-
-struct DarkModePersistence {
-    std::string config_path;
-    bool last_dark_mode;
-};
-
-std::string writable_config_path() {
-#if defined(_WIN32)
-    if (const char* local_app_data = std::getenv("LOCALAPPDATA")) {
-        const std::filesystem::path root(local_app_data);
-        if (!root.empty() && root.is_absolute()) {
-            return (root / "marauder-cardputerzero" / "marauder-cardputerzero.conf").string();
-        }
-    }
-#endif
-    if (const char* xdg_config_home = std::getenv("XDG_CONFIG_HOME")) {
-        const std::filesystem::path root(xdg_config_home);
-        if (!root.empty() && root.is_absolute()) {
-            return (root / "marauder-cardputerzero" / "marauder-cardputerzero.conf").string();
-        }
-    }
-    if (const char* home = std::getenv("HOME")) {
-        const std::filesystem::path root(home);
-        if (!root.empty() && root.is_absolute()) {
-            return (root / ".config" / "marauder-cardputerzero" / "marauder-cardputerzero.conf").string();
-        }
-    }
-    std::error_code error;
-    const auto temporary = std::filesystem::temp_directory_path(error);
-    return error ? "marauder-cardputerzero.conf"
-                 : (temporary / "marauder-cardputerzero.conf").string();
-}
-
-void persist_dark_mode_observer(lv_observer_t* observer, lv_subject_t* subject) {
-    auto* persistence = static_cast<DarkModePersistence*>(lv_observer_get_user_data(observer));
-    if (!persistence) {
-        return;
-    }
-    const bool dark_mode = lv_subject_get_int(subject) != 0;
-    if (dark_mode == persistence->last_dark_mode) {
-        return;
-    }
-    persistence->last_dark_mode = dark_mode;
-
-    ApplicationConfig config;
-    config.dark_mode = dark_mode;
-    std::string error;
-    if (save_application_config(persistence->config_path, config, error)) {
-        LOG_INFO("saved config: {} (dark_mode={})",
-                 persistence->config_path,
-                 config.dark_mode ? "yes" : "no");
-    } else {
-        LOG_WARN("failed to save config {}: {}", persistence->config_path, error);
     }
 }
 
@@ -176,6 +114,23 @@ private:
             return true;
         }
 
+        if (key == LV_KEY_ESC && !long_pressed) {
+            switch (escape_action(view_model_.current_page(),
+                                  view_model_.marauder_menu_at_root())) {
+                case EscapeAction::ExitApplication:
+                    toast_->hide();
+                    view_model_.request_quit();
+                    break;
+                case EscapeAction::BackMenu:
+                    view_model_.marauder_menu_back();
+                    break;
+                case EscapeAction::ShowDashboard:
+                    view_model_.show_dashboard_page();
+                    break;
+            }
+            return true;
+        }
+
         if (view_model_.current_page() == model::AppPage::Dashboard) {
             if (long_pressed && key == '4') {
                 if (exit_key_pressed_ == key && exit_armed_) {
@@ -215,7 +170,7 @@ private:
                 }
                 return true;
             }
-            if (key == LV_KEY_LEFT || key == 'z' || key == 'Z' || key == LV_KEY_ESC) {
+            if (key == LV_KEY_LEFT || key == 'z' || key == 'Z') {
                 if (!view_model_.marauder_menu_at_root()) view_model_.marauder_menu_back();
                 return true;
             }
@@ -240,33 +195,12 @@ private:
         }
 
         if (view_model_.current_page() != model::AppPage::Dashboard && !long_pressed &&
-            (key == LV_KEY_LEFT || key == 'z' || key == 'Z' || key == LV_KEY_ESC)) {
+            (key == LV_KEY_LEFT || key == 'z' || key == 'Z')) {
             view_model_.show_dashboard_page();
             return true;
         }
 
-        const bool is_escape = key == LV_KEY_ESC;
-        if (!is_escape) {
-            return false;
-        }
-
-        if (long_pressed) {
-            if (exit_key_pressed_ == key && exit_armed_) {
-                toast_->hide();
-                view_model_.request_quit();
-            }
-        }
-        else {
-            exit_key_pressed_ = key;
-            exit_armed_ = view_model_.current_page() == model::AppPage::Dashboard;
-            if (exit_armed_) {
-                toast_->show_persistent_highlighted("Hold ",
-                                                    "ESC",
-                                                    " to exit",
-                                                    view::widgets::ToastTone::Warning);
-            }
-        }
-        return true;
+        return false;
     }
 
     void handle_release(uint32_t key) {
@@ -276,9 +210,6 @@ private:
 
         if (exit_armed_) {
             toast_->hide();
-        } else if (key == LV_KEY_ESC &&
-                   view_model_.current_page() != model::AppPage::Dashboard) {
-            view_model_.show_dashboard_page();
         }
         exit_key_pressed_ = 0;
         exit_armed_ = false;
@@ -352,26 +283,6 @@ int Application::run() {
     }
 
     viewmodel::BaseViewModel view_model;
-    const std::string user_config_path = writable_config_path();
-    std::string loaded_config_path = APP_CONFIG_FILE;
-    if (user_config_path != APP_CONFIG_FILE) {
-        std::error_code filesystem_error;
-        if (std::filesystem::is_regular_file(user_config_path, filesystem_error)) {
-            loaded_config_path = user_config_path;
-        }
-    }
-
-    ApplicationConfig config;
-    std::string config_error;
-    if (load_application_config(loaded_config_path, config, config_error)) {
-        view_model.set_dark_mode(config.dark_mode);
-        LOG_INFO("loaded config: {} (dark_mode={})",
-                 loaded_config_path,
-                 config.dark_mode ? "yes" : "no");
-    } else {
-        LOG_WARN("failed to load config {}: {}; using defaults", loaded_config_path, config_error);
-    }
-
 #if USE_DESKTOP
     DesktopSimulatorFrame simulator_frame(assets);
     auto* display = simulator_frame.display();
@@ -385,7 +296,7 @@ int Application::run() {
 
     auto* standard_font = assets.load_standard_font(14);
     view::apply_lvgl_theme(display,
-                           view_model.is_dark_mode(),
+                           true,
                            standard_font ? standard_font : LV_FONT_DEFAULT);
 
 #if USE_DESKTOP
@@ -395,11 +306,6 @@ int Application::run() {
     ScreenManager screen_manager(view_model, assets);
     screen_manager.start();
     ShortcutController shortcuts(view_model, assets);
-
-    DarkModePersistence dark_mode_persistence{user_config_path, view_model.is_dark_mode()};
-    auto* dark_mode_observer = lv_subject_add_observer(view_model.dark_mode_subject(),
-                                                        persist_dark_mode_observer,
-                                                        &dark_mode_persistence);
 
     bool running = true;
     auto* quit_observer = lv_subject_add_observer(view_model.quit_requested_subject(),
@@ -422,10 +328,6 @@ int Application::run() {
     if (quit_observer) {
         lv_observer_remove(quit_observer);
     }
-    if (dark_mode_observer) {
-        lv_observer_remove(dark_mode_observer);
-    }
-
     return 0;
 }
 

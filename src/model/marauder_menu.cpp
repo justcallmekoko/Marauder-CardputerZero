@@ -64,7 +64,6 @@ const std::vector<Item>& items_for(Id menu) {
         {"Storage", Color::LightGrey, Action::None, Id::Main, false, false},
     };
     static const std::vector<Item> settings = {
-        {"Light / Dark", Color::LightGrey, Action::ToggleTheme, Id::Main, false, true},
         {"Adapter Setup", Color::Green, Action::OpenAdapters, Id::Main, false, true},
     };
 

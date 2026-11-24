@@ -27,7 +27,6 @@ enum class MarauderMenuAction {
     OpenWifiScan,
     OpenAdapters,
     OpenDiagnostics,
-    ToggleTheme,
 };
 
 enum class MarauderMenuColor {

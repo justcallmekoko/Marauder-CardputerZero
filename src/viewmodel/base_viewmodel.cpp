@@ -52,8 +52,6 @@ lv_subject_t* BaseViewModel::wifi_scan_subject() { return wifi_scan_subject_.nat
 lv_subject_t* BaseViewModel::quit_requested_subject() { return quit_requested_subject_.native(); }
 lv_subject_t* BaseViewModel::help_request_subject() { return help_request_subject_.native(); }
 bool BaseViewModel::is_dark_mode() const { return model_.dark_mode(); }
-void BaseViewModel::set_dark_mode(bool enabled) { model_.set_dark_mode(enabled); publish_navigation(); }
-void BaseViewModel::toggle_dark_mode() { model_.toggle_dark_mode(); publish_navigation(); }
 model::AppPage BaseViewModel::current_page() const { return model_.current_page(); }
 void BaseViewModel::show_dashboard_page() { model_.set_current_page(model::AppPage::Dashboard); publish_navigation(); }
 void BaseViewModel::show_diagnostics_page() {
@@ -100,9 +98,6 @@ void BaseViewModel::marauder_menu_activate() {
             break;
         case model::MarauderMenuAction::OpenDiagnostics:
             show_diagnostics_page();
-            break;
-        case model::MarauderMenuAction::ToggleTheme:
-            toggle_dark_mode();
             break;
         case model::MarauderMenuAction::None:
             break;

@@ -45,8 +45,6 @@ public:
     lv_subject_t* help_request_subject();
 
     bool is_dark_mode() const;
-    void set_dark_mode(bool enabled);
-    void toggle_dark_mode();
     model::AppPage current_page() const;
     void show_dashboard_page();
     void show_diagnostics_page();
