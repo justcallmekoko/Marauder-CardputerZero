@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "feat/**", "fix/**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  desktop-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ninja-build \
+            libsdl2-dev \
+            libpng-dev \
+            libjpeg-dev \
+            libfmt-dev \
+            libfreetype-dev \
+            zlib1g-dev
+          pipx install cmake==4.1.2
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Configure desktop simulator
+        run: cmake --preset linux-x86-64
+
+      - name: Build desktop simulator
+        run: cmake --build --preset linux-x86-64-dbg --parallel 2
+
+      - name: Validate store manifest
+        run: cmake -P .agents/skills/cardputerzero-package-release/scripts/validate_app_builder.cmake
