@@ -14,7 +14,8 @@ Native C++17/LVGL 9.5 port of ESP32 Marauder for the ARM64 Linux-based Cardputer
 - Viewport-safe summary/details paging for adapter information (`8` toggles pages)
 - Read-only kernel capability probing for monitor-mode support; injection remains unverified until an explicit hardware test
 - Non-blocking managed-mode Wi-Fi scanning on the selected adapter, with strongest-first paginated results
-- Direct menu navigation with the keyboard’s printed arrow keys—no `Fn` required—plus `Enter` and retained `4`–`8` quick functions
+- Direct menu navigation with the printed `Z`/`X`/`C`/`F` arrow cluster—no modifier required—plus `Enter` and retained `4`–`8` quick functions
+- APPLaunch icon uses the white JCMK LLC mark on a black background
 - Read-only inventory of:
   - operating system, kernel, uptime, memory, and storage
   - network interfaces, Linux drivers, state, and wireless classification
@@ -37,7 +38,7 @@ The adapter layer enumerates Linux wireless interfaces, correlates USB metadata,
 
 ## Keyboard workflow
 
-The main screen follows the Marauder hierarchy and classic black/multicolor palette: **WiFi**, **Bluetooth**, **GPS**, **Device**, and **Settings**. Press the keyboard keys printed with `Up`, `Down`, `Left`, and `Right` directly—without holding `Fn`—and use `Enter` to activate. `Esc` also goes back. Unimplemented functions are visibly marked `soon` rather than silently doing nothing.
+The main screen follows the Marauder hierarchy and classic black/multicolor palette: **WiFi**, **Bluetooth**, **GPS**, **Device**, and **Settings**. Use the printed arrow cluster directly: `F` is Up, `X` is Down, `Z` is Left, and `C` is Right. No `Fn`, `Sym`, `Caps`, or other modifier is required. Use `Enter` to activate; `Esc` also goes back. Unimplemented functions are visibly marked `soon` rather than silently doing nothing.
 
 Quick functions remain available:
 
@@ -86,7 +87,7 @@ cmake --build --preset linux-x86-64-dbg
 cmake --workflow --preset cp0-cross-package
 ```
 
-The expected artifact is `dist/Marauder_0.5.2_rev1_arm64.deb`. Packaging and deployment remain separate actions.
+The expected artifact is `dist/Marauder_0.5.3_rev1_arm64.deb`. Packaging and deployment remain separate actions.
 
 ## Safety and scope
 

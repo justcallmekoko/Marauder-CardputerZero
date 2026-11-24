@@ -198,16 +198,12 @@ uint32_t map_evdev_key(uint16_t code) {
         case KEY_ENTER:
         case KEY_KPENTER:
             return LV_KEY_ENTER;
-        // Cardputer Zero prints Up, Down, Left, Right on ; . , / respectively.
-        // Route the unmodified base keys so menu navigation does not require Fn.
-        case KEY_SEMICOLON:
-            return ';';
-        case KEY_DOT:
-            return '.';
-        case KEY_COMMA:
-            return ',';
-        case KEY_SLASH:
-            return '/';
+        // Cardputer Zero's printed arrow cluster is F=Up, X=Down, Z=Left,
+        // C=Right. Route those unmodified base keys; modifiers are not needed.
+        case KEY_F:
+            return 'f';
+        case KEY_X:
+            return 'x';
         case KEY_Z:
             return 'z';
         case KEY_C:
@@ -244,9 +240,8 @@ bool has_nav_keys(int fd) {
 
     return has_key(KEY_ESC) || has_key(KEY_LEFT) || has_key(KEY_RIGHT) ||
            has_key(KEY_UP) || has_key(KEY_DOWN) || has_key(KEY_ENTER) || has_key(KEY_KPENTER) ||
-           has_key(KEY_SEMICOLON) || has_key(KEY_DOT) ||
-           has_key(KEY_COMMA) || has_key(KEY_SLASH) ||
-           has_key(KEY_Z) || has_key(KEY_C) || has_key(KEY_4) || has_key(KEY_5) || has_key(KEY_6) ||
+           has_key(KEY_F) || has_key(KEY_X) || has_key(KEY_Z) || has_key(KEY_C) ||
+           has_key(KEY_4) || has_key(KEY_5) || has_key(KEY_6) ||
            has_key(KEY_7) || has_key(KEY_8) || has_key(KEY_SYSRQ) || has_key(KEY_HELP);
 }
 
