@@ -57,6 +57,8 @@ enum class MarauderMenuColor {
     Yellow,
 };
 
+enum class RadioRequirement { None, Selected, Managed, Monitor };
+
 struct MarauderMenuItem {
     const char* label;
     MarauderMenuColor color{MarauderMenuColor::White};
@@ -64,6 +66,7 @@ struct MarauderMenuItem {
     MarauderMenuId submenu{MarauderMenuId::Main};
     bool opens_submenu{false};
     bool available{true};
+    RadioRequirement radio{RadioRequirement::None};
 };
 
 class MarauderMenuModel {

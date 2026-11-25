@@ -28,13 +28,13 @@ const std::vector<Item>& items_for(Id menu) {
         {"General", Color::Purple, Action::None, Id::WifiGeneral, true, true},
     };
     static const std::vector<Item> wifi_networks = {
-        {"Access Points", Color::Orange, Action::OpenWifiScan, Id::Main, false, true},
+        {"Access Points", Color::Orange, Action::OpenWifiScan, Id::Main, false, true, RadioRequirement::Managed},
     };
     static const std::vector<Item> wifi_activity = {
-        {"Traffic graph", Color::Green, Action::OpenTraffic, Id::Main, false, true},
-        {"Beacon frames", Color::Orange, Action::None, Id::Main, false, false},
-        {"Probe Requests", Color::Cyan, Action::None, Id::Main, false, false},
-        {"Deauth", Color::Red, Action::None, Id::Main, false, false},
+        {"Traffic graph", Color::Green, Action::OpenTraffic, Id::Main, false, true, RadioRequirement::Selected},
+        {"Beacon frames", Color::Orange, Action::None, Id::Main, false, false, RadioRequirement::Monitor},
+        {"Probe Requests", Color::Cyan, Action::None, Id::Main, false, false, RadioRequirement::Monitor},
+        {"Deauth", Color::Red, Action::None, Id::Main, false, false, RadioRequirement::Monitor},
     };
     static const std::vector<Item> wifi_attacks = {
         {"Deauth", Color::Red, Action::None, Id::Main, false, false},

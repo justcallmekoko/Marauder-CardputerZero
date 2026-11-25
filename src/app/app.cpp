@@ -74,7 +74,10 @@ public:
     }
 
 private:
-    void show_confirmation(const std::string& message, const char* accept) {
+    enum class DialogAction { Exit, SelectAdapter, OpenAdapters };
+    DialogAction dialog_action_{DialogAction::Exit};
+    void show_confirmation(const std::string& message, const char* accept, DialogAction action) {
+        dialog_action_ = action;
         const auto colors = view::palette(view_model_.is_dark_mode());
         confirmation_ = lv_obj_create(lv_layer_top());
         lv_obj_remove_style_all(confirmation_);
@@ -86,7 +89,7 @@ private:
 
         auto* panel = lv_obj_create(confirmation_);
         lv_obj_remove_style_all(panel);
-        lv_obj_set_size(panel, 248, pending_adapter_.empty() ? 88 : 112);
+        lv_obj_set_size(panel, 248, action == DialogAction::Exit ? 88 : 112);
         lv_obj_center(panel);
         lv_obj_clear_flag(panel, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_set_style_radius(panel, 6, 0);
@@ -126,7 +129,8 @@ private:
         if (confirmation_) {
             if (!long_pressed && (key == LV_KEY_ENTER || key == LV_KEY_ESC)) {
                 if (key == LV_KEY_ENTER) {
-                    if (pending_adapter_.empty()) view_model_.request_quit();
+                    if (dialog_action_ == DialogAction::Exit) view_model_.request_quit();
+                    else if (dialog_action_ == DialogAction::OpenAdapters) view_model_.show_adapters_page();
                     else {
                         const auto& radios = view_model_.adapters();
                         const auto cursor = view_model_.adapter_cursor();
@@ -195,7 +199,7 @@ private:
                                   view_model_.marauder_menu_at_root())) {
                 case EscapeAction::ExitApplication:
                     toast_->hide();
-                    show_confirmation("Exit Marauder?", "Enter  Exit");
+                    show_confirmation("Exit Marauder?", "Enter  Exit", DialogAction::Exit);
                     break;
                 case EscapeAction::BackMenu:
                     view_model_.marauder_menu_back();
@@ -214,7 +218,12 @@ private:
                             (key == LV_KEY_ENTER || key == LV_KEY_RIGHT) ? NavigationAction::Primary :
                             key == LV_KEY_LEFT ? NavigationAction::Back : navigation_action(key);
         if (view_model_.current_page() == model::AppPage::Dashboard) {
-            if (key == LV_KEY_ENTER) view_model_.marauder_menu_activate();
+            if (key == LV_KEY_ENTER) {
+                const auto index = view_model_.marauder_menu_selected_index();
+                const auto warning = view_model_.collection_warning(view_model_.marauder_menu_item(index).radio);
+                if (warning.empty()) view_model_.marauder_menu_activate();
+                else show_confirmation(warning, "Enter Adapters", DialogAction::OpenAdapters);
+            }
             else if (action == NavigationAction::Previous) view_model_.move_menu_focus(0, -1);
             else if (action == NavigationAction::Next) view_model_.move_menu_focus(0, 1);
             else if (action == NavigationAction::Back) view_model_.move_menu_focus(-1, 0);
@@ -253,7 +262,7 @@ private:
                     pending_adapter_ = radio.stable_id;
                     const auto message = use == ConnectionUse::Connected ? " carries WiFi" :
                         use == ConnectionUse::Hotspot ? " hosts a hotspot" : " link unknown";
-                    show_confirmation(radio.interface_name + message + "\nUse this adapter?", "Enter  Use");
+                    show_confirmation(radio.interface_name + message + "\nUse this adapter?", "Enter  Use", DialogAction::SelectAdapter);
                 }
                 return true;
             }
@@ -269,7 +278,12 @@ private:
             if (action == NavigationAction::Previous) { view_model_.previous_wifi_scan_page(); return true; }
             if (action == NavigationAction::Next) { view_model_.next_wifi_scan_page(); return true; }
             if (action == NavigationAction::Primary) { view_model_.toggle_wifi_scan_details(); return true; }
-            if (action == NavigationAction::Details) { view_model_.start_wifi_scan(); return true; }
+            if (action == NavigationAction::Details) {
+                const auto warning = view_model_.collection_warning(model::RadioRequirement::Managed);
+                if (warning.empty()) view_model_.start_wifi_scan();
+                else show_confirmation(warning, "Enter Adapters", DialogAction::OpenAdapters);
+                return true;
+            }
         }
 
         if (view_model_.current_page() != model::AppPage::Dashboard && action == NavigationAction::Back) {

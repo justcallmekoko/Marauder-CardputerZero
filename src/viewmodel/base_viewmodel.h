@@ -74,6 +74,7 @@ public:
     const auto& credential_prompt() const { return credential_prompt_; }
     std::size_t credential_length() const { return credential_input_.size(); }
     void credential_key(uint32_t key);
+    std::string collection_warning(model::RadioRequirement requirement) const;
     void marauder_menu_activate();
     bool marauder_menu_back();
     void refresh_diagnostics();

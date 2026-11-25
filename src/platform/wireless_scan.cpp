@@ -3,6 +3,7 @@
  */
 
 #include "wireless_scan.h"
+#include "channel_survey.h"
 
 #include <algorithm>
 #include <array>
@@ -195,10 +196,7 @@ bool parse_access_point(std::string_view reply, WifiNetwork& ap) {
         !number(field(reply, "level"), ap.rssi)) return false;
     ap.ssid = field(reply, "ssid");
     if (ap.ssid.empty()) ap.ssid = "<hidden>";
-    const int f = ap.frequency_mhz;
-    ap.channel = f == 2484 ? 14 : f >= 2412 && f <= 2472 ? (f-2407)/5 :
-                 f == 5935 ? 2 : f >= 5955 && f <= 7115 ? (f-5950)/5 :
-                 f >= 5000 && f < 5925 ? (f-5000)/5 : 0;
+    ap.channel = channel_number(ap.frequency_mhz);
     ap.signal_percent = std::clamp(2 * (std::clamp(ap.rssi,-110,0) + 100), 0, 100);
     const auto flags = field(reply, "flags");
     ap.security = flags.empty() ? "Unknown" : flags;

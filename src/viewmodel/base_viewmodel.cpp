@@ -174,6 +174,29 @@ void BaseViewModel::credential_key(uint32_t key) {
     marauder_menu_generation_subject_.set(marauder_menu_generation_subject_.value() + 1);
 }
 
+std::string BaseViewModel::collection_warning(model::RadioRequirement requirement) const {
+    using Requirement = model::RadioRequirement;
+    if (requirement == Requirement::None) return {};
+    if (model_.selected_adapter_id().empty()) return "Select a WiFi adapter first";
+    const auto selected = std::find_if(adapters_.begin(), adapters_.end(), [&](const auto& adapter) {
+        return adapter.stable_id == model_.selected_adapter_id();
+    });
+    if (selected == adapters_.end()) return "Selected adapter unavailable";
+    const std::string path = "/sys/class/net/" + selected->interface_name + "/";
+    std::string index;
+    if (!(std::ifstream(path + "ifindex") >> index) || index != selected->ifindex)
+        return "Selected adapter unavailable";
+    if (requirement == Requirement::Selected) return {};
+    int type{};
+    if (!(std::ifstream(path + "type") >> type)) return "Cannot verify adapter mode";
+    const bool monitor = type == 801 || type == 802 || type == 803;
+    if (requirement == Requirement::Managed && monitor) return "Turn monitor mode off for AP scans";
+    if (requirement == Requirement::Monitor && !monitor)
+        return selected->monitor_mode == platform::wireless::CapabilityState::Unsupported ?
+            "Select a monitor-capable adapter" : "Enable monitor mode first";
+    return {};
+}
+
 void BaseViewModel::marauder_menu_activate() {
     using Action = model::MarauderMenuAction;
     const auto action = marauder_menu_.activate();

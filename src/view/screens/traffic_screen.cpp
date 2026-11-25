@@ -23,7 +23,7 @@ void TrafficScreen::build_content(lv_obj_t* content) {
     }
     auto* title = title_ = lv_label_create(content);
     view_model().take_traffic_step();
-    lv_label_set_text_fmt(title, "Adapter traffic   %s", interface_.c_str());
+    lv_label_set_text_fmt(title, "RX + TX packets   %s", interface_.c_str());
     lv_obj_set_pos(title, 10, 4);
     auto* font = assets().load_standard_font(14);
     lv_obj_set_style_text_font(title, font ? font : LV_FONT_DEFAULT, 0);
@@ -88,7 +88,12 @@ void TrafficScreen::sample() {
     set_key_guide(choices > 1 ? "Z/C Channel    Esc Back" : "Interface packets/s    Esc Back");
     if (index) {
         const auto& channel = channels_[index - 1];
-        lv_label_set_text_fmt(title_, "Channel activity   %u MHz", frequency_);
+        const unsigned number = platform::wireless::channel_number(frequency_);
+        if (number) {
+            const char* band = frequency_ < 2500 ? "2.4" : frequency_ < 5000 ? "4.9" :
+                               frequency_ < 5935 ? "5" : frequency_ < 8000 ? "6" : "60";
+            lv_label_set_text_fmt(title_, "Channel %u   %s GHz", number, band);
+        } else lv_label_set_text(title_, "Channel unknown");
         lv_label_set_text(status_, "Waiting for driver airtime sample");
         if (fresh && previous_channel_.mhz == frequency_ && channel.active > previous_channel_.active &&
             channel.busy >= previous_channel_.busy) {
@@ -100,7 +105,7 @@ void TrafficScreen::sample() {
         previous_channel_ = channel;
         return;
     }
-    lv_label_set_text_fmt(title_, "Adapter traffic   %s", interface_.c_str());
+    lv_label_set_text_fmt(title_, "RX + TX packets   %s", interface_.c_str());
     uint64_t rx{}, tx{};
     const std::string path = "/sys/class/net/" + interface_ + "/statistics/";
     if (!(std::ifstream(path + "rx_packets") >> rx) || !(std::ifstream(path + "tx_packets") >> tx)) {
