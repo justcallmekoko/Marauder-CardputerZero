@@ -27,8 +27,7 @@ BaseViewModel::BaseViewModel()
       diagnostics_generation_subject_(0),
       adapter_detail_subject_("Collecting wireless adapters..."),
       wifi_scan_subject_("SELECT AN ADAPTER FIRST"),
-      quit_requested_subject_(false),
-      help_request_subject_(0) {
+      quit_requested_subject_(false) {
     wifi_scan_timer_ = lv_timer_create(wifi_scan_timer_cb, 100, this);
     refresh_diagnostics();
 }
