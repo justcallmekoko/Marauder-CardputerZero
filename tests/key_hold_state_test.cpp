@@ -13,13 +13,16 @@ int main() {
     assert(!transition.started_press && transition.released_key == 0);
 
     transition = state.update('B', true);
-    assert(transition.started_press && transition.released_key == 'A');
-    assert(state.active_key() == 'B');
+    assert(!transition.started_press && transition.released_key == 0);
+    assert(state.active_key() == 'A');
 
     transition = state.update('A', false);
-    assert(!transition.started_press && transition.released_key == 0);
-    assert(state.active_key() == 'B');
+    assert(!transition.started_press && transition.released_key == 'A');
+    assert(state.active_key() == 0);
 
+    transition = state.update('B', true);
+    assert(transition.started_press && transition.released_key == 0);
+    assert(state.active_key() == 'B');
     transition = state.update('B', false);
     assert(!transition.started_press && transition.released_key == 'B');
     assert(state.active_key() == 0);

@@ -22,22 +22,18 @@ lv_color_t menu_color(model::MarauderMenuColor color) {
     switch (color) {
         case model::MarauderMenuColor::White: return lv_color_hex(0xffffff);
         case model::MarauderMenuColor::Cyan: return lv_color_hex(0x00ffff);
-        case model::MarauderMenuColor::Blue: return lv_color_hex(0x0000ff);
+        case model::MarauderMenuColor::Blue: return lv_color_hex(0x2196f3);
         case model::MarauderMenuColor::Red: return lv_color_hex(0xff0000);
         case model::MarauderMenuColor::Green: return lv_color_hex(0x00ff00);
         case model::MarauderMenuColor::LightGrey: return lv_color_hex(kMarauderLightGray);
         case model::MarauderMenuColor::Magenta: return lv_color_hex(0xff00ff);
-        case model::MarauderMenuColor::Purple: return lv_color_hex(0x7b007b);
+        case model::MarauderMenuColor::Purple: return lv_color_hex(0xb050ff);
         case model::MarauderMenuColor::Orange: return lv_color_hex(0xffb600);
         case model::MarauderMenuColor::Yellow: return lv_color_hex(0xffff00);
     }
     return lv_color_hex(kMarauderWhite);
 }
 
-bool needs_light_label(model::MarauderMenuColor color) {
-    return color == model::MarauderMenuColor::Blue ||
-           color == model::MarauderMenuColor::Purple;
-}
 }
 
 DashboardScreen::DashboardScreen(viewmodel::BaseViewModel& view_model, app::AssetManager& assets)
@@ -121,13 +117,9 @@ void DashboardScreen::render_menu() {
         const bool active = index == selected;
         lv_obj_set_style_bg_opa(rows_[index], active ? LV_OPA_COVER : LV_OPA_TRANSP, 0);
         lv_obj_set_style_bg_color(rows_[index], item.available ? item_color : lv_color_hex(kMarauderDarkGray), 0);
-        const bool light_label = item.available && needs_light_label(item.color);
-        lv_obj_set_style_border_width(rows_[index], !active && light_label ? 2 : 0, 0);
-        lv_obj_set_style_border_side(rows_[index], LV_BORDER_SIDE_LEFT, 0);
-        lv_obj_set_style_border_color(rows_[index], item_color, 0);
+        lv_obj_set_style_border_width(rows_[index], 0, 0);
         lv_obj_set_style_text_color(row_labels_[index],
-                                    active && item.available && !light_label ? lv_color_hex(kMarauderBlack) :
-                                    light_label ? lv_color_hex(kMarauderWhite) :
+                                    active && item.available ? lv_color_hex(kMarauderBlack) :
                                     item.available ? item_color : muted_text,
                                     0);
     }

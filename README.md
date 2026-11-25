@@ -82,7 +82,7 @@ cmake --build --preset linux-x86-64-dbg
 cmake --workflow --preset cp0-cross-package
 ```
 
-The expected artifact is `dist/Marauder_0.6.2_rev1_arm64.deb`. Packaging and deployment remain separate actions.
+The expected artifact is `dist/Marauder_0.6.3_rev1_arm64.deb`. Packaging and deployment remain separate actions.
 
 ## Safety and scope
 

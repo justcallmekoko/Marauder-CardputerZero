@@ -13,10 +13,9 @@ class KeyHoldState {
 public:
     KeyHoldTransition update(uint32_t key, bool pressed) {
         if (pressed) {
-            if (active_key_ == key) return {};
-            const auto previous = active_key_;
+            if (active_key_ != 0) return {};
             active_key_ = key;
-            return {previous, true};
+            return {0, true};
         }
         if (active_key_ != key) return {};
         active_key_ = 0;
