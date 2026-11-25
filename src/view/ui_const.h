@@ -53,18 +53,18 @@ constexpr uint32_t kTextDisabled = 0xc2c2c2;
 } // namespace light
 
 namespace dark {
-constexpr uint32_t kPrimary      = 0x63e2b7;
-constexpr uint32_t kInfo         = 0x70c0e8;
-constexpr uint32_t kSuccess      = 0x63e2b7;
-constexpr uint32_t kWarning      = 0xf2c97d;
-constexpr uint32_t kError        = 0xe88080;
-constexpr uint32_t kBody         = 0x101014;
-constexpr uint32_t kCard         = 0x18181c;
-constexpr uint32_t kAction       = 0x0f0f0f;
-constexpr uint32_t kButton       = 0x141414;
-constexpr uint32_t kBorder       = 0x3d3d3d;
-constexpr uint32_t kTextPrimary  = 0xe6e6e6;
-constexpr uint32_t kTextDisabled = 0x616161;
+constexpr uint32_t kPrimary      = 0xa6cead;
+constexpr uint32_t kInfo         = 0x98c2d2;
+constexpr uint32_t kSuccess      = 0xa6cead;
+constexpr uint32_t kWarning      = 0xd3ba96;
+constexpr uint32_t kError        = 0xd99d9e;
+constexpr uint32_t kBody         = 0x11151c;
+constexpr uint32_t kCard         = 0x171c24;
+constexpr uint32_t kAction       = 0x121720;
+constexpr uint32_t kButton       = 0x222933;
+constexpr uint32_t kBorder       = 0x343e4b;
+constexpr uint32_t kTextPrimary  = 0xe1e6eb;
+constexpr uint32_t kTextDisabled = 0x9aa5b3;
 } // namespace dark
 
 } // namespace color

@@ -168,10 +168,12 @@ lv_font_t* AssetManager::load_font(const std::filesystem::path& file_name, uint3
 }
 
 lv_font_t* AssetManager::load_standard_font(uint32_t size, StandardFontWeight weight) {
+    auto* pixel = load_font("Marauder-Handheld.ttf", size);
 #if USE_DESKTOP
+    if (pixel) pixel->fallback = &lv_font_montserrat_12;
     LV_UNUSED(size);
     LV_UNUSED(weight);
-    return nullptr;
+    return pixel;
 #else
     const char* path = weight == StandardFontWeight::Regular
                            ? kNotoSansCjkRegular
@@ -180,7 +182,8 @@ lv_font_t* AssetManager::load_standard_font(uint32_t size, StandardFontWeight we
     if (font) {
         font->fallback = fallback_font(size);
     }
-    return font;
+    if (pixel) pixel->fallback = font ? font : fallback_font(size);
+    return pixel ? pixel : font;
 #endif
 }
 

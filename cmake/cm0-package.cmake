@@ -30,12 +30,10 @@ if(APP_INSTALL_SYSTEMD_SERVICE)
     )
 endif()
 
+install(PROGRAMS src/platform/helpers/radio-inventory src/platform/helpers/gps-session src/platform/helpers/monitor-session DESTINATION lib/marauder)
+
 install(TARGETS ${PROJECT_NAME}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-)
-
-install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/config/marauder-cardputerzero.conf"
-    DESTINATION "/etc"
 )
 
 install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/assets/audio/"
@@ -96,19 +94,12 @@ set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "${APP_DEBIAN_ARCHITECTURE}")
 set(CPACK_DEBIAN_PACKAGE_MAINTAINER "${APP_MAINTAINER}")
 set(CPACK_DEBIAN_PACKAGE_SECTION "utils")
 set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
-set(APP_DEBIAN_DEPENDS "libc6, libstdc++6, libgcc-s1, libfreetype6, libpng16-16t64, libjpeg62-turbo, zlib1g, iw, network-manager")
+set(APP_DEBIAN_DEPENDS "libc6, libstdc++6, libgcc-s1, libfreetype6, libpng16-16t64, libjpeg62-turbo, zlib1g, iw, network-manager, python3 (>= 3.12), bluez")
 if(FMT_INCLUDE_DIR AND FMT_LIBRARY)
     string(APPEND APP_DEBIAN_DEPENDS ", libfmt10")
 endif()
 set(CPACK_DEBIAN_PACKAGE_DEPENDS "${APP_DEBIAN_DEPENDS}")
 set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS OFF)
 set(CPACK_DEBIAN_PACKAGE_CONTROL_STRICT_PERMISSION TRUE)
-
-configure_file(
-    "${CMAKE_CURRENT_LIST_DIR}/templates/conffiles.in"
-    "${APP_GENERATED_DIR}/conffiles"
-    @ONLY
-)
-set(CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA "${APP_GENERATED_DIR}/conffiles")
 
 include(CPack)

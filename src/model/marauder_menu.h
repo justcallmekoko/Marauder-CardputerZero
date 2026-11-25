@@ -12,22 +12,36 @@ namespace model {
 enum class MarauderMenuId {
     Main,
     Wifi,
-    WifiScanners,
-    WifiSniffers,
+    WifiNetworks,
+    WifiActivity,
     WifiAttacks,
     WifiGeneral,
     Bluetooth,
     Gps,
     Device,
-    Settings,
+    Accounts,
+    Radios,
+    Display,
+    FilesAndMemory,
 };
 
 enum class MarauderMenuAction {
     None,
     OpenWifiScan,
+    OpenTraffic,
     OpenAdapters,
     OpenDiagnostics,
-    ToggleTheme,
+    CycleBatteryDisplay,
+    OpenRadioSetup,
+    CycleStorage,
+    CycleCache,
+    Brightness,
+    DimDelay,
+    Reserve,
+    UploadPolicy,
+    WigleName,
+    WigleToken,
+    WdgKey,
 };
 
 enum class MarauderMenuColor {
@@ -43,6 +57,8 @@ enum class MarauderMenuColor {
     Yellow,
 };
 
+enum class RadioRequirement { None, Selected, Managed, Monitor };
+
 struct MarauderMenuItem {
     const char* label;
     MarauderMenuColor color{MarauderMenuColor::White};
@@ -50,6 +66,7 @@ struct MarauderMenuItem {
     MarauderMenuId submenu{MarauderMenuId::Main};
     bool opens_submenu{false};
     bool available{true};
+    RadioRequirement radio{RadioRequirement::None};
 };
 
 class MarauderMenuModel {
@@ -59,9 +76,12 @@ public:
     const char* title() const;
     MarauderMenuId current_menu() const;
     std::size_t depth() const;
+    bool can_go_back() const;
     std::size_t selected_index() const;
     std::size_t item_count() const;
     const MarauderMenuItem& item(std::size_t index) const;
+    std::size_t columns() const;
+    void move(int dx, int dy);
     void previous();
     void next();
     MarauderMenuAction activate();

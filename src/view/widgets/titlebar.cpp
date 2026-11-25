@@ -100,7 +100,7 @@ void TitleBar::build() {
     auto* title = lv_label_create(core_obj_);
     lv_label_bind_text(title, view_model_.title_subject(), nullptr);
     lv_label_set_long_mode(title, LV_LABEL_LONG_DOT);
-    lv_obj_set_width(title, 142);
+    lv_obj_set_width(title, 73);
     const lv_font_t* title_font = assets_.load_standard_font(14);
     lv_obj_set_style_text_font(title, title_font ? title_font : &lv_font_montserrat_14, 0);
     lv_obj_align(title, LV_ALIGN_LEFT_MID, 8, 0);
@@ -108,7 +108,7 @@ void TitleBar::build() {
 
     auto* status = lv_obj_create(core_obj_);
     lv_obj_remove_style_all(status);
-    lv_obj_set_size(status, 160, LV_PCT(100));
+    lv_obj_set_size(status, 230, LV_PCT(100));
     lv_obj_align(status, LV_ALIGN_RIGHT_MID, -5, 0);
     lv_obj_set_flex_flow(status, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(status, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
@@ -124,6 +124,19 @@ void TitleBar::build() {
     if (!status_font) {
         status_font = &lv_font_montserrat_14;
     }
+    auto* gps = lv_label_create(status);
+    const auto* small = assets_.load_standard_font(10);
+    configure_label(gps, view_model_.dark_mode_subject(), small ? small : &lv_font_montserrat_10, 79);
+    reactive::observe_obj(gps, view_model_.gps_status_subject(), [](lv_observer_t* observer, lv_subject_t* subject) {
+        auto* label = static_cast<lv_obj_t*>(lv_observer_get_target(observer));
+        const std::string state = lv_subject_get_string(subject);
+        const auto colors = view::palette(true);
+        auto ink = colors.text_disabled;
+        if (state == "Fix" || state.find(" sat") != std::string::npos) ink = colors.success;
+        else if (state == "Wait" || state == "No fix" || state == "No data" || state == "Busy") ink = colors.warning;
+        lv_label_set_text_fmt(label, "GPS %s", state.c_str());
+        lv_obj_set_style_text_color(label, ink, 0);
+    }, nullptr);
     wifi_label_ = lv_label_create(status);
     configure_label(wifi_label_, view_model_.dark_mode_subject(), icon_font, 18);
     ethernet_label_ = lv_label_create(status);
@@ -136,7 +149,9 @@ void TitleBar::build() {
     configure_label(time_label_, view_model_.dark_mode_subject(), status_font, 42);
 
     refresh_time();
-    refresh_device_status();
+    reactive::observe_obj(core_obj_, view_model_.battery_display_subject(), [](lv_observer_t* observer, lv_subject_t*) {
+        static_cast<TitleBar*>(lv_observer_get_user_data(observer))->refresh_device_status();
+    }, this);
     refresh_timer_ = lv_timer_create(refresh_timer_cb, 1000, this);
 }
 
@@ -164,8 +179,14 @@ void TitleBar::refresh_device_status() {
 
     lv_label_set_text(battery_icon_label_,
                       battery_icon(status.battery_percent, status.battery_charging));
-    set_visible(battery_icon_label_, status.battery_present);
-    set_visible(battery_percent_label_, status.battery_present);
+    const auto mode = view_model_.battery_display();
+    const auto colors = view::palette(view_model_.is_dark_mode());
+    const auto ink = status.battery_percent <= 20 ? colors.error :
+                     status.battery_percent <= 50 ? colors.warning : colors.success;
+    lv_obj_set_style_text_color(battery_icon_label_, ink, 0);
+    lv_obj_set_style_text_color(battery_percent_label_, ink, 0);
+    set_visible(battery_icon_label_, status.battery_present && mode != model::BatteryDisplay::Percent);
+    set_visible(battery_percent_label_, status.battery_present && mode != model::BatteryDisplay::Icon);
     if (status.battery_present) {
         std::array<char, 6> percent{};
         std::snprintf(percent.data(), percent.size(), "%d%%", std::clamp(status.battery_percent, 0, 100));

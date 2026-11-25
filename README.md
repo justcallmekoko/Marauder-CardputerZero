@@ -2,19 +2,19 @@
 
 Native C++17/LVGL 9.5 port of ESP32 Marauder for the ARM64 Linux-based Cardputer Zero.
 
-> Status: early development. The current milestone includes read-only diagnostics, adapter selection and capability reporting, plus managed-mode Wi-Fi scanning. Bluetooth, LoRa, GNSS logging, monitor-mode capture, and packet operations are not implemented yet.
+> Status: early development. The current milestone includes diagnostics, radio setup, monitor-mode switching, and live access point and observed client lists from raw frames.
 
 ## Current milestone
 
 - Cardputer Zero APPLaunch integration and Debian packaging scaffold
-- 320x170 LVGL interface with a classic Marauder-style hierarchical menu
-- Dashboard, wireless-adapter selection, and scrollable diagnostics screens
+- 320x170 LVGL interface with a four-tile keyboard launcher
+- Dashboard, wireless-adapter selection, and five bounded keyboard-reachable System Info pages
 - Read-only wireless adapter catalog with interface, driver, PHY, bus, VID/PID, MAC, stable identity, and explicit monitor/injection verification state
 - Keyboard-driven adapter browsing and in-app selection without changing interface state
-- Viewport-safe summary/details paging for adapter information (`8` toggles pages)
+- Viewport-safe summary/details paging for adapter information (`D` toggles pages)
 - Read-only kernel capability probing for monitor-mode support; injection remains unverified until an explicit hardware test
-- Non-blocking managed-mode Wi-Fi scanning on the selected adapter, with strongest-first paginated results
-- Direct menu navigation with the printed `Z`/`X`/`C`/`F` arrow cluster—no modifier required—plus `Enter` and retained `4`–`8` quick functions
+- Live C++ radiotap and 802.11 frame parsing on the selected monitor-mode adapter, with scrolling AP and observed-client lists, RSSI, frame counts, and offline vendor lookup
+- Direct menu navigation with the printed `Z`/`X`/`C`/`F` arrow cluster, `Enter` for the primary action, and `D` for details on supported screens
 - APPLaunch icon uses the white JCMK LLC mark on a black background
 - Read-only inventory of:
   - operating system, kernel, uptime, memory, and storage
@@ -23,7 +23,7 @@ Native C++17/LVGL 9.5 port of ESP32 Marauder for the ARM64 Linux-based Cardputer
   - serial, I2C, SPI, and GPIO device nodes
   - availability of radio and diagnostic command-line tools
   - gpsd socket presence
-- Light and dark themes
+- Graphite theme with muted category accents
 - No background service and no permanent root process
 
 ## Hardware contract under evaluation
@@ -38,16 +38,31 @@ The adapter layer enumerates Linux wireless interfaces, correlates USB metadata,
 
 ## Keyboard workflow
 
-The main screen follows the Marauder hierarchy and classic black/multicolor palette: **WiFi**, **Bluetooth**, **GPS**, **Device**, and **Settings**. Use the printed arrow cluster directly: `F` is Up, `X` is Down, `Z` is Left, and `C` is Right. No `Fn`, `Sym`, `Caps`, or other modifier is required. Use `Enter` to activate; `Esc` also goes back. Unimplemented functions are visibly marked `soon` rather than silently doing nothing.
+The launcher has four tiles. Use `F/X` for up/down and `Z/C` for left/right. `Enter` opens the focused tile and `Esc` returns from submenus. At the launcher root, `Esc` opens an exit confirmation. Press `Enter` to exit or `Esc` to stay on the current tile. Unimplemented functions carry a “soon” label.
 
-Quick functions remain available:
+The menu text uses the classic 5×7 glyphs from the Cardputer firmware. Under **Device → Display and power → Battery display**, press `Enter` to cycle through icon, percentage, and both. The choice is saved per user. Battery indicators are red at 20% or below, amber through 50%, and green above 50%.
 
-1. Press `5` on the main menu to open Adapters.
-2. Use `5`/`7` to choose an adapter and `6` to select it.
-3. Return to the dashboard and press `8` for Wi-Fi Scan.
-4. On the scan page, use `5`/`7` for result pages, `6` to rescan, and `8` to return to Adapters.
+**Device → Radios and GPS → Radio setup** lists WiFi, Bluetooth and GPS devices. Browse with F/X, toggle the highlighted adapter with Enter, and refresh after connecting hardware with D. Marauder remembers confirmed WiFi and Bluetooth choices per adapter and reapplies them on launch or refresh. On exit, it releases GPS and restores the original radio block and Bluetooth power settings for connected adapters it changed. The WiFi picker remembers the selected hardware identity and only selects it when detected. It remembers the enabled GPS receiver and resumes reading it on launch. Disable GPS to forget the selection. Select a USB or Cap/Grove port to read it. Marauder listens through gpsd when it already manages that port. Otherwise it checks serial data for checksum-valid NMEA. Disable GPS or exit to release the reader, restore serial settings, and return connector power to its initial state.
 
-Managed-mode scans use the target’s existing NetworkManager service when available; the Cardputer Zero base image has been validated with it. Scans do not enable monitor mode and do not test injection.
+**Device → Accounts and uploads** stores a WiGLE API name and token and a WDGWars API key in separate owner-only files under the app configuration directory. Type a replacement and press Enter to save, or Esc to cancel. Del followed by Enter removes a saved field.
+
+Display and power offers System, 25%, 50%, 75%, and 100% brightness. Idle dimming defaults to Never. The first key wakes the screen and exiting restores the entry brightness.
+Storage and memory groups the screenshot destination, free-space reserve (64 MiB by default), and image cache. Screenshots check the destination volume before writing.
+Accounts and uploads defaults to Manual. Select Upload policy, review the active NetworkManager WiFi profile, and press Enter again to trust it for future automatic uploads. Select the policy again to revert to Manual. This version stores the policy locally and has no uploader or survey logger.
+
+The GPS badge shows Off, Wait, No data, Busy, or the number of satellites used in the current fix. It shows Fix until the receiver supplies a count. A valid sentence can confirm a receiver even before a satellite fix. USB serial bridges appear as candidates until receiver data is recognized.
+
+Open **WiFi → General → Adapter Setup** to choose the WiFi interface used by the app. The border follows keyboard focus, and an asterisk marks the interface selected for use. Press `Enter` to select the highlighted adapter or `D` to inspect its details.
+
+Under **WiFi > Networks > Access Points**, the list shows cached APs as soon as the Wi-Fi service supplies them, adds new discoveries during refresh, and reconciles the results after each scan. Scans repeat every 20 seconds while browsing. Use F/X to highlight a network, Enter to inspect its managed-scan details, Esc to return, and D to rescan. The C++ collector speaks to the local Wi-Fi service directly and parses its discovery records. The AP inventory scrolls one row at a time. In Adapters, M switches the selected idle adapter into monitor mode. M again or exiting the app releases it. **WiFi > Activity > Traffic graph** plots the selected adapter’s received and transmitted packets per second over the last 30 samples. The graph uses interface counters and scales to the visible peak. With monitor mode enabled in Adapters, Z/C tunes the radio to an enabled channel. The graph plots interface packets per second and shows driver-reported busy airtime alongside the rate. A dash means the driver has no fresh measurement. Choosing an adapter with a live Wi-Fi connection, a hosted hotspot, or an unknown connection state prompts for confirmation. Adapter details show monitor capability and current monitor status.
+
+Monitor switching requires one-time administrator enrollment for the local operator. The approved sudo command is only `/usr/lib/marauder/monitor-session`. For example, a sudoers entry for the account `operator` is `operator ALL=(root) NOPASSWD: /usr/lib/marauder/monitor-session`. Install the package before enrolling the user. The helper accepts a wireless interface name and restores its mode when the app closes its session.
+
+The bottom strip shows the current screen’s shortcuts. System Info is canonically located at **Device > System Info** and exposes Summary, System, Interfaces, USB/Peripherals, and Tools pages. On Adapters and System Info, `D` toggles details/summary. On System Info, `F`/`X` changes page, `C`/`Enter` refreshes, and `Z`/`Esc` returns to Device with its selection retained.
+
+Open **WiFi → Networks → Access Points** after selecting an adapter and enabling monitor mode. The app tunes through the adapter's supported channels and adds APs as beacon, response, or data frames arrive. Enter opens AP information, then the observed-client list, then client information. The app pins the AP's channel while its information or clients are open. Client RSSI is shown only when a frame transmitted by that client was observed. Frame counts include observed retransmissions and are not an association guarantee. Leaving the screen closes capture; exiting also restores the adapter through the monitor session.
+
+On AP information, press **D** to cycle through overview, authentication, and encryption pages. The security interpreter reads the AP's beacon or probe-response advertisements. It identifies legacy WPA, RSN AKM selectors, pairwise/group/management ciphers, PMF capable/required bits, SAE H2E and SAE-PK flags, WPS IE presence, and malformed or unknown selectors. Common summaries include WPA2 Personal/Enterprise, WPA3 Personal SAE, WPA2/WPA3 Personal transition, OWE, DPP, and WPA3 Enterprise 192 when its advertised cipher and PMF profile matches. A privacy bit without a valid WPA/RSN element is reported as uncertain legacy privacy, not proven WEP. These labels describe advertised capabilities, not a client's negotiated security, Wi-Fi Alliance certification, or resistance to a particular attack. Selector mappings follow [hostap's WPA definitions](https://github.com/zephyrproject-rtos/hostap/blob/main/src/common/wpa_common.h); OWE discovery follows [RFC 8110](https://datatracker.ietf.org/doc/rfc8110/).
 
 ## Architecture
 
@@ -63,7 +78,7 @@ Hardware discovery stays in the platform layer. Blocking scans and packet proces
 
 ## UI direction
 
-The Cardputer Zero application should maintain a similar look and feel to the Cardputer ADV version of ESP32Marauder. Preserve its compact information hierarchy, high-contrast Marauder visual identity, familiar terminology, and keyboard-first interaction patterns where practical, while adapting layouts to Linux/LVGL and the Cardputer Zero display rather than forcing a pixel-for-pixel copy.
+The 320×170 screen reserves a top bar for device status and a bottom strip for keyboard controls. Pastel accents identify categories and outlined tiles show keyboard focus.
 
 ## Build
 
@@ -87,7 +102,7 @@ cmake --build --preset linux-x86-64-dbg
 cmake --workflow --preset cp0-cross-package
 ```
 
-The expected artifact is `dist/Marauder_0.5.5_rev1_arm64.deb`. Packaging and deployment remain separate actions.
+The expected artifact is `dist/Marauder_0.6.24_rev1_arm64.deb`. Packaging and deployment remain separate actions.
 
 ## Safety and scope
 

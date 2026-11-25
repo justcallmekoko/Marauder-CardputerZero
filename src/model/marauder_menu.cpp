@@ -20,23 +20,21 @@ const std::vector<Item>& items_for(Id menu) {
         {"Bluetooth", Color::Cyan, Action::None, Id::Bluetooth, true, true},
         {"GPS", Color::Red, Action::None, Id::Gps, true, true},
         {"Device", Color::Blue, Action::None, Id::Device, true, true},
-        {"Settings", Color::LightGrey, Action::None, Id::Settings, true, true},
     };
     static const std::vector<Item> wifi = {
-        {"Scanners", Color::Orange, Action::None, Id::WifiScanners, true, true},
-        {"Sniffers", Color::Yellow, Action::None, Id::WifiSniffers, true, true},
+        {"Networks", Color::Orange, Action::None, Id::WifiNetworks, true, true},
+        {"Activity", Color::Yellow, Action::None, Id::WifiActivity, true, true},
         {"Attacks", Color::Red, Action::None, Id::WifiAttacks, true, true},
         {"General", Color::Purple, Action::None, Id::WifiGeneral, true, true},
     };
-    static const std::vector<Item> wifi_scanners = {
-        {"Access Points", Color::Orange, Action::OpenWifiScan, Id::Main, false, true},
-        {"Stations", Color::Cyan, Action::None, Id::Main, false, false},
-        {"Packet Monitor", Color::Blue, Action::None, Id::Main, false, false},
+    static const std::vector<Item> wifi_networks = {
+        {"Access Points", Color::Orange, Action::OpenWifiScan, Id::Main, false, true, RadioRequirement::Monitor},
     };
-    static const std::vector<Item> wifi_sniffers = {
-        {"Probe Requests", Color::Cyan, Action::None, Id::Main, false, false},
-        {"Deauth", Color::Red, Action::None, Id::Main, false, false},
-        {"Pwnagotchi", Color::Orange, Action::None, Id::Main, false, false},
+    static const std::vector<Item> wifi_activity = {
+        {"Traffic graph", Color::Green, Action::OpenTraffic, Id::Main, false, true, RadioRequirement::Selected},
+        {"Beacon frames", Color::Orange, Action::None, Id::Main, false, false, RadioRequirement::Monitor},
+        {"Probe Requests", Color::Cyan, Action::None, Id::Main, false, false, RadioRequirement::Monitor},
+        {"Deauth", Color::Red, Action::None, Id::Main, false, false, RadioRequirement::Monitor},
     };
     static const std::vector<Item> wifi_attacks = {
         {"Deauth", Color::Red, Action::None, Id::Main, false, false},
@@ -45,7 +43,6 @@ const std::vector<Item>& items_for(Id menu) {
     };
     static const std::vector<Item> wifi_general = {
         {"Adapter Setup", Color::Purple, Action::OpenAdapters, Id::Main, false, true},
-        {"Scan Networks", Color::Green, Action::OpenWifiScan, Id::Main, false, true},
         {"Saved Networks", Color::LightGrey, Action::None, Id::Main, false, false},
     };
     static const std::vector<Item> bluetooth = {
@@ -59,27 +56,47 @@ const std::vector<Item>& items_for(Id menu) {
         {"Track", Color::Orange, Action::None, Id::Main, false, false},
     };
     static const std::vector<Item> device = {
-        {"Adapter Setup", Color::Blue, Action::OpenAdapters, Id::Main, false, true},
-        {"System Info", Color::Cyan, Action::OpenDiagnostics, Id::Main, false, true},
-        {"Storage", Color::LightGrey, Action::None, Id::Main, false, false},
+        {"Radios and GPS", Color::Cyan, Action::None, Id::Radios, true, true},
+        {"Display and power", Color::Green, Action::None, Id::Display, true, true},
+        {"Storage and memory", Color::Blue, Action::None, Id::FilesAndMemory, true, true},
+        {"Accounts and uploads", Color::Magenta, Action::None, Id::Accounts, true, true},
+        {"System Info", Color::Purple, Action::OpenDiagnostics, Id::Main, false, true},
     };
-    static const std::vector<Item> settings = {
-        {"Light / Dark", Color::LightGrey, Action::ToggleTheme, Id::Main, false, true},
-        {"Adapter Setup", Color::Green, Action::OpenAdapters, Id::Main, false, true},
-        {"System Info", Color::Cyan, Action::OpenDiagnostics, Id::Main, false, true},
+    static const std::vector<Item> radios = {
+        {"Radio setup", Color::Cyan, Action::OpenRadioSetup, Id::Main, false, true},
+        {"WiFi adapter", Color::Green, Action::OpenAdapters, Id::Main, false, true},
+    };
+    static const std::vector<Item> display = {
+        {"Brightness", Color::Green, Action::Brightness, Id::Main, false, true},
+        {"Dim after", Color::Green, Action::DimDelay, Id::Main, false, true},
+        {"Battery display", Color::Green, Action::CycleBatteryDisplay, Id::Main, false, true},
+    };
+    static const std::vector<Item> accounts = {
+        {"Upload policy", Color::Purple, Action::UploadPolicy, Id::Main, false, true},
+        {"WiGLE API name", Color::Cyan, Action::WigleName, Id::Main, false, true},
+        {"WiGLE API token", Color::Cyan, Action::WigleToken, Id::Main, false, true},
+        {"WDGWars API key", Color::Magenta, Action::WdgKey, Id::Main, false, true},
     };
 
+    static const std::vector<Item> files_memory = {
+        {"Screenshots", Color::Blue, Action::CycleStorage, Id::Main, false, true},
+        {"Keep free", Color::Blue, Action::Reserve, Id::Main, false, true},
+        {"Image cache", Color::Purple, Action::CycleCache, Id::Main, false, true},
+    };
     switch (menu) {
+        case Id::FilesAndMemory: return files_memory;
         case Id::Main: return main;
         case Id::Wifi: return wifi;
-        case Id::WifiScanners: return wifi_scanners;
-        case Id::WifiSniffers: return wifi_sniffers;
+        case Id::WifiNetworks: return wifi_networks;
+        case Id::WifiActivity: return wifi_activity;
         case Id::WifiAttacks: return wifi_attacks;
         case Id::WifiGeneral: return wifi_general;
         case Id::Bluetooth: return bluetooth;
         case Id::Gps: return gps;
         case Id::Device: return device;
-        case Id::Settings: return settings;
+        case Id::Radios: return radios;
+        case Id::Display: return display;
+        case Id::Accounts: return accounts;
     }
     return main;
 }
@@ -88,14 +105,17 @@ const char* title_for(Id menu) {
     switch (menu) {
         case Id::Main: return "MARAUDER";
         case Id::Wifi: return "WiFi";
-        case Id::WifiScanners: return "WiFi > Scanners";
-        case Id::WifiSniffers: return "WiFi > Sniffers";
+        case Id::WifiNetworks: return "WiFi > Networks";
+        case Id::WifiActivity: return "WiFi > Activity";
         case Id::WifiAttacks: return "WiFi > Attacks";
         case Id::WifiGeneral: return "WiFi > General";
         case Id::Bluetooth: return "Bluetooth";
         case Id::Gps: return "GPS";
         case Id::Device: return "Device";
-        case Id::Settings: return "Settings";
+        case Id::Radios: return "Radios and GPS";
+        case Id::Display: return "Display and power";
+        case Id::Accounts: return "Accounts and uploads";
+        case Id::FilesAndMemory: return "Storage and memory";
     }
     return "MARAUDER";
 }
@@ -106,6 +126,7 @@ MarauderMenuModel::MarauderMenuModel() : stack_{{MarauderMenuId::Main, 0}} {}
 const char* MarauderMenuModel::title() const { return title_for(current_menu()); }
 MarauderMenuId MarauderMenuModel::current_menu() const { return stack_.back().menu; }
 std::size_t MarauderMenuModel::depth() const { return stack_.size(); }
+bool MarauderMenuModel::can_go_back() const { return stack_.size() > 1; }
 std::size_t MarauderMenuModel::selected_index() const { return stack_.back().selected; }
 std::size_t MarauderMenuModel::item_count() const { return items_for(current_menu()).size(); }
 const MarauderMenuItem& MarauderMenuModel::item(std::size_t index) const {
@@ -113,6 +134,29 @@ const MarauderMenuItem& MarauderMenuModel::item(std::size_t index) const {
     if (index >= items.size()) throw std::out_of_range("Marauder menu item");
     return items[index];
 }
+std::size_t MarauderMenuModel::columns() const {
+    switch (current_menu()) {
+        case MarauderMenuId::Radios:
+        case MarauderMenuId::Display:
+        case MarauderMenuId::Device:
+        case MarauderMenuId::FilesAndMemory:
+        case MarauderMenuId::Accounts: return 1;
+        default: return 2;
+    }
+}
+
+void MarauderMenuModel::move(int dx, int dy) {
+    const int width = static_cast<int>(columns());
+    const int count = static_cast<int>(item_count());
+    const int current = static_cast<int>(selected_index());
+    const int row = current / width + dy;
+    const int col = current % width + dx;
+    if (row < 0 || row * width >= count || col < 0 || col >= width) return;
+    const int next = row * width + col;
+    if (next < count) stack_.back().selected = next;
+    else if (dy != 0) stack_.back().selected = count - 1;
+}
+
 void MarauderMenuModel::previous() {
     auto& frame = stack_.back();
     const auto count = item_count();

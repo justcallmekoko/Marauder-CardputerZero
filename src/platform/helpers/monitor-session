@@ -1,0 +1,114 @@
+#!/usr/bin/python3 -I
+"""Hold an idle adapter in monitor mode for the lifetime of the caller's pipe."""
+import fcntl
+import array
+import os
+from pathlib import Path
+import re
+import socket
+import subprocess
+import sys
+
+IW = "/usr/sbin/iw"
+IP = "/usr/sbin/ip"
+NM = "/usr/bin/nmcli"
+
+def run(*args):
+    result = subprocess.run(args, stdin=subprocess.DEVNULL, capture_output=True,
+                            text=True, env={"LC_ALL": "C", "PATH": "/usr/sbin:/usr/bin"},
+                            timeout=5, check=True)
+    return result.stdout.strip()
+
+def lease(name):
+    if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_.-]{0,14}", name):
+        raise ValueError("Invalid interface")
+    link = Path("/sys/class/net") / name
+    phy = (link / "phy80211").resolve(strict=True)
+    index = socket.if_nametoindex(name)
+    # A kernel-owned directory provides a common lock across callers on this PHY.
+    lock = os.open(phy, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        modes = run(IW, "phy", phy.name, "info").partition("Supported interface modes:")[2]
+        if not re.search(r"^\s*\* monitor\s*$", modes.split("Band ")[0], re.M):
+            raise ValueError("Monitor unsupported")
+        if not re.search(r"^\s*type managed$", run(IW, "dev", name, "info"), re.M):
+            raise ValueError("Requires managed mode")
+        for sibling in link.parent.iterdir():
+            if sibling != link and (sibling / "phy80211").resolve() == phy:
+                if (sibling / "operstate").read_text().strip() not in ("down", "dormant"):
+                    raise ValueError("Radio already in use")
+        if run(IW, "dev", name, "link") != "Not connected.":
+            raise ValueError("Active WiFi connection")
+        state = run(NM, "-g", "GENERAL.STATE", "dev", "show", name).split()[0]
+        if state not in ("10", "30"):
+            raise ValueError("Adapter busy or unavailable")
+        managed = state == "30"
+        was_up = bool(int((link / "flags").read_text(), 16) & 1)
+        try:
+            if managed:
+                run(NM, "dev", "set", name, "managed", "no")
+            run(IP, "link", "set", "dev", name, "down")
+            run(IW, "dev", name, "set", "type", "monitor")
+            run(IP, "link", "set", "dev", name, "up")
+            if not re.search(r"^\s*type monitor$", run(IW, "dev", name, "info"), re.M):
+                raise ValueError("Mode change unconfirmed")
+            print("Monitor on", flush=True)
+            allowed = {int(match.group(1)) for line in modes.splitlines()
+                       if "(disabled)" not in line
+                       and (match := re.match(r"\s*\* (\d+)(?:\.0+)? MHz \[", line))}
+            while request := sys.stdin.buffer.readline(32):
+                if socket.if_nametoindex(name) != index or (link / "phy80211").resolve() != phy:
+                    break
+                if request == b"CAPTURE\n":
+                    try:
+                        if not re.search(r"^\s*type monitor$", run(IW, "dev", name, "info"), re.M):
+                            raise ValueError("Monitor mode required")
+                        with socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.htons(3)) as capture:
+                            capture.bind((name, 0))
+                            with socket.socket(fileno=os.dup(1)) as channel:
+                                channel.sendmsg([b"FD\n"], [(socket.SOL_SOCKET, socket.SCM_RIGHTS,
+                                    array.array("i", [capture.fileno()]))])
+                    except (OSError, ValueError, subprocess.SubprocessError):
+                        print("Capture unavailable", flush=True)
+                    continue
+                if not re.fullmatch(rb"[0-9]{3,5}\n", request):
+                    break
+                freq = int(request)
+                try:
+                    if freq not in allowed:
+                        raise ValueError("Channel unavailable")
+                    info = run(IW, "dev", name, "info")
+                    if not re.search(r"^\s*type monitor$", info, re.M):
+                        raise ValueError("Monitor mode required")
+                    run(IW, "dev", name, "set", "freq", str(freq))
+                    info = run(IW, "dev", name, "info")
+                    tuned = re.search(r"^\s*channel \d+ \((\d+) MHz\)", info, re.M)
+                    print("OK" if tuned and int(tuned[1]) == freq else "Tune unconfirmed", flush=True)
+                except (ValueError, subprocess.SubprocessError):
+                    print("Channel tune failed", flush=True)
+        finally:
+            if socket.if_nametoindex(name) == index:
+                failures = []
+                for command in [(IP, "link", "set", "dev", name, "down"),
+                                (IW, "dev", name, "set", "type", "managed"),
+                                (IP, "link", "set", "dev", name, "up" if was_up else "down")]:
+                    try:
+                        run(*command)
+                    except (OSError, subprocess.SubprocessError) as error:
+                        failures.append(error)
+                if managed:
+                    run(NM, "dev", "set", name, "managed", "yes")
+                if failures:
+                    raise ValueError("Radio restore incomplete")
+    finally:
+        os.close(lock)
+
+if __name__ == "__main__":
+    try:
+        if len(sys.argv) != 2 or os.geteuid() != 0:
+            raise ValueError("Monitor permission required")
+        lease(sys.argv[1])
+    except (OSError, ValueError, subprocess.SubprocessError) as err:
+        print(str(err) if isinstance(err, ValueError) else "Radio mode change failed", flush=True)
+        sys.exit(1)

@@ -28,13 +28,14 @@
 namespace platform::screenshot {
 namespace {
 
-std::filesystem::path screenshot_directory() {
+std::filesystem::path screenshot_directory(bool documents) {
+    const auto folder = documents ? std::filesystem::path("Documents") / "Marauder" : std::filesystem::path("Pictures") / "Screenshots";
     if (const char* home = std::getenv("HOME"); home && home[0] != '\0') {
-        return std::filesystem::path(home) / "Pictures" / "Screenshots";
+        return std::filesystem::path(home) / folder;
     }
 #if !defined(_WIN32)
     if (const passwd* user = getpwuid(getuid()); user && user->pw_dir && user->pw_dir[0] != '\0') {
-        return std::filesystem::path(user->pw_dir) / "Pictures" / "Screenshots";
+        return std::filesystem::path(user->pw_dir) / folder;
     }
 #endif
     return std::filesystem::path("/tmp") / "Screenshots";
@@ -137,7 +138,7 @@ bool write_png(const std::filesystem::path& path,
 
 } // namespace
 
-CaptureResult capture_active_screen() {
+CaptureResult capture_active_screen(bool documents, unsigned reserve_mib) {
     CaptureResult result;
     auto* screen = lv_screen_active();
     if (!screen) {
@@ -145,7 +146,7 @@ CaptureResult capture_active_screen() {
         return result;
     }
 
-    const auto directory = screenshot_directory();
+    const auto directory = screenshot_directory(documents);
     std::error_code filesystem_error;
     std::filesystem::create_directories(directory, filesystem_error);
     if (filesystem_error) {
@@ -153,6 +154,15 @@ CaptureResult capture_active_screen() {
         return result;
     }
 
+    if (reserve_mib) {
+        const auto available = std::filesystem::space(directory, filesystem_error).available;
+        // Allow for an incompressible frame, PNG framing and filesystem allocation.
+        const auto frame = static_cast<uint64_t>(lv_obj_get_width(screen)) * lv_obj_get_height(screen) * 4;
+        if (filesystem_error || available < reserve_mib * 1048576ULL + frame * 2 + 65536) {
+            result.error = filesystem_error ? "Free space unavailable" : "Storage reserve reached";
+            return result;
+        }
+    }
     const auto path = directory / timestamp_filename();
     lv_draw_buf_t* snapshot = lv_snapshot_take(screen, LV_COLOR_FORMAT_ARGB8888);
     if (!snapshot) {

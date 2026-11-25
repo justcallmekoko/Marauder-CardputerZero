@@ -16,6 +16,6 @@ struct CaptureResult {
     std::string error;
 };
 
-CaptureResult capture_active_screen();
+CaptureResult capture_active_screen(bool documents, unsigned reserve_mib = 0);
 
 } // namespace platform::screenshot

@@ -8,6 +8,7 @@
 #include <array>
 #include <cctype>
 #include <cstdio>
+#include <sstream>
 #include <filesystem>
 #include <sys/wait.h>
 
@@ -35,6 +36,29 @@ std::string iw_binary() {
 }
 
 } // namespace
+
+std::string frequency_bands(const std::string& info) {
+    struct Band { int low, high; const char* name; bool seen; };
+    Band bands[] = {{750, 999, "Sub-1", false}, {2400, 2500, "2.4", false},
+                    {4900, 5924, "5", false}, {5925, 7125, "6", false},
+                    {57000, 71000, "60", false}};
+    std::istringstream lines(info);
+    for (std::string line; std::getline(lines, line);) {
+        std::istringstream fields(line);
+        std::string star, unit;
+        double frequency;
+        if (!(fields >> star >> frequency >> unit) || star != "*" || unit != "MHz") continue;
+        for (auto& band : bands)
+            if (frequency >= band.low && frequency <= band.high) band.seen = true;
+    }
+    std::string result;
+    for (const auto& band : bands) {
+        if (!band.seen) continue;
+        if (!result.empty()) result += " / ";
+        result += band.name;
+    }
+    return result.empty() ? result : result + " GHz";
+}
 
 CapabilityState monitor_mode_from_iw_phy_info(std::string_view output) {
     bool in_modes = false;
@@ -82,14 +106,27 @@ MonitorModeProbe probe_monitor_mode(const std::string& phy_name) {
         return {CapabilityState::Unknown, "PHY query failed; radio unchanged"};
     }
 
+    std::vector<unsigned> frequencies;
+    std::istringstream lines(output);
+    for (std::string line; std::getline(lines, line);) {
+        std::istringstream fields(line);
+        std::string star, unit;
+        double mhz;
+        if (fields >> star >> mhz >> unit && star == "*" && unit == "MHz" &&
+            line.find("(disabled)") == std::string::npos && mhz > 0 && mhz <= 71000 &&
+            mhz == static_cast<unsigned>(mhz))
+            frequencies.push_back(static_cast<unsigned>(mhz));
+    }
+    std::sort(frequencies.begin(), frequencies.end());
+    frequencies.erase(std::unique(frequencies.begin(), frequencies.end()), frequencies.end());
     const auto state = monitor_mode_from_iw_phy_info(output);
     if (state == CapabilityState::Supported) {
-        return {state, "Kernel advertises monitor mode"};
+        return {state, "Kernel advertises monitor mode", frequency_bands(output), frequencies};
     }
     if (state == CapabilityState::Unsupported) {
-        return {state, "Kernel lacks monitor mode"};
+        return {state, "Kernel lacks monitor mode", frequency_bands(output), frequencies};
     }
-    return {state, "PHY modes unknown; radio unchanged"};
+    return {state, "PHY modes unknown; radio unchanged", frequency_bands(output), frequencies};
 }
 
 } // namespace platform::wireless

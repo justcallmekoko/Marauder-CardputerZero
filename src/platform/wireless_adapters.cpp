@@ -55,19 +55,25 @@ bool meaningful_serial(const std::string& serial) {
 }
 
 std::string stable_identity(const AdapterInfo& adapter) {
-    if (adapter.bus_type == "USB" && meaningful_serial(adapter.serial)) {
-        return "usb:" + adapter.vendor_id + ':' + adapter.product_id + ':' + adapter.serial;
-    }
     if (adapter.permanent_mac && !adapter.mac_address.empty()) {
         return "mac:" + adapter.mac_address;
     }
+    if (adapter.bus_type == "USB" && meaningful_serial(adapter.serial)) {
+        return "usb:" + adapter.vendor_id + ':' + adapter.product_id + ':' + adapter.serial;
+    }
     if (!adapter.device_path.empty()) {
-        return "path:" + adapter.device_path;
+        return "path:" + adapter.vendor_id + ":" + adapter.product_id + ":" + adapter.device_path;
     }
     return "ifindex:" + adapter.ifindex;
 }
 
 } // namespace
+
+std::string AdapterInfo::display_name() const {
+    if (manufacturer.empty()) return product_name.empty() ? interface_name : product_name;
+    if (product_name.empty() || product_name == manufacturer) return manufacturer;
+    return manufacturer + " " + product_name;
+}
 
 Catalog enumerate() {
     Catalog catalog;
@@ -83,13 +89,17 @@ Catalog enumerate() {
             catalog.error = "Unable to enumerate network interfaces";
             break;
         }
-        if (!fs::is_directory(entry.path() / "wireless")) {
+        if (!fs::is_directory(entry.path() / "wireless") && !fs::exists(entry.path() / "phy80211")) {
             continue;
         }
 
         AdapterInfo adapter;
         adapter.interface_name = entry.path().filename().string();
         adapter.ifindex = read_value(entry.path() / "ifindex");
+        const auto link_type = read_value(entry.path() / "type");
+        // Linux ARPHRD_IEEE80211, PRISM and RADIOTAP identify monitor interfaces.
+        adapter.monitor_status = link_type == "801" || link_type == "802" || link_type == "803" ? "On" :
+                                 link_type == "1" ? "Off" : "Unknown";
         adapter.operstate = read_value(entry.path() / "operstate");
         adapter.mac_address = read_value(entry.path() / "address");
         adapter.permanent_mac = read_value(entry.path() / "addr_assign_type") == "0";
@@ -110,6 +120,8 @@ Catalog enumerate() {
 
         adapter.stable_id = stable_identity(adapter);
         const auto monitor_probe = probe_monitor_mode(adapter.phy_name);
+        adapter.bands = monitor_probe.bands;
+        adapter.frequencies = monitor_probe.frequencies;
         adapter.monitor_mode = monitor_probe.state;
         adapter.injection = CapabilityState::Unverified;
         adapter.capability_note = monitor_probe.note;

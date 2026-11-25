@@ -5,39 +5,67 @@
 
 #include "base_viewmodel.h"
 
+#include "display_format.h"
 #include "system_diagnostics.h"
+#include "radio_power.h"
+#include "channel_survey.h"
+#include "src/misc/cache/instance/lv_image_cache.h"
+#include <chrono>
+#include <fstream>
+#include <cstdio>
 
 #include <algorithm>
 #include <sstream>
 #include <system_error>
+#include <iterator>
+#if defined(__linux__) && !USE_DESKTOP
+#include <cerrno>
+#include <poll.h>
+#include <unistd.h>
+#endif
 
 namespace viewmodel {
 namespace {
-int page_to_int(model::AppPage page) { return static_cast<int>(page); }
-
-std::string clip_for_display(const std::string& value, std::size_t max_length) {
-    auto next_codepoint = [&](std::size_t index) {
-        const auto byte = static_cast<unsigned char>(value[index]);
-        std::size_t length = byte < 0x80 ? 1 :
-                             (byte & 0xe0) == 0xc0 ? 2 :
-                             (byte & 0xf0) == 0xe0 ? 3 :
-                             (byte & 0xf8) == 0xf0 ? 4 : 1;
-        return std::min(value.size(), index + length);
-    };
-    std::size_t count = 0;
-    for (std::size_t index = 0; index < value.size(); index = next_codepoint(index)) ++count;
-    if (count <= max_length) return value;
-    const std::size_t keep = max_length < 4 ? max_length : max_length - 3;
-    std::size_t end = 0;
-    for (std::size_t index = 0; index < keep && end < value.size(); ++index) end = next_codepoint(end);
-    return value.substr(0, end) + (max_length < 4 ? "" : "...");
+constexpr const char* brightness_path = "/sys/class/backlight/backlight/brightness";
+int backlight_value(const char* path) {
+    int n = -1;
+    std::ifstream(path) >> n;
+    return n;
 }
+
+std::pair<std::string,std::string> active_wifi_profile() {
+#if defined(__linux__) && !USE_DESKTOP
+    FILE* pipe = popen("LC_ALL=C /usr/bin/nmcli -w 1 -t -e no -f TYPE,UUID,NAME connection show --active 2>/dev/null", "r");
+    if (!pipe) return {};
+    std::pair<std::string,std::string> profile;
+    char buffer[1024];
+    unsigned count = 0;
+    while (std::fgets(buffer, sizeof(buffer), pipe)) {
+        std::string line(buffer);
+        const std::string prefix = "802-11-wireless:";
+        if (line.compare(0, prefix.size(), prefix) != 0) continue;
+        const auto sep = line.find(':', prefix.size());
+        if (sep == std::string::npos) continue;
+        auto uuid = line.substr(prefix.size(), sep - prefix.size());
+        if (uuid.size() != 36 || uuid.find_first_not_of("abcdefABCDEF0123456789-") != std::string::npos) continue;
+        auto name = line.substr(sep + 1);
+        name.erase(name.find_last_not_of("\r\n") + 1);
+        profile = {uuid, name};
+        ++count;
+    }
+    if (pclose(pipe) == 0 && count == 1) return profile;
+#endif
+    return {};
+}
+
+int page_to_int(model::AppPage page) { return static_cast<int>(page); }
 }
 
 BaseViewModel::BaseViewModel()
     : title_subject_(model_.app_title()),
       dark_mode_subject_(model_.dark_mode()),
       current_page_subject_(page_to_int(model_.current_page())),
+      battery_display_subject_(static_cast<int>(model_.battery_display())),
       marauder_menu_generation_subject_(0),
       dashboard_summary_subject_("Collecting system information..."),
       diagnostics_detail_subject_("Collecting system information..."),
@@ -45,16 +73,33 @@ BaseViewModel::BaseViewModel()
       adapter_detail_subject_("Collecting wireless adapters..."),
       wifi_scan_subject_("SELECT AN ADAPTER FIRST"),
       quit_requested_subject_(false) {
+    lv_image_cache_resize(model_.cache_kib() * 1024U, false);
     wifi_scan_timer_ = lv_timer_create(wifi_scan_timer_cb, 100, this);
+    original_light_ = backlight_value(brightness_path);
+    light_max_ = backlight_value("/sys/class/backlight/backlight/max_brightness");
+    gps_id_ = model::saved_gps_id();
+    if (!gps_id_.empty())
+        gps_status_.set(gps_session_.start(gps_id_) ? "Wait" : "Unavailable");
+    radio_session_ = platform::begin_radio_session();
+    refresh_radios();
+    activity_tick_ = lv_tick_get();
+    if (model_.brightness() && original_light_ >= 0 && light_max_ > 0)
+        set_light(std::max(1, static_cast<int>(model_.brightness()) * light_max_ / 100));
     refresh_diagnostics();
 }
 
 BaseViewModel::~BaseViewModel() {
+    if (changed_light_) set_light(original_light_);
     if (wifi_scan_timer_) {
         lv_timer_delete(wifi_scan_timer_);
         wifi_scan_timer_ = nullptr;
     }
-    if (wifi_scan_thread_.joinable()) wifi_scan_thread_.join();
+    stop_wifi_capture();
+    if (radio_job_.valid()) radio_job_.wait();
+    if (monitor_job_.valid()) monitor_job_.wait();
+    monitor_session_.stop();
+    gps_session_.stop();
+    platform::end_radio_session(radio_session_);
 }
 lv_subject_t* BaseViewModel::title_subject() { return title_subject_.native(); }
 lv_subject_t* BaseViewModel::dark_mode_subject() { return dark_mode_subject_.native(); }
@@ -67,16 +112,16 @@ lv_subject_t* BaseViewModel::adapter_detail_subject() { return adapter_detail_su
 lv_subject_t* BaseViewModel::wifi_scan_subject() { return wifi_scan_subject_.native(); }
 lv_subject_t* BaseViewModel::quit_requested_subject() { return quit_requested_subject_.native(); }
 bool BaseViewModel::is_dark_mode() const { return model_.dark_mode(); }
-void BaseViewModel::set_dark_mode(bool enabled) { model_.set_dark_mode(enabled); publish_navigation(); }
-void BaseViewModel::toggle_dark_mode() { model_.toggle_dark_mode(); publish_navigation(); }
 model::AppPage BaseViewModel::current_page() const { return model_.current_page(); }
-void BaseViewModel::show_dashboard_page() { model_.set_current_page(model::AppPage::Dashboard); publish_navigation(); }
+void BaseViewModel::show_dashboard_page() { stop_wifi_capture(); model_.set_current_page(model::AppPage::Dashboard); publish_navigation(); }
 void BaseViewModel::show_diagnostics_page() {
+    stop_wifi_capture();
     refresh_diagnostics();
     model_.set_current_page(model::AppPage::Diagnostics);
     publish_navigation();
 }
 void BaseViewModel::show_adapters_page() {
+    stop_wifi_capture();
     refresh_adapters();
     model_.set_current_page(model::AppPage::Adapters);
     publish_navigation();
@@ -84,26 +129,113 @@ void BaseViewModel::show_adapters_page() {
 void BaseViewModel::show_wifi_scan_page() {
     model_.set_current_page(model::AppPage::WifiScan);
     publish_navigation();
-    if (wifi_networks_.empty() && !wifi_scan_running_) start_wifi_scan();
+    if (!wifi_scan_running_) start_wifi_scan();
 }
-void BaseViewModel::toggle_page() { model_.toggle_page(); publish_navigation(); }
+void BaseViewModel::toggle_page() { stop_wifi_capture(); model_.toggle_page(); publish_navigation(); }
 const char* BaseViewModel::marauder_menu_title() const { return marauder_menu_.title(); }
 std::size_t BaseViewModel::marauder_menu_item_count() const { return marauder_menu_.item_count(); }
 const model::MarauderMenuItem& BaseViewModel::marauder_menu_item(std::size_t index) const {
     return marauder_menu_.item(index);
 }
 std::size_t BaseViewModel::marauder_menu_selected_index() const { return marauder_menu_.selected_index(); }
-bool BaseViewModel::marauder_menu_at_root() const { return marauder_menu_.depth() == 1; }
-void BaseViewModel::marauder_menu_previous() {
-    marauder_menu_.previous();
+bool BaseViewModel::marauder_menu_at_root() const { return !marauder_menu_.can_go_back(); }
+bool BaseViewModel::marauder_menu_can_go_back() const { return marauder_menu_.can_go_back(); }
+void BaseViewModel::move_menu_focus(int dx, int dy) {
+    pending_uuid_.clear(); pending_network_.clear(); resource_error_.clear();
+    const auto previous = marauder_menu_.selected_index();
+    marauder_menu_.move(dx, dy);
+    if (previous != marauder_menu_.selected_index())
+        marauder_menu_generation_subject_.set(marauder_menu_generation_subject_.value() + 1);
+}
+namespace {
+bool credential_action(model::MarauderMenuAction action, model::Credential& field) {
+    using A = model::MarauderMenuAction;
+    switch (action) {
+        case A::WigleName: field = model::Credential::WigleName; return true;
+        case A::WigleToken: field = model::Credential::WigleToken; return true;
+        case A::WdgKey: field = model::Credential::WdgKey; return true;
+        default: return false;
+    }
+}
+}
+
+void BaseViewModel::credential_key(uint32_t key) {
+    if (!credential_open_) return;
+    if (key == LV_KEY_ESC) credential_open_ = false;
+    else if (key == LV_KEY_ENTER) {
+        if (credential_input_.empty() && !clear_credential_) return;
+        if (model::store_credential(credential_field_, credential_input_)) credential_open_ = false;
+        else credential_prompt_ = "Save failed. Enter to retry.";
+    } else if (key == LV_KEY_DEL && credential_input_.empty()) {
+        clear_credential_ = true;
+        credential_prompt_ = "Enter to remove saved value";
+    } else if (key == LV_KEY_BACKSPACE) {
+        if (!credential_input_.empty()) credential_input_.pop_back();
+    } else if (key >= 33 && key <= 126 && credential_input_.size() < 512) {
+        credential_input_.push_back(static_cast<char>(key));
+        clear_credential_ = false;
+        credential_prompt_ = "Enter to save";
+    } else return;
+    if (!credential_open_) {
+        std::fill(credential_input_.begin(), credential_input_.end(), '\0');
+        credential_input_.clear();
+    }
     marauder_menu_generation_subject_.set(marauder_menu_generation_subject_.value() + 1);
 }
-void BaseViewModel::marauder_menu_next() {
-    marauder_menu_.next();
-    marauder_menu_generation_subject_.set(marauder_menu_generation_subject_.value() + 1);
+
+std::string BaseViewModel::collection_warning(model::RadioRequirement requirement) const {
+    using Requirement = model::RadioRequirement;
+    if (requirement == Requirement::None) return {};
+    if (model_.selected_adapter_id().empty()) return "Select a WiFi adapter first";
+    const auto selected = std::find_if(adapters_.begin(), adapters_.end(), [&](const auto& adapter) {
+        return adapter.stable_id == model_.selected_adapter_id();
+    });
+    if (selected == adapters_.end()) return "Selected adapter unavailable";
+    const std::string path = "/sys/class/net/" + selected->interface_name + "/";
+    std::string index;
+    if (!(std::ifstream(path + "ifindex") >> index) || index != selected->ifindex)
+        return "Selected adapter unavailable";
+    if (requirement == Requirement::Selected) return {};
+    int type{};
+    if (!(std::ifstream(path + "type") >> type)) return "Cannot verify adapter mode";
+    const bool monitor = type == 801 || type == 802 || type == 803;
+    if (requirement == Requirement::Managed && monitor) return "Turn monitor mode off for AP scans";
+    if (requirement == Requirement::Monitor && !monitor)
+        return selected->monitor_mode == platform::wireless::CapabilityState::Unsupported ?
+            "Select a monitor-capable adapter" : "Enable monitor mode first";
+    return {};
 }
+
 void BaseViewModel::marauder_menu_activate() {
+    using Action = model::MarauderMenuAction;
     const auto action = marauder_menu_.activate();
+    resource_error_.clear();
+    if (action == Action::Brightness) {
+        if (light_max_ <= 0 || original_light_ < 0) resource_error_ = "Backlight unavailable";
+        else if (!model_.cycle_brightness()) resource_error_ = "Could not save preference";
+        else if (!set_light(model_.brightness() ? std::max(1, light_max_ * static_cast<int>(model_.brightness()) / 100) : original_light_))
+            resource_error_ = "Backlight write failed";
+    }
+    if (action == Action::DimDelay && !model_.cycle_dim()) resource_error_ = "Could not save preference";
+    if (action == Action::Reserve && !model_.cycle_reserve()) resource_error_ = "Could not save preference";
+    if (action == Action::UploadPolicy) choose_upload_policy();
+    if (credential_action(action, credential_field_)) {
+        credential_open_ = true;
+        clear_credential_ = false;
+        credential_prompt_ = model::credential_saved(credential_field_) ?
+            "Type replacement or Del to remove" : "Type a new value";
+    }
+    if (action == Action::CycleStorage || action == Action::CycleCache) {
+        const bool storage = action == Action::CycleStorage;
+        const bool saved = storage ? model_.cycle_storage() : model_.cycle_cache();
+        if (saved && !storage) lv_image_cache_resize(model_.cache_kib() * 1024U, true);
+        resource_message_ = !saved ? "Could not save preference" : !storage ? "Image cache limit applied" :
+            model_.screenshots_in_documents() ? "~/Documents/Marauder" : "~/Pictures/Screenshots";
+    }
+    if (action == model::MarauderMenuAction::CycleBatteryDisplay) {
+        model_.cycle_battery_display();
+        battery_display_subject_.set(static_cast<int>(model_.battery_display()));
+    }
     marauder_menu_generation_subject_.set(marauder_menu_generation_subject_.value() + 1);
     switch (action) {
         case model::MarauderMenuAction::OpenWifiScan:
@@ -115,27 +247,186 @@ void BaseViewModel::marauder_menu_activate() {
         case model::MarauderMenuAction::OpenDiagnostics:
             show_diagnostics_page();
             break;
-        case model::MarauderMenuAction::ToggleTheme:
-            toggle_dark_mode();
+        case Action::OpenTraffic:
+            model_.set_current_page(model::AppPage::Traffic);
+            publish_navigation();
             break;
+        case Action::OpenRadioSetup:
+            model_.set_current_page(model::AppPage::RadioSetup);
+            publish_navigation();
+            refresh_radios();
+            break;
+        case Action::WigleName:
+        case Action::WigleToken:
+        case Action::WdgKey:
+        case Action::CycleStorage:
+        case Action::Brightness:
+        case Action::DimDelay:
+        case Action::Reserve:
+        case Action::UploadPolicy:
+        case Action::CycleCache:
+        case model::MarauderMenuAction::CycleBatteryDisplay:
         case model::MarauderMenuAction::None:
             break;
     }
 }
+const char* BaseViewModel::settings_message() const {
+    if (!resource_error_.empty()) return resource_error_.c_str();
+    if (!pending_uuid_.empty()) return "Enter to trust WiFi";
+    if (marauder_menu_.current_menu() == model::MarauderMenuId::FilesAndMemory) return resource_message_.c_str();
+    return "";
+}
+
+std::string BaseViewModel::setting_value(model::MarauderMenuAction action) const {
+    using Action = model::MarauderMenuAction;
+    if (action == Action::Brightness) return model_.brightness() ? std::to_string(model_.brightness()) + "%" : "System";
+    if (action == Action::DimDelay) return model_.dim_seconds() ? std::to_string(model_.dim_seconds()) + " sec" : "Never";
+    if (action == Action::Reserve) return model_.reserve_mib() ? std::to_string(model_.reserve_mib()) + " MiB" : "Off";
+    if (action == Action::UploadPolicy) return !pending_uuid_.empty() ? pending_network_ :
+        model_.trusted_profile().empty() ? "Manual" : "Trusted WiFi";
+    model::Credential field;
+    if (credential_action(action, field)) return model::credential_saved(field) ? "Saved" : "Not set";
+    if (action == model::MarauderMenuAction::CycleBatteryDisplay) return model::battery_display_name(model_.battery_display());
+    if (action == model::MarauderMenuAction::CycleStorage)
+        return model_.screenshots_in_documents() ? "Documents" : "Pictures";
+    if (action == model::MarauderMenuAction::CycleCache)
+        return model_.cache_kib() ? std::to_string(model_.cache_kib()) + " KiB" : "Off";
+    return {};
+}
+
+void BaseViewModel::load_radios(std::string key, bool enabled) {
+    if (radio_busy()) return;
+    radio_list_.message = key.empty() ? "Refreshing" : "Applying";
+    try {
+        radio_job_ = std::async(std::launch::async, platform::read_radios, std::move(key), enabled, radio_session_);
+    } catch (const std::system_error&) { radio_list_.message = "Worker unavailable"; }
+    marauder_menu_generation_subject_.set(marauder_menu_generation_subject_.value() + 1);
+}
+
+void BaseViewModel::refresh_radios() { load_radios({}, false); }
+
+void BaseViewModel::move_radio(int direction) {
+    if (radios().empty()) return;
+    if (direction < 0 && radio_cursor_ > 0) --radio_cursor_;
+    if (direction > 0 && radio_cursor_ + 1 < radios().size()) ++radio_cursor_;
+    marauder_menu_generation_subject_.set(marauder_menu_generation_subject_.value() + 1);
+}
+
+void BaseViewModel::toggle_radio() {
+    if (radios().empty()) return;
+    const auto& radio = radios()[radio_cursor_];
+    if (radio_busy()) return;
+    if (radio.kind == "GPS") {
+        const auto next = gps_id_ == radio.id ? std::string{} : radio.id;
+        if (!model::save_gps_id(next)) {
+            radio_list_.message = "Could not save GPS";
+        } else if (next.empty()) {
+            gps_session_.stop();
+            gps_id_.clear();
+            gps_status_.set("Off");
+            radio_list_.message = "GPS released";
+        } else if (gps_session_.start(radio.id)) {
+            gps_id_ = radio.id;
+            gps_status_.set("Wait");
+            radio_list_.message = "GPS selected";
+        } else {
+            gps_id_ = next;
+            gps_status_.set("Unavailable");
+            radio_list_.message = "GPS reader unavailable";
+        }
+        sync_gps_rows();
+        marauder_menu_generation_subject_.set(marauder_menu_generation_subject_.value() + 1);
+        return;
+    }
+    if (radio.state == "On" || radio.state == "Off") load_radios(radio.id, radio.state == "Off");
+}
+
+void BaseViewModel::update_gps_status() {
+    const auto state = gps_session_.poll();
+    if (!state.empty()) gps_status_.set(state.c_str());
+}
+
+void BaseViewModel::sync_gps_rows() {
+    auto& rows = radio_list_.devices;
+    rows.erase(std::remove_if(rows.begin(), rows.end(), [](const auto& d) {
+        return d.kind == "GPS" && d.name == "Saved GPS";
+    }), rows.end());
+    bool found = false;
+    for (auto& d : rows) {
+        if (d.kind != "GPS") continue;
+        d.state = d.id == gps_id_ ? "On" : "Off";
+        found |= d.id == gps_id_;
+    }
+    if (!gps_id_.empty() && !found)
+        rows.push_back({gps_id_, "GPS", "Saved GPS", "Disconnected", "Waiting for receiver",
+                        "Enter to disable", "", "On", ""});
+    if (radio_cursor_ >= rows.size()) radio_cursor_ = rows.empty() ? 0 : rows.size() - 1;
+}
+
+void BaseViewModel::finish_radio_setting() {
+    if (!radio_busy() || radio_job_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return;
+    const auto selected = radios().empty() ? std::string{} : radios()[radio_cursor_].id;
+    try { radio_list_ = radio_job_.get(); }
+    catch (const std::exception&) { radio_list_ = {"Radio request failed", {}}; }
+    sync_gps_rows();
+    radio_cursor_ = 0;
+    for (std::size_t i = 0; i < radios().size(); ++i) {
+        if (radios()[i].id == selected) { radio_cursor_ = i; break; }
+    }
+    marauder_menu_generation_subject_.set(marauder_menu_generation_subject_.value() + 1);
+}
+
 bool BaseViewModel::marauder_menu_back() {
+    pending_uuid_.clear(); pending_network_.clear(); resource_error_.clear();
     if (!marauder_menu_.back()) return false;
     marauder_menu_generation_subject_.set(marauder_menu_generation_subject_.value() + 1);
     return true;
 }
 
 void BaseViewModel::refresh_diagnostics() {
-    const auto snapshot = platform::diagnostics::collect();
-    const auto summary = platform::diagnostics::dashboard_summary(snapshot);
-    const auto details = platform::diagnostics::detail_text(snapshot);
+    diagnostics_snapshot_ = platform::diagnostics::collect();
+    system_info_.refresh_counts(diagnostics_snapshot_.network_interfaces.size(),
+                                diagnostics_snapshot_.usb_devices.size(),
+                                diagnostics_snapshot_.peripheral_nodes.size(),
+                                diagnostics_snapshot_.tools.size());
+    const auto summary = platform::diagnostics::dashboard_summary(diagnostics_snapshot_);
     dashboard_summary_subject_.set(summary.c_str());
-    diagnostics_detail_subject_.set(details.c_str());
-    diagnostics_generation_subject_.set(diagnostics_generation_subject_.value() + 1);
+    publish_diagnostics();
     refresh_adapters();
+}
+
+void BaseViewModel::previous_system_info_page() { system_info_.previous_page(); publish_diagnostics(); }
+void BaseViewModel::next_system_info_page() { system_info_.next_page(); publish_diagnostics(); }
+void BaseViewModel::toggle_system_info_details() { system_info_.toggle_details(); publish_diagnostics(); }
+
+void BaseViewModel::publish_diagnostics() {
+    const auto text = format::system_info_page(diagnostics_snapshot_, system_info_);
+    diagnostics_detail_subject_.set(text.c_str());
+    diagnostics_generation_subject_.set(diagnostics_generation_subject_.value() + 1);
+}
+
+void BaseViewModel::toggle_monitor() {
+    if (monitor_busy() || highlighted_adapter_ >= adapters_.size()) return;
+    const auto& adapter = adapters_[highlighted_adapter_];
+    if (adapter.stable_id != model_.selected_adapter_id()) adapter_error_ = "Select adapter first";
+    else if (wifi_scan_running_) adapter_error_ = "Leave Access Points first";
+    else if (monitor_owner_.empty() && adapter.monitor_mode != platform::wireless::CapabilityState::Supported)
+        adapter_error_ = "Monitor support unavailable";
+    else {
+        const bool start = monitor_owner_.empty();
+        const auto name = adapter.interface_name;
+        monitor_owner_ = adapter.stable_id;
+        try {
+            monitor_job_ = std::async(std::launch::async, [this, name, start] {
+                return start ? monitor_session_.start(name) : monitor_session_.stop();
+            });
+            adapter_error_ = "Switching radio mode...";
+        } catch (const std::system_error&) {
+            if (start) monitor_owner_.clear();
+            adapter_error_ = "Cannot switch mode now";
+        }
+    }
+    publish_adapter_detail();
 }
 
 void BaseViewModel::refresh_adapters() {
@@ -147,6 +438,10 @@ void BaseViewModel::refresh_adapters() {
     } else if (highlighted_adapter_ >= adapters_.size()) {
         highlighted_adapter_ = adapters_.size() - 1;
     }
+    const auto saved = std::find_if(adapters_.begin(), adapters_.end(), [&](const auto& adapter) {
+        return adapter.stable_id == model_.selected_adapter_id();
+    });
+    if (saved != adapters_.end()) highlighted_adapter_ = saved - adapters_.begin();
     adapter_details_expanded_ = false;
     publish_adapter_detail();
 }
@@ -168,13 +463,27 @@ void BaseViewModel::next_adapter() {
 void BaseViewModel::select_highlighted_adapter() {
     if (adapters_.empty()) return;
     const auto& adapter = adapters_[highlighted_adapter_];
-    if (model_.selected_adapter_id() != adapter.stable_id) {
+    const bool changed = model_.selected_adapter_id() != adapter.stable_id;
+    if (changed && !monitor_owner_.empty()) {
+        adapter_error_ = "Turn monitor off first";
+        publish_adapter_detail();
+        return;
+    }
+    if (!model_.set_selected_adapter_id(adapter.stable_id)) {
+        adapter_error_ = "Could not save WiFi selection";
+        publish_adapter_detail();
+        return;
+    }
+    adapter_error_.clear();
+    if (changed) {
         wifi_networks_.clear();
         wifi_scan_interface_.clear();
         wifi_scan_error_.clear();
-        wifi_scan_page_ = 0;
+        wifi_scan_detail_index_ = 0;
+        wifi_scan_details_expanded_ = false;
+        wifi_view_ = 0;
+        wifi_info_tab_ = 0;
     }
-    model_.set_selected_adapter_id(adapter.stable_id);
     publish_adapter_detail();
     publish_wifi_scan();
 }
@@ -185,7 +494,7 @@ void BaseViewModel::toggle_adapter_details() {
 }
 
 void BaseViewModel::start_wifi_scan() {
-    if (wifi_scan_running_) return;
+    stop_wifi_capture();
     const auto selected = std::find_if(adapters_.begin(), adapters_.end(), [&](const auto& adapter) {
         return adapter.stable_id == model_.selected_adapter_id();
     });
@@ -194,75 +503,241 @@ void BaseViewModel::start_wifi_scan() {
         publish_wifi_scan();
         return;
     }
-    if (wifi_scan_thread_.joinable()) wifi_scan_thread_.join();
     wifi_scan_interface_ = selected->interface_name;
-    wifi_scan_error_.clear();
-    wifi_scan_running_ = true;
-    wifi_scan_ready_ = false;
-    publish_wifi_scan();
-    const auto interface_name = wifi_scan_interface_;
-    try {
-        wifi_scan_thread_ = std::thread([this, interface_name] {
-            platform::wireless::WifiScanResult result;
-            try {
-                result = platform::wireless::scan_wifi_networks(interface_name);
-            } catch (...) {
-                result.error = "Unexpected Wi-Fi scan failure";
-            }
-            {
-                std::lock_guard<std::mutex> lock(wifi_scan_mutex_);
-                pending_wifi_scan_ = std::move(result);
-                pending_wifi_scan_interface_ = interface_name;
-            }
-            wifi_scan_ready_ = true;
-        });
-    } catch (const std::system_error&) {
-        wifi_scan_running_ = false;
-        wifi_scan_error_ = "Unable to start background scan";
+    wifi_frequencies_ = selected->frequencies;
+    std::stable_sort(wifi_frequencies_.begin(), wifi_frequencies_.end(), [](unsigned a, unsigned b) {
+        return (a < 3000) != (b < 3000) ? a < 3000 : a < b;
+    });
+    wifi_frequencies_.erase(std::unique(wifi_frequencies_.begin(), wifi_frequencies_.end()), wifi_frequencies_.end());
+    wifi_scan_error_ = collection_warning(model::RadioRequirement::Monitor);
+    if (!wifi_scan_error_.empty()) { publish_wifi_scan(); return; }
+    const int capture = monitor_session_.capture_socket();
+    if (capture < 0) {
+        wifi_scan_error_ = "Monitor capture unavailable";
         publish_wifi_scan();
+        return;
     }
+    wifi_networks_.clear();
+    wifi_scan_detail_index_ = 0;
+    wifi_client_index_ = 0;
+    wifi_view_ = 0;
+    wifi_info_tab_ = 0;
+    wifi_capture_stop_ = false;
+    wifi_capture_failed_ = false;
+    wifi_hop_index_ = 0;
+    wifi_tuned_frequency_ = 0;
+    wifi_hop_tick_ = 0;
+    wifi_scan_running_ = true;
+    try {
+        wifi_scan_thread_ = std::thread([this, capture] {
+#if defined(__linux__) && !USE_DESKTOP
+            uint8_t bytes[8192];
+            while (!wifi_capture_stop_) {
+                pollfd ready{capture, POLLIN, 0};
+                const int status = poll(&ready, 1, 150);
+                if (status < 0) { if (errno == EINTR) continue; break; }
+                if (status == 0) continue;
+                if (ready.revents & (POLLERR | POLLHUP | POLLNVAL)) break;
+                if (!(ready.revents & POLLIN)) continue;
+                const auto count = read(capture, bytes, sizeof(bytes));
+                if (count <= 0) break;
+                platform::wireless::FrameObservation observation;
+                if (!platform::wireless::parse_monitor_frame(bytes, static_cast<size_t>(count), observation)) continue;
+                std::lock_guard<std::mutex> lock(wifi_scan_mutex_);
+                if (incoming_frames_.size() < 1024) incoming_frames_.push_back(std::move(observation));
+            }
+            if (!wifi_capture_stop_) wifi_capture_failed_ = true;
+            close(capture);
+#endif
+        });
+        wifi_scan_error_.clear();
+    } catch (const std::system_error&) {
+#if defined(__linux__) && !USE_DESKTOP
+        close(capture);
+#endif
+        wifi_scan_running_ = false;
+        wifi_scan_error_ = "Unable to start frame capture";
+    }
+    publish_wifi_scan();
+}
+
+void BaseViewModel::stop_wifi_capture() {
+    wifi_capture_stop_ = true;
+    if (wifi_scan_thread_.joinable()) wifi_scan_thread_.join();
+    if (wifi_hop_job_.valid()) wifi_hop_job_.wait();
+    wifi_scan_running_ = false;
+    std::lock_guard<std::mutex> lock(wifi_scan_mutex_);
+    incoming_frames_.clear();
+}
+
+void BaseViewModel::advance_wifi_channel() {
+    if (!wifi_scan_running_ || wifi_frequencies_.empty()) return;
+    if (wifi_hop_job_.valid()) {
+        if (wifi_hop_job_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return;
+        if (wifi_hop_job_.get() == "OK") wifi_tuned_frequency_ = wifi_frequencies_[wifi_hop_index_];
+    }
+    if (wifi_hop_tick_ && lv_tick_elaps(wifi_hop_tick_) < 650) return;
+    unsigned requested{};
+    if (wifi_view_ == 0) {
+        wifi_hop_index_ = wifi_hop_tick_ ? (wifi_hop_index_ + 1) % wifi_frequencies_.size() : 0;
+        requested = wifi_frequencies_[wifi_hop_index_];
+    } else if (wifi_scan_detail_index_ < wifi_networks_.size()) {
+        requested = wifi_networks_[wifi_scan_detail_index_].frequency_mhz;
+        const auto found = std::find(wifi_frequencies_.begin(), wifi_frequencies_.end(), requested);
+        if (found == wifi_frequencies_.end()) return;
+        wifi_hop_index_ = static_cast<size_t>(found - wifi_frequencies_.begin());
+        if (requested == wifi_tuned_frequency_) return;
+    }
+    if (!requested) return;
+    wifi_hop_tick_ = lv_tick_get();
+    wifi_hop_job_ = std::async(std::launch::async, [this, requested] { return monitor_session_.tune(requested); });
 }
 
 void BaseViewModel::previous_wifi_scan_page() {
-    const std::size_t pages = std::max<std::size_t>(1, (wifi_networks_.size() + 4) / 5);
-    wifi_scan_page_ = wifi_scan_page_ == 0 ? pages - 1 : wifi_scan_page_ - 1;
+    auto& index = wifi_view_ >= 2 ? wifi_client_index_ : wifi_scan_detail_index_;
+    if (index > 0) { --index; if (wifi_view_ <= 1) wifi_info_tab_ = 0; }
     publish_wifi_scan();
 }
 
 void BaseViewModel::next_wifi_scan_page() {
-    const std::size_t pages = std::max<std::size_t>(1, (wifi_networks_.size() + 4) / 5);
-    wifi_scan_page_ = (wifi_scan_page_ + 1) % pages;
+    auto& index = wifi_view_ >= 2 ? wifi_client_index_ : wifi_scan_detail_index_;
+    const auto limit = wifi_view_ >= 2 && wifi_scan_detail_index_ < wifi_networks_.size() ?
+        wifi_networks_[wifi_scan_detail_index_].clients.size() : wifi_networks_.size();
+    if (index + 1 < limit) { ++index; if (wifi_view_ <= 1) wifi_info_tab_ = 0; }
     publish_wifi_scan();
+}
+
+void BaseViewModel::toggle_wifi_scan_details() {
+    if (wifi_networks_.empty()) return;
+    if (wifi_view_ == 0) { wifi_view_ = 1; wifi_info_tab_ = 0; }
+    else if (wifi_view_ == 1) { wifi_view_ = 2; wifi_client_index_ = 0; }
+    else if (wifi_view_ == 2 && !wifi_networks_[wifi_scan_detail_index_].clients.empty()) wifi_view_ = 3;
+    else if (wifi_view_ == 3) wifi_view_ = 2;
+    wifi_scan_details_expanded_ = wifi_view_ != 0;
+    publish_wifi_scan();
+}
+
+void BaseViewModel::wifi_back() {
+    if (wifi_view_ > 0) --wifi_view_;
+    if (wifi_view_ == 0) wifi_info_tab_ = 0;
+    wifi_scan_details_expanded_ = wifi_view_ != 0;
+    publish_wifi_scan();
+}
+
+void BaseViewModel::advance_wifi_info_tab() {
+    if (wifi_view_ != 1) return;
+    wifi_info_tab_ = (wifi_info_tab_ + 1) % 3;
+    publish_wifi_scan();
+}
+
+bool BaseViewModel::set_light(int value) {
+    if (value < 0 || light_max_ <= 0) return false;
+    std::ofstream file(brightness_path);
+    file << value;
+    file.close();
+    if (!file) return false;
+    changed_light_ = value != original_light_;
+    return true;
+}
+
+bool BaseViewModel::wake_display() {
+    activity_tick_ = lv_tick_get();
+    if (before_dim_ < 0) return false;
+    if (set_light(before_dim_)) before_dim_ = -1;
+    return true;
+}
+
+void BaseViewModel::idle_display() {
+    if (!model_.dim_seconds() || before_dim_ >= 0 || light_max_ <= 0 ||
+        lv_tick_elaps(activity_tick_) < model_.dim_seconds() * 1000) return;
+    const int current = backlight_value(brightness_path);
+    const int target = std::max(1, current / 5);
+    if (current > target && set_light(target)) before_dim_ = current;
+    else activity_tick_ = lv_tick_get();
+}
+
+void BaseViewModel::choose_upload_policy() {
+    if (!model_.trusted_profile().empty()) {
+        if (!model_.set_trusted_profile("")) resource_error_ = "Could not save policy";
+        return;
+    }
+    const auto profile = active_wifi_profile();
+    if (profile.first.empty()) {
+        resource_error_ = "Connect one WiFi network";
+        pending_uuid_.clear();
+    } else if (profile.first == pending_uuid_) {
+        if (!model_.set_trusted_profile(pending_uuid_)) resource_error_ = "Could not save policy";
+        pending_uuid_.clear();
+    } else {
+        pending_uuid_ = profile.first;
+        pending_network_ = profile.second;
+    }
 }
 
 void BaseViewModel::request_quit() { quit_requested_subject_.set(true); }
 
 void BaseViewModel::wifi_scan_timer_cb(lv_timer_t* timer) {
     auto* self = static_cast<BaseViewModel*>(lv_timer_get_user_data(timer));
-    if (self) self->finish_wifi_scan_if_ready();
+    if (self) {
+        self->idle_display();
+        if (self->monitor_busy() && self->monitor_job_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+            const auto message = self->monitor_job_.get();
+            if (message != "Monitor on") self->monitor_owner_.clear();
+            self->refresh_adapters();
+            self->adapter_error_ = message;
+            self->publish_adapter_detail();
+        }
+        self->finish_wifi_scan_if_ready();
+        if (self->wifi_capture_failed_.exchange(false)) {
+            self->stop_wifi_capture();
+            self->wifi_scan_error_ = "Monitor capture stopped";
+            self->publish_wifi_scan();
+        }
+        self->advance_wifi_channel();
+        self->finish_radio_setting();
+        self->update_gps_status();
+    }
 }
 
 void BaseViewModel::finish_wifi_scan_if_ready() {
-    if (!wifi_scan_ready_.exchange(false)) return;
-    if (wifi_scan_thread_.joinable()) wifi_scan_thread_.join();
-    platform::wireless::WifiScanResult completed;
-    std::string completed_interface;
+    std::vector<platform::wireless::FrameObservation> incoming;
     {
         std::lock_guard<std::mutex> lock(wifi_scan_mutex_);
-        completed = std::move(pending_wifi_scan_);
-        completed_interface = std::move(pending_wifi_scan_interface_);
-        pending_wifi_scan_ = {};
+        incoming.swap(incoming_frames_);
     }
-    const auto selected = std::find_if(adapters_.begin(), adapters_.end(), [&](const auto& adapter) {
-        return adapter.stable_id == model_.selected_adapter_id();
-    });
-    if (selected != adapters_.end() && selected->interface_name == completed_interface) {
-        wifi_scan_interface_ = completed_interface;
-        wifi_networks_ = std::move(completed.networks);
-        wifi_scan_error_ = std::move(completed.error);
-        wifi_scan_page_ = 0;
+    if (incoming.empty()) return;
+    for (const auto& frame : incoming) {
+        auto ap = std::find_if(wifi_networks_.begin(), wifi_networks_.end(), [&](const auto& item) { return item.bssid == frame.bssid; });
+        if (ap == wifi_networks_.end()) {
+            if (wifi_networks_.size() >= 512) continue;
+            platform::wireless::WifiNetwork item;
+            item.bssid = frame.bssid;
+            item.ssid = frame.ssid.empty() ? "[hidden/unknown]" : frame.ssid;
+            item.vendor = platform::wireless::vendor_for_mac(frame.bssid);
+            wifi_networks_.push_back(std::move(item));
+            ap = std::prev(wifi_networks_.end());
+        }
+        ++ap->frames;
+        if (frame.beacon) {
+            if (!frame.ssid.empty()) ap->ssid = frame.ssid;
+            ap->security = frame.security;
+            ap->security_info = frame.security_info;
+            if (frame.has_rssi) { ap->rssi = frame.rssi; ap->has_rssi = true; }
+        }
+        if (frame.frequency_mhz) {
+            ap->frequency_mhz = frame.frequency_mhz;
+            ap->channel = platform::wireless::channel_number(frame.frequency_mhz);
+        }
+        if (frame.client.empty()) continue;
+        auto client = std::find_if(ap->clients.begin(), ap->clients.end(), [&](const auto& item) { return item.mac == frame.client; });
+        if (client == ap->clients.end()) {
+            if (ap->clients.size() >= 64) continue;
+            ap->clients.push_back({frame.client, platform::wireless::vendor_for_mac(frame.client)});
+            client = std::prev(ap->clients.end());
+        }
+        ++client->frames;
+        if (frame.client_transmitted && frame.has_rssi) { client->rssi = frame.rssi; client->has_rssi = true; }
     }
-    wifi_scan_running_ = false;
     publish_wifi_scan();
 }
 
@@ -273,36 +748,14 @@ void BaseViewModel::publish_navigation() {
 }
 
 void BaseViewModel::publish_wifi_scan() {
-    std::ostringstream out;
-    if (wifi_scan_interface_.empty()) {
-        out << "WIFI SCAN\n"
-            << (wifi_scan_error_.empty() ? "Select an adapter on the Adapters page" : wifi_scan_error_) << "\n"
-            << "4 BACK   8 ADAPTERS";
-        wifi_scan_subject_.set(out.str().c_str());
-        return;
-    }
-
-    const std::size_t pages = std::max<std::size_t>(1, (wifi_networks_.size() + 4) / 5);
-    wifi_scan_page_ = std::min(wifi_scan_page_, pages - 1);
-    out << "WIFI SCAN " << wifi_scan_interface_ << "  " << (wifi_scan_page_ + 1) << '/' << pages << '\n';
-    if (wifi_scan_running_) {
-        out << "SCANNING... previous results below\n";
-    } else if (!wifi_scan_error_.empty()) {
-        out << wifi_scan_error_ << "\n";
-    } else {
-        out << wifi_networks_.size() << " NETWORKS  strongest first\n";
-    }
-
-    const std::size_t begin = wifi_scan_page_ * 5;
-    const std::size_t end = std::min(begin + 5, wifi_networks_.size());
-    for (std::size_t index = begin; index < end; ++index) {
-        const auto& network = wifi_networks_[index];
-        out << network.signal_percent << "% C" << network.channel << ' '
-            << clip_for_display(network.ssid, 22) << ' '
-            << clip_for_display(network.security, 8) << '\n';
-    }
-    if (begin == end && !wifi_scan_running_ && wifi_scan_error_.empty()) out << "No networks found\n";
-    wifi_scan_subject_.set(out.str().c_str());
+    const auto text = format::wifi_scan_page(wifi_scan_interface_,
+                                             wifi_networks_,
+                                             wifi_scan_error_,
+                                             wifi_scan_running_,
+                                             wifi_scan_details_expanded_,
+                                             wifi_scan_detail_index_);
+    wifi_scan_subject_.set(text.c_str());
+    inventory_generation_.set(inventory_generation_.value() + 1);
 }
 
 void BaseViewModel::publish_adapter_detail() {
@@ -318,9 +771,9 @@ void BaseViewModel::publish_adapter_detail() {
     const bool selected = model_.selected_adapter_id() == adapter.stable_id;
     if (!adapter_details_expanded_) {
         out << "ADAPTER " << (highlighted_adapter_ + 1) << '/' << adapters_.size()
-            << (selected ? "  [SELECTED]" : "  [6 SELECT]") << '\n'
+            << (selected ? "  [SELECTED]" : "  [C/ENTER SELECT]") << '\n'
             << adapter.interface_name << "  " << adapter.bus_type << "  " << adapter.operstate << '\n';
-        const auto product = clip_for_display(adapter.manufacturer +
+        const auto product = format::clip_for_display(adapter.manufacturer +
                                               (adapter.manufacturer.empty() || adapter.product_name.empty() ? "" : " ") +
                                               adapter.product_name,
                                               42);
@@ -329,17 +782,18 @@ void BaseViewModel::publish_adapter_detail() {
         out << "Driver " << (adapter.driver.empty() ? "unknown" : adapter.driver)
             << "  PHY " << (adapter.phy_name.empty() ? "unknown" : adapter.phy_name) << '\n'
             << "MAC " << (adapter.mac_address.empty() ? "unknown" : adapter.mac_address) << '\n'
-            << "8  MORE DETAILS";
+            << "F/X ITEM C/ENTER SELECT\n"
+            << "Z/ESC BACK D MORE";
     } else {
         out << "ADAPTER " << (highlighted_adapter_ + 1) << '/' << adapters_.size() << "  DETAILS\n"
             << adapter.interface_name << "  ifindex " << (adapter.ifindex.empty() ? "?" : adapter.ifindex) << '\n'
-            << "ID " << clip_for_display(adapter.stable_id, 42) << '\n'
+            << "ID " << format::clip_for_display(adapter.stable_id, 30) << '\n'
             << "MAC " << (adapter.permanent_mac ? "PERMANENT" : "ASSIGNED") << '\n'
-            << "Monitor " << platform::wireless::capability_label(adapter.monitor_mode) << '\n'
+            << "Monitor now " << adapter.monitor_status << "   Capability " << platform::wireless::capability_label(adapter.monitor_mode) << '\n'
             << "Injection " << platform::wireless::capability_label(adapter.injection) << '\n'
-            << adapter.capability_note << '\n'
-            << "8  SUMMARY";
+            << adapter.capability_note;
     }
+    if (!adapter_error_.empty()) out << '\n' << adapter_error_;
     adapter_detail_subject_.set(out.str().c_str());
 }
 

@@ -3,20 +3,38 @@
  */
 
 #pragma once
+#include "wifi_security.h"
 
+#include <functional>
 #include <string>
 #include <string_view>
 #include <vector>
 
 namespace platform::wireless {
 
+enum class ConnectionUse { Idle, Connected, Hotspot, Unknown };
+ConnectionUse connection_use(const std::string& interface_name);
+
 struct WifiNetwork {
+    struct Client {
+        std::string mac;
+        std::string vendor;
+        int rssi{};
+        bool has_rssi{};
+        unsigned frames{};
+    };
     std::string bssid;
     std::string ssid;
     int channel{0};
     int frequency_mhz{0};
     int signal_percent{0};
     std::string security;
+    SecurityInfo security_info;
+    std::string vendor{};
+    int rssi{0};
+    bool has_rssi{};
+    unsigned frames{};
+    std::vector<Client> clients;
 };
 
 struct WifiScanResult {
@@ -24,8 +42,9 @@ struct WifiScanResult {
     std::string error;
 };
 
-std::vector<std::string> split_nmcli_terse_row(std::string_view row);
-WifiScanResult parse_nmcli_wifi_scan(std::string_view output);
-WifiScanResult scan_wifi_networks(const std::string& interface_name);
+bool parse_access_point(std::string_view reply, WifiNetwork& ap);
+std::string vendor_for_mac(const std::string& address);
+WifiScanResult scan_wifi_networks(const std::string& interface_name,
+                                 const std::function<void(WifiNetwork)>& discovered = {});
 
 } // namespace platform::wireless

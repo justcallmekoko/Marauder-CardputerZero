@@ -6,6 +6,7 @@
 
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace platform::wireless {
 
@@ -19,8 +20,11 @@ enum class CapabilityState {
 struct MonitorModeProbe {
     CapabilityState state{CapabilityState::Unknown};
     std::string note;
+    std::string bands;
+    std::vector<unsigned> frequencies;
 };
 
+std::string frequency_bands(const std::string& info);
 CapabilityState monitor_mode_from_iw_phy_info(std::string_view output);
 MonitorModeProbe probe_monitor_mode(const std::string& phy_name);
 

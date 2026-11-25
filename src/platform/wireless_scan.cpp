@@ -3,16 +3,23 @@
  */
 
 #include "wireless_scan.h"
+#include "channel_survey.h"
 
 #include <algorithm>
 #include <array>
 #include <cctype>
 #include <charconv>
 #include <cstdio>
+#include <fstream>
+#include <unordered_map>
 
 #if !defined(_WIN32)
-#include <filesystem>
-#include <sys/wait.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <poll.h>
+#include <unistd.h>
+#include <cstring>
+#include <chrono>
 #endif
 
 namespace platform::wireless {
@@ -23,17 +30,6 @@ bool safe_interface_name(const std::string& value) {
            std::all_of(value.begin(), value.end(), [](unsigned char ch) {
                return std::isalnum(ch) != 0 || ch == '_' || ch == '-' || ch == '.';
            });
-}
-
-bool parse_int(const std::string& value, int minimum, int maximum, int& parsed, bool allow_mhz = false) {
-    if (value.empty()) return false;
-    const auto result = std::from_chars(value.data(), value.data() + value.size(), parsed);
-    if (result.ec != std::errc{} || parsed < minimum || parsed > maximum) return false;
-    std::string_view suffix(result.ptr, static_cast<std::size_t>(value.data() + value.size() - result.ptr));
-    while (!suffix.empty() && std::isspace(static_cast<unsigned char>(suffix.front())) != 0) {
-        suffix.remove_prefix(1);
-    }
-    return suffix.empty() || (allow_mhz && suffix == "MHz");
 }
 
 std::string sanitize_text(std::string_view value) {
@@ -70,91 +66,214 @@ std::string sanitize_text(std::string_view value) {
     return clean;
 }
 
-} // namespace
-
-std::vector<std::string> split_nmcli_terse_row(std::string_view row) {
-    std::vector<std::string> fields;
-    std::string field;
-    bool escaped = false;
-    for (const char ch : row) {
-        if (escaped) {
-            field.push_back(ch);
-            escaped = false;
-        } else if (ch == '\\') {
-            escaped = true;
-        } else if (ch == ':') {
-            fields.push_back(std::move(field));
-            field.clear();
-        } else if (ch != '\r') {
-            field.push_back(ch);
-        }
+#if !defined(_WIN32)
+std::string registered_vendor(const std::string& address) {
+    std::string digits;
+    for (unsigned char c : address) {
+        if (c == ':') continue;
+        if (!std::isxdigit(c)) return "Unknown";
+        digits.push_back(static_cast<char>(std::toupper(c)));
     }
-    if (escaped) field.push_back('\\');
-    fields.push_back(std::move(field));
-    return fields;
-}
+    if (digits.size() != 12) return "Unknown";
+    if (std::string_view("2367ABEF").find(digits[1]) != std::string_view::npos)
+        return "Private/local address";
 
-WifiScanResult parse_nmcli_wifi_scan(std::string_view output) {
-    WifiScanResult result;
-    bool saw_nonempty_row = false;
-    std::size_t offset = 0;
-    while (offset <= output.size()) {
-        const auto end = output.find('\n', offset);
-        const auto length = end == std::string_view::npos ? output.size() - offset : end - offset;
-        const auto row = output.substr(offset, length);
-        if (!row.empty()) {
-            saw_nonempty_row = true;
-            auto fields = split_nmcli_terse_row(row);
-            WifiNetwork network;
-            if (fields.size() == 6 &&
-                parse_int(fields[2], 0, 1000, network.channel) &&
-                parse_int(fields[3], 0, 100000, network.frequency_mhz, true) &&
-                parse_int(fields[4], 0, 100, network.signal_percent)) {
-                network.bssid = sanitize_text(fields[0]);
-                network.ssid = fields[1].empty() ? "<hidden>" : sanitize_text(fields[1]);
-                network.security = fields[5].empty() ? "OPEN" : sanitize_text(fields[5]);
-                result.networks.push_back(std::move(network));
+    static const auto names = [] {
+        std::unordered_map<std::string, std::string> prefixes;
+        for (const char* file : {"oui", "mam", "oui36", "iab"}) {
+            std::ifstream input(std::string("/usr/share/ieee-data/") + file + ".csv");
+            std::string line;
+            while (std::getline(input, line)) {
+                const auto registry = line.find(',');
+                if (registry == std::string::npos) continue;
+                const auto end = line.find(',', registry + 1);
+                if (end == std::string::npos || end + 1 == line.size()) continue;
+                const auto prefix = line.substr(registry + 1, end - registry - 1);
+                if (prefix.size() != 6 && prefix.size() != 7 && prefix.size() != 9) continue;
+                std::string name;
+                const bool quoted = line[end + 1] == '"';
+                for (auto i = end + 1 + quoted; i < line.size(); ++i) {
+                    if (!quoted && line[i] == ',') break;
+                    if (quoted && line[i] == '"') {
+                        if (i + 1 == line.size() || line[i + 1] != '"') break;
+                        ++i;
+                    }
+                    name.push_back(line[i]);
+                }
+                if (!name.empty()) prefixes.emplace(prefix, sanitize_text(name));
             }
         }
-        if (end == std::string_view::npos) break;
-        offset = end + 1;
+        return prefixes;
+    }();
+    for (auto length : {9, 7, 6}) {
+        const auto it = names.find(digits.substr(0, length));
+        if (it != names.end()) return it->second;
     }
-    std::stable_sort(result.networks.begin(), result.networks.end(), [](const auto& lhs, const auto& rhs) {
-        return lhs.signal_percent > rhs.signal_percent;
-    });
-    if (saw_nonempty_row && result.networks.empty()) result.error = "Unexpected Wi-Fi scan output";
-    return result;
+    return "Unknown";
+}
+#endif
+} // namespace
+
+std::string vendor_for_mac(const std::string& address) {
+#if !defined(_WIN32)
+    return registered_vendor(address);
+#else
+    return "Unknown";
+#endif
 }
 
-WifiScanResult scan_wifi_networks(const std::string& interface_name) {
+namespace {
+std::string field(std::string_view reply, std::string_view key) {
+    while (!reply.empty()) {
+        const auto end = reply.find('\n');
+        const auto line = reply.substr(0, end);
+        if (line.size() > key.size() && line.substr(0, key.size()) == key && line[key.size()] == '=')
+            return sanitize_text(line.substr(key.size() + 1));
+        if (end == reply.npos) break;
+        reply.remove_prefix(end + 1);
+    }
+    return {};
+}
+
+bool number(const std::string& text, int& value) {
+    auto end = text.data() + text.size();
+    auto result = std::from_chars(text.data(), end, value);
+    return result.ec == std::errc{} && result.ptr == end;
+}
+
+bool mac_address(std::string_view s) {
+    if (s.size() != 17) return false;
+    for (size_t i = 0; i < s.size(); ++i)
+        if (i % 3 == 2 ? s[i] != ':' : !std::isxdigit(static_cast<unsigned char>(s[i]))) return false;
+    return true;
+}
+
+#if defined(__linux__)
+class Control {
+public:
+    explicit Control(const std::string& path) {
+        fd_ = socket(AF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC, 0);
+        sockaddr_un address{};
+        address.sun_family = AF_UNIX;
+        if (fd_ < 0 || bind(fd_, reinterpret_cast<sockaddr*>(&address), sizeof(sa_family_t)) < 0) return;
+        if (path.size() >= sizeof(address.sun_path)) return;
+        std::memcpy(address.sun_path, path.c_str(), path.size() + 1);
+        ready = connect(fd_, reinterpret_cast<sockaddr*>(&address), sizeof(address)) == 0;
+    }
+    ~Control() { if (fd_ >= 0) close(fd_); }
+    Control(const Control&) = delete;
+    Control& operator=(const Control&) = delete;
+    std::string receive(int timeout_ms) {
+        pollfd p{fd_, POLLIN, 0};
+        if (poll(&p, 1, timeout_ms) <= 0) return "CONTROL-ERROR";
+        std::array<char, 32768> data;
+        const auto n = recv(fd_, data.data(), data.size(), MSG_TRUNC);
+        return n >= 0 && static_cast<size_t>(n) <= data.size() ? std::string(data.data(), n) : "CONTROL-ERROR";
+    }
+    std::string query(const std::string& command) {
+        if (!ready || send(fd_, command.data(), command.size(), 0) != static_cast<ssize_t>(command.size())) return "CONTROL-ERROR";
+        return receive(1200);
+    }
+    bool ready{};
+private:
+    int fd_{-1};
+};
+#endif
+}
+
+ConnectionUse connection_use(const std::string& interface_name) {
+#if defined(__linux__)
+    if (safe_interface_name(interface_name)) {
+        Control client("/run/wpa_supplicant/" + interface_name);
+        const auto reply = client.query("STATUS");
+        const auto state = field(reply, "wpa_state");
+        if (field(reply, "mode") == "AP") return ConnectionUse::Hotspot;
+        if (state == "COMPLETED" || state == "ASSOCIATED" || state == "4WAY_HANDSHAKE" ||
+            state == "GROUP_HANDSHAKE") return ConnectionUse::Connected;
+        if (!state.empty()) return ConnectionUse::Idle;
+        Control hotspot("/run/hostapd/" + interface_name);
+        if (field(hotspot.query("STATUS"), "state") == "ENABLED") return ConnectionUse::Hotspot;
+    }
+#endif
+    return ConnectionUse::Unknown;
+}
+
+bool parse_access_point(std::string_view reply, WifiNetwork& ap) {
+    ap.bssid = field(reply, "bssid");
+    if (!mac_address(ap.bssid) || !number(field(reply, "freq"), ap.frequency_mhz) ||
+        !number(field(reply, "level"), ap.rssi)) return false;
+    ap.ssid = field(reply, "ssid");
+    if (ap.ssid.empty()) ap.ssid = "<hidden>";
+    ap.channel = channel_number(ap.frequency_mhz);
+    ap.signal_percent = std::clamp(2 * (std::clamp(ap.rssi,-110,0) + 100), 0, 100);
+    const auto flags = field(reply, "flags");
+    ap.security = flags.empty() ? "Unknown" : flags;
+    return true;
+}
+
+WifiScanResult scan_wifi_networks(const std::string& interface_name,
+                                 const std::function<void(WifiNetwork)>& discovered) {
     if (!safe_interface_name(interface_name)) return {{}, "Invalid adapter name"};
-#if defined(_WIN32)
-    return {{}, "Wi-Fi scanning is available on Linux devices"};
+#if !defined(__linux__)
+    return {{}, "WiFi inventory requires Linux"};
 #else
-    std::error_code filesystem_error;
-    const bool has_usr_nmcli = std::filesystem::is_regular_file("/usr/bin/nmcli", filesystem_error);
-    filesystem_error.clear();
-    const bool has_bin_nmcli = std::filesystem::is_regular_file("/bin/nmcli", filesystem_error);
-    const char* binary = has_usr_nmcli ? "/usr/bin/nmcli" : has_bin_nmcli ? "/bin/nmcli" : nullptr;
-    if (!binary) return {{}, "NetworkManager tools unavailable"};
-
-    const std::string command = std::string(binary) +
-        " --wait 12 --terse --escape yes --fields BSSID,SSID,CHAN,FREQ,SIGNAL,SECURITY"
-        " device wifi list ifname " + interface_name + " --rescan yes 2>/dev/null";
-    FILE* pipe = popen(command.c_str(), "r");
-    if (!pipe) return {{}, "Unable to start Wi-Fi scan"};
-
-    std::string output;
-    std::array<char, 4096> buffer{};
-    while (fgets(buffer.data(), static_cast<int>(buffer.size()), pipe)) {
-        output.append(buffer.data());
-        if (output.size() > 1024 * 1024) break;
+    const std::string path = "/run/wpa_supplicant/" + interface_name;
+    Control wifi(path);
+    {
+        if (!wifi.ready) return {{}, "WiFi service unavailable"};
+        Control events(path);
+        if (events.query("ATTACH") != "OK\n") return {{}, "Cannot watch WiFi scan"};
+        const auto scan = wifi.query("SCAN");
+        if (scan != "OK\n" && scan.find("FAIL-BUSY") == scan.npos) return {{}, "Scan unavailable"};
+        // Existing service records are available while the radio runs its new scan.
+        if (discovered) {
+            auto reply = wifi.query("BSS FIRST");
+            for (size_t i = 0; i < 1024; ++i) {
+                WifiNetwork ap;
+                if (!parse_access_point(reply, ap)) break;
+                discovered(std::move(ap));
+                const auto id = field(reply, "id");
+                if (id.empty()) break;
+                reply = wifi.query("BSS NEXT-" + id);
+            }
+        }
+        const auto until = std::chrono::steady_clock::now() + std::chrono::seconds(12);
+        for (;;) {
+            const auto left = std::chrono::duration_cast<std::chrono::milliseconds>(until - std::chrono::steady_clock::now()).count();
+            if (left <= 0) return {{}, "Scan timed out"};
+            const auto event = events.receive(static_cast<int>(left));
+            const std::string marker = "CTRL-EVENT-BSS-ADDED ";
+            const auto added = event.find(marker);
+            if (discovered && added != event.npos) {
+                const auto begin = added + marker.size();
+                const auto end = event.find(' ', begin);
+                int id{};
+                if (end != event.npos && number(event.substr(begin, end - begin), id) && id >= 0) {
+                    WifiNetwork ap;
+                    if (parse_access_point(wifi.query("BSS ID-" + std::to_string(id)), ap))
+                        discovered(std::move(ap));
+                }
+            }
+            if (event.find("CTRL-EVENT-SCAN-RESULTS") != event.npos) break;
+            if (event.empty() || event.find("CTRL-EVENT-SCAN-FAILED") != event.npos) return {{}, "Scan did not complete"};
+        }
     }
-    const int status = pclose(pipe);
-    if (status == -1 || !WIFEXITED(status) || WEXITSTATUS(status) != 0) {
-        return {{}, "Wi-Fi scan failed"};
+    WifiScanResult result;
+    std::string next = "BSS FIRST";
+    for (size_t i = 0; i < 1024; ++i) {
+        const auto reply = wifi.query(next);
+        if (reply == "FAIL\n" || reply == "\n") break;
+        // wpa_supplicant signals the end of its BSS table with an empty datagram.
+        if (reply.empty()) break;
+        WifiNetwork item;
+        if (!parse_access_point(reply, item))
+            return {{}, "Cannot read radio inventory"};
+        if (discovered) discovered(item);
+        item.vendor = registered_vendor(item.bssid);
+        next = "BSS NEXT-" + field(reply,"id");
+        result.networks.push_back(std::move(item));
     }
-    return parse_nmcli_wifi_scan(output);
+    return result;
 #endif
 }
 

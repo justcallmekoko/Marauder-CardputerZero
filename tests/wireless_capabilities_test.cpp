@@ -27,5 +27,7 @@ int main() {
     assert(monitor_mode_from_iw_phy_info(unsupported) == CapabilityState::Unsupported);
     assert(monitor_mode_from_iw_phy_info("Wiphy phy2\n") == CapabilityState::Unknown);
     assert(monitor_mode_from_iw_phy_info("Supported interface modes:\n") == CapabilityState::Unknown);
+    assert(platform::wireless::frequency_bands("* 2412.0 MHz [1]\n* 5180.0 MHz [36]") == "2.4 / 5 GHz");
+    assert(platform::wireless::frequency_bands("* 5955 MHz [1]") == "6 GHz");
     return 0;
 }
