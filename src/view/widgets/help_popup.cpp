@@ -29,6 +29,14 @@ constexpr std::array<HelpRow, 5> kDashboardRows = {{
     {"ESC", "Back / exit at root"},
 }};
 
+constexpr std::array<HelpRow, 5> kDeviceRows = {{
+    {"F / X", "Browse settings"},
+    {"ENTER", "Open or change highlighted item"},
+    {"ESC", "Back one menu"},
+    {"HELP", "Close help"},
+    {"", ""},
+}};
+
 constexpr std::array<HelpRow, 5> kRadioRows = {{
     {"F / X", "Browse devices"},
     {"ENTER", "Toggle selected device"},
@@ -182,19 +190,18 @@ bool HelpPopup::visible() const {
 }
 
 void HelpPopup::update_rows(model::AppPage page) {
+    const bool list = page == model::AppPage::Dashboard && view_model_.menu_columns() == 1;
     const bool radios = page == model::AppPage::RadioSetup;
     const bool adapters = page == model::AppPage::Adapters;
     const bool wifi_scan = page == model::AppPage::WifiScan;
     const bool diagnostics = page == model::AppPage::Diagnostics;
-    lv_label_set_text(page_badge_, radios ? "RADIO SETUP" : adapters ? "ADAPTERS" : wifi_scan ? "WIFI SCAN" : diagnostics ? "SYSTEM INFO" : "MENU");
+    lv_label_set_text(page_badge_, list ? "DEVICE" : radios ? "RADIO SETUP" : adapters ? "ADAPTERS" : wifi_scan ? "WIFI SCAN" : diagnostics ? "SYSTEM INFO" : "MENU");
     for (std::size_t i = 0; i < rows_.size(); ++i) {
         lv_obj_remove_flag(rows_[i].row, LV_OBJ_FLAG_HIDDEN);
-        const auto& row = radios ? kRadioRows[i] : adapters ? kAdapterRows[i] : wifi_scan ? kWifiScanRows[i] : diagnostics ? kDiagnosticsRows[i] : kDashboardRows[i];
+        const auto& row = list ? kDeviceRows[i] : radios ? kRadioRows[i] : adapters ? kAdapterRows[i] : wifi_scan ? kWifiScanRows[i] : diagnostics ? kDiagnosticsRows[i] : kDashboardRows[i];
         lv_label_set_text(rows_[i].key, row.key);
         lv_label_set_text(rows_[i].action, row.action);
-        if (page == model::AppPage::Dashboard && i == 2) {
-            lv_label_set_text(rows_[i].action, view_model_.marauder_menu_at_root() ? "Idle at root" : "Back one menu");
-        }
+        if (list && !*row.key) lv_obj_add_flag(rows_[i].row, LV_OBJ_FLAG_HIDDEN);
     }
 }
 
