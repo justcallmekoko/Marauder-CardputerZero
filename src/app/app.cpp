@@ -70,23 +70,23 @@ public:
 
     ~ShortcutController() {
         platform::clear_global_key_listener(global_key_listener, this);
-        if (exit_dialog_) lv_obj_delete(exit_dialog_);
+        if (confirmation_) lv_obj_delete(confirmation_);
     }
 
 private:
-    void show_exit_dialog() {
+    void show_confirmation(const std::string& message, const char* accept) {
         const auto colors = view::palette(view_model_.is_dark_mode());
-        exit_dialog_ = lv_obj_create(lv_layer_top());
-        lv_obj_remove_style_all(exit_dialog_);
-        lv_obj_set_size(exit_dialog_, LV_PCT(100), LV_PCT(100));
-        lv_obj_set_style_bg_color(exit_dialog_, lv_color_black(), 0);
-        lv_obj_set_style_bg_opa(exit_dialog_, LV_OPA_80, 0);
-        lv_obj_clear_flag(exit_dialog_, LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_add_flag(exit_dialog_, LV_OBJ_FLAG_CLICKABLE);
+        confirmation_ = lv_obj_create(lv_layer_top());
+        lv_obj_remove_style_all(confirmation_);
+        lv_obj_set_size(confirmation_, LV_PCT(100), LV_PCT(100));
+        lv_obj_set_style_bg_color(confirmation_, lv_color_black(), 0);
+        lv_obj_set_style_bg_opa(confirmation_, LV_OPA_80, 0);
+        lv_obj_clear_flag(confirmation_, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_add_flag(confirmation_, LV_OBJ_FLAG_CLICKABLE);
 
-        auto* panel = lv_obj_create(exit_dialog_);
+        auto* panel = lv_obj_create(confirmation_);
         lv_obj_remove_style_all(panel);
-        lv_obj_set_size(panel, 248, 88);
+        lv_obj_set_size(panel, 248, pending_adapter_.empty() ? 88 : 112);
         lv_obj_center(panel);
         lv_obj_clear_flag(panel, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_set_style_radius(panel, 6, 0);
@@ -96,7 +96,9 @@ private:
         lv_obj_set_style_border_color(panel, colors.border, 0);
 
         auto* title = lv_label_create(panel);
-        lv_label_set_text(title, "Exit Marauder?");
+        lv_label_set_text(title, message.c_str());
+        lv_obj_set_width(title, 228);
+        lv_obj_set_style_text_align(title, LV_TEXT_ALIGN_CENTER, 0);
         auto* font = assets_.load_standard_font(16);
         lv_obj_set_style_text_font(title, font ? font : LV_FONT_DEFAULT, 0);
         lv_obj_set_style_text_color(title, colors.text, 0);
@@ -116,17 +118,25 @@ private:
             lv_obj_align(label, align, x, -12);
         };
         add_shortcut("Esc  Cancel", LV_ALIGN_BOTTOM_LEFT, 12, colors.text);
-        add_shortcut("Enter  Exit", LV_ALIGN_BOTTOM_RIGHT, -12, colors.warning);
+        add_shortcut(accept, LV_ALIGN_BOTTOM_RIGHT, -12, colors.warning);
     }
 
     bool handle_key(uint32_t key, bool long_pressed) {
         if (view_model_.wake_display()) return true;
-        if (exit_dialog_) {
-            if (!long_pressed && key == LV_KEY_ENTER) {
-                view_model_.request_quit();
-            } else if (!long_pressed && key == LV_KEY_ESC) {
-                lv_obj_delete(exit_dialog_);
-                exit_dialog_ = nullptr;
+        if (confirmation_) {
+            if (!long_pressed && (key == LV_KEY_ENTER || key == LV_KEY_ESC)) {
+                if (key == LV_KEY_ENTER) {
+                    if (pending_adapter_.empty()) view_model_.request_quit();
+                    else {
+                        const auto& radios = view_model_.adapters();
+                        const auto cursor = view_model_.adapter_cursor();
+                        if (cursor < radios.size() && radios[cursor].stable_id == pending_adapter_)
+                            view_model_.select_highlighted_adapter();
+                    }
+                }
+                lv_obj_delete(confirmation_);
+                confirmation_ = nullptr;
+                pending_adapter_.clear();
             }
             return true;
         }
@@ -185,7 +195,7 @@ private:
                                   view_model_.marauder_menu_at_root())) {
                 case EscapeAction::ExitApplication:
                     toast_->hide();
-                    show_exit_dialog();
+                    show_confirmation("Exit Marauder?", "Enter  Exit");
                     break;
                 case EscapeAction::BackMenu:
                     view_model_.marauder_menu_back();
@@ -230,7 +240,22 @@ private:
         if (view_model_.current_page() == model::AppPage::Adapters) {
             if (action == NavigationAction::Previous) { view_model_.previous_adapter(); return true; }
             if (action == NavigationAction::Next) { view_model_.next_adapter(); return true; }
-            if (action == NavigationAction::Primary) { view_model_.select_highlighted_adapter(); return true; }
+            if (action == NavigationAction::Primary) {
+                const auto& radios = view_model_.adapters();
+                const auto index = view_model_.adapter_cursor();
+                if (index >= radios.size()) return true;
+                const auto& radio = radios[index];
+                using platform::wireless::ConnectionUse;
+                const auto use = platform::wireless::connection_use(radio.interface_name);
+                if (use == ConnectionUse::Idle) view_model_.select_highlighted_adapter();
+                else {
+                    pending_adapter_ = radio.stable_id;
+                    const auto message = use == ConnectionUse::Connected ? " carries WiFi" :
+                        use == ConnectionUse::Hotspot ? " hosts a hotspot" : " link unknown";
+                    show_confirmation(radio.interface_name + message + "\nUse this adapter?", "Enter  Use");
+                }
+                return true;
+            }
             if (action == NavigationAction::Details) { view_model_.toggle_adapter_details(); return true; }
         }
 
@@ -264,7 +289,8 @@ private:
 
     viewmodel::BaseViewModel& view_model_;
     AssetManager& assets_;
-    lv_obj_t* exit_dialog_ = nullptr;
+    std::string pending_adapter_;
+    lv_obj_t* confirmation_ = nullptr;
     std::unique_ptr<view::widgets::Toast> toast_;
     std::unique_ptr<view::widgets::HelpPopup> help_popup_;
 };

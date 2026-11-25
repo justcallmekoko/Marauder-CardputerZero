@@ -10,6 +10,9 @@
 
 namespace platform::wireless {
 
+enum class ConnectionUse { Idle, Connected, Hotspot, Unknown };
+ConnectionUse connection_use(const std::string& interface_name);
+
 struct WifiNetwork {
     std::string bssid;
     std::string ssid;

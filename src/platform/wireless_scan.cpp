@@ -172,6 +172,23 @@ private:
 #endif
 }
 
+ConnectionUse connection_use(const std::string& interface_name) {
+#if defined(__linux__)
+    if (safe_interface_name(interface_name)) {
+        Control client("/run/wpa_supplicant/" + interface_name);
+        const auto reply = client.query("STATUS");
+        const auto state = field(reply, "wpa_state");
+        if (field(reply, "mode") == "AP") return ConnectionUse::Hotspot;
+        if (state == "COMPLETED" || state == "ASSOCIATED" || state == "4WAY_HANDSHAKE" ||
+            state == "GROUP_HANDSHAKE") return ConnectionUse::Connected;
+        if (!state.empty()) return ConnectionUse::Idle;
+        Control hotspot("/run/hostapd/" + interface_name);
+        if (field(hotspot.query("STATUS"), "state") == "ENABLED") return ConnectionUse::Hotspot;
+    }
+#endif
+    return ConnectionUse::Unknown;
+}
+
 bool parse_access_point(std::string_view reply, WifiNetwork& ap) {
     ap.bssid = field(reply, "bssid");
     if (!mac_address(ap.bssid) || !number(field(reply, "freq"), ap.frequency_mhz) ||
