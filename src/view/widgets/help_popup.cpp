@@ -56,7 +56,7 @@ constexpr std::array<HelpRow, 5> kAdapterRows = {{
 constexpr std::array<HelpRow, 5> kWifiScanRows = {{
     {"Z / ESC", "Back to originating menu"},
     {"F / X", "Previous / next result"},
-    {"C / ENTER", "AP info / observed clients"},
+    {"C / ENTER", "Open operations / selection"},
     {"D", "Restart / AP security pages"},
     {"HELP", "Context help"},
 }};

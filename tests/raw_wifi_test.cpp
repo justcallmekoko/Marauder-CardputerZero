@@ -6,6 +6,7 @@
 
 using platform::wireless::FrameObservation;
 using platform::wireless::parse_monitor_frame;
+using platform::wireless::parse_frame_summary;
 
 int main() {
     // Radiotap with channel 6 and -48 dBm, followed by a beacon.
@@ -13,7 +14,11 @@ int main() {
     beacon.resize(13 + 36, 0);
     beacon[13] = 0x80;
     const uint8_t ap[6]{0x10, 0x20, 0x30, 0x40, 0x50, 0x60};
-    for (int i = 0; i < 6; ++i) beacon[13 + 16 + i] = ap[i];
+    for (int i = 0; i < 6; ++i) {
+        beacon[13 + 4 + i] = 0xff;
+        beacon[13 + 10 + i] = ap[i];
+        beacon[13 + 16 + i] = ap[i];
+    }
     beacon[13 + 34] = 0x10;
     beacon.insert(beacon.end(), {0, 4, 'T', 'e', 's', 't',
         48, 20, 1, 0, 0, 15, 172, 4, 1, 0, 0, 15, 172, 4,
@@ -24,6 +29,10 @@ int main() {
     assert(observed.ssid == "Test" && observed.security == "WPA2 Personal");
     assert(observed.security_info.akm == "PSK" && observed.security_info.pairwise == "CCMP-128");
     assert(observed.frequency_mhz == 2437 && observed.has_rssi && observed.rssi == -48);
+    platform::wireless::FrameSummary summary;
+    assert(parse_frame_summary(beacon.data(), beacon.size(), summary));
+    assert(summary.type == "Beacon" && summary.sender == observed.bssid);
+    assert(summary.receiver == "FF:FF:FF:FF:FF:FF");
 
     std::vector<uint8_t> uplink{0, 0, 13, 0, 0x28, 0, 0, 0, 0x85, 0x09, 0, 0, 0xc4};
     uplink.resize(13 + 24, 0);
@@ -33,11 +42,18 @@ int main() {
     assert(parse_monitor_frame(uplink.data(), uplink.size(), observed));
     assert(observed.client == "22:33:44:55:66:77" && observed.client_transmitted);
     assert(observed.rssi == -60);
+    assert(parse_frame_summary(uplink.data(), uplink.size(), summary));
+    assert(summary.type == "Data" && summary.sender == observed.client && summary.receiver == observed.bssid);
 
     uplink[14] = 0x02; // From DS: AP transmitter, client receiver.
     for (int i = 0; i < 6; ++i) { uplink[13 + 4 + i] = client[i]; uplink[13 + 10 + i] = ap[i]; }
     assert(parse_monitor_frame(uplink.data(), uplink.size(), observed));
     assert(observed.client == "22:33:44:55:66:77" && !observed.client_transmitted);
+    assert(parse_frame_summary(uplink.data(), uplink.size(), summary));
+    assert(summary.sender == observed.bssid && summary.receiver == observed.client);
+    uplink[13] = 0xD4; uplink[14] = 0; uplink.resize(13 + 10);
+    assert(parse_frame_summary(uplink.data(), uplink.size(), summary));
+    assert(summary.type == "ACK" && summary.sender.empty() && summary.receiver == observed.client);
     assert(!parse_monitor_frame(beacon.data(), 7, observed));
     beacon[2] = 0xff;
     assert(!parse_monitor_frame(beacon.data(), beacon.size(), observed));

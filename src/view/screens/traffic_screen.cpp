@@ -24,9 +24,11 @@ void TrafficScreen::build_content(lv_obj_t* content) {
             channels_ = adapter.frequencies;
         }
     }
+    if (view_model().traffic_monitor_source() && view_model().traffic_can_tune() && !channels_.empty())
+        requested_ = channels_.front();
     auto* title = title_ = lv_label_create(content);
     view_model().take_traffic_step();
-    lv_label_set_text_fmt(title, "RX + TX packets   %s", interface_.c_str());
+    lv_label_set_text_fmt(title, "%s packets   %s", view_model().traffic_monitor_source() ? "Monitor" : "Adapter", interface_.c_str());
     lv_obj_set_pos(title, 10, 4);
     auto* font = assets().load_standard_font(14);
     lv_obj_set_style_text_font(title, font ? font : LV_FONT_DEFAULT, 0);
@@ -44,7 +46,7 @@ void TrafficScreen::build_content(lv_obj_t* content) {
     lv_obj_set_style_text_color(status_, colors.text, 0);
     font = assets().load_standard_font(12);
     lv_obj_set_style_text_font(status_, font ? font : LV_FONT_DEFAULT, 0);
-    set_key_guide("30 seconds   RX + TX packets/s    Esc  Back");
+    set_key_guide(view_model().traffic_monitor_source() ? "Z/C Tune channel   Esc Back" : "Adapter packets/s   Esc Back");
     if (interface_.empty()) {
         lv_label_set_text(status_, "Select a WiFi adapter first");
         return;
@@ -101,14 +103,14 @@ void TrafficScreen::sample() {
         });
         return;
     }
-    set_key_guide(channels_.empty() ? "Interface packets/s    Esc Back" : "Z/C Tune channel    Esc Back");
+    set_key_guide(!view_model().traffic_monitor_source() || channels_.empty() ? "Adapter packets/s    Esc Back" : "Z/C Tune channel    Esc Back");
     if (lv_tick_elaps(sample_tick_) < 1000) return;
     sample_tick_ = lv_tick_get();
     if (frequency_) {
         const char* band = frequency_ < 2500 ? "2.4" : frequency_ < 5000 ? "4.9" :
                            frequency_ < 5935 ? "5" : frequency_ < 8000 ? "6" : "60";
         lv_label_set_text_fmt(title_, "Channel %u   %s GHz", platform::wireless::channel_number(frequency_), band);
-    } else lv_label_set_text_fmt(title_, "RX + TX packets   %s", interface_.c_str());
+    } else lv_label_set_text_fmt(title_, "%s packets   %s", view_model().traffic_monitor_source() ? "Monitor" : "Adapter", interface_.c_str());
     std::string busy_text = "--% busy";
     if (frequency_) {
         if (survey_.valid() && survey_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {

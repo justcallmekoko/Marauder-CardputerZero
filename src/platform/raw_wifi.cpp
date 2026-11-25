@@ -18,13 +18,12 @@ std::string address(const uint8_t* mac) {
                   mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
     return text;
 }
-}
 
-bool parse_monitor_frame(const uint8_t* bytes, std::size_t size, FrameObservation& out) {
-    out = {};
+bool radiotap(const uint8_t* bytes, std::size_t size, std::size_t& header,
+              int& frequency, int& rssi, bool& has_rssi) {
     if (!bytes || size < 8 || bytes[0] != 0) return false;
-    const auto header = le16(bytes + 2);
-    if (header < 8 || header + 24 > size) return false;
+    header = le16(bytes + 2);
+    if (header < 8 || header > size) return false;
     std::size_t bitmap_end = 4;
     unsigned present = 0;
     do {
@@ -40,10 +39,50 @@ bool parse_monitor_frame(const uint8_t* bytes, std::size_t size, FrameObservatio
         if (!(first & (1u << bit))) continue;
         cursor = aligned(cursor, alignments[bit]);
         if (cursor + widths[bit] > header) return false;
-        if (bit == 3) out.frequency_mhz = static_cast<int>(le16(bytes + cursor));
-        if (bit == 5) { out.rssi = static_cast<int8_t>(bytes[cursor]); out.has_rssi = true; }
+        if (bit == 3) frequency = static_cast<int>(le16(bytes + cursor));
+        if (bit == 5) { rssi = static_cast<int8_t>(bytes[cursor]); has_rssi = true; }
         cursor += widths[bit];
     }
+    return true;
+}
+}
+
+bool parse_frame_summary(const uint8_t* bytes, std::size_t size, FrameSummary& out) {
+    out = {};
+    std::size_t header{};
+    if (!radiotap(bytes, size, header, out.frequency_mhz, out.rssi, out.has_rssi) || size - header < 10)
+        return false;
+    const auto* frame = bytes + header;
+    const auto length = size - header;
+    const unsigned control = le16(frame);
+    if ((control & 3) != 0) return false;
+    const unsigned type = (control >> 2) & 3;
+    const unsigned subtype = (control >> 4) & 15;
+    if (type == 0 || type == 2) {
+        if (length < 24 || (type == 2 && (control & 0x0300) == 0x0300 && length < 30)) return false;
+        out.receiver = address(frame + 4);
+        out.sender = address(frame + 10);
+        if (type == 2) {
+            out.type = subtype == 4 || subtype == 12 ? "Null" : subtype >= 8 ? "QoS data" : "Data";
+        } else {
+            static constexpr const char* names[] = {"Assoc req", "Assoc resp", "Reassoc req", "Reassoc resp",
+                "Probe req", "Probe resp", "Timing", "Reserved", "Beacon", "ATIM", "Disassoc",
+                "Auth", "Deauth", "Action", "Action", "Reserved"};
+            out.type = names[subtype];
+        }
+    } else if (type == 1) {
+        out.receiver = address(frame + 4);
+        if (length >= 16 && subtype != 12 && subtype != 13) out.sender = address(frame + 10);
+        out.type = subtype == 13 ? "ACK" : subtype == 12 ? "CTS" : subtype == 11 ? "RTS" : "Control";
+    } else return false;
+    return true;
+}
+
+bool parse_monitor_frame(const uint8_t* bytes, std::size_t size, FrameObservation& out) {
+    out = {};
+    std::size_t header{};
+    if (!radiotap(bytes, size, header, out.frequency_mhz, out.rssi, out.has_rssi) || header + 24 > size)
+        return false;
     const auto* frame = bytes + header;
     const auto length = size - header;
     const unsigned control = le16(frame);

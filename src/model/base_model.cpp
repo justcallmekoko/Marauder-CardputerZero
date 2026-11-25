@@ -135,6 +135,7 @@ BaseModel::BaseModel() {
     dim_seconds_ = load_choice("idle-seconds", dim_delays);
     reserve_mib_ = load_choice("reserve-mib", reserves);
     trusted_profile_ = read_value("trusted-wifi-uuid");
+    traffic_monitor_source_ = read_value("traffic-graph-source") != "adapter";
     documents_ = read_value("screenshot-folder") == "Documents";
     const auto cache = read_value("image-cache-kib");
     if (cache == "256") cache_kib_ = 256;
@@ -142,6 +143,12 @@ BaseModel::BaseModel() {
     const auto value = read_value("battery-display");
     if (value == "Icon") battery_display_ = BatteryDisplay::Icon;
     else if (value == "Percentage") battery_display_ = BatteryDisplay::Percent;
+}
+
+bool BaseModel::cycle_traffic_source() {
+    if (!save_value("traffic-graph-source", traffic_monitor_source_ ? "adapter" : "monitor")) return false;
+    traffic_monitor_source_ = !traffic_monitor_source_;
+    return true;
 }
 
 void BaseModel::cycle_battery_display() {

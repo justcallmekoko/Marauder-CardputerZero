@@ -65,6 +65,7 @@ const std::vector<Item>& items_for(Id menu) {
     static const std::vector<Item> radios = {
         {"Radio setup", Color::Cyan, Action::OpenRadioSetup, Id::Main, false, true},
         {"WiFi adapter", Color::Green, Action::OpenAdapters, Id::Main, false, true},
+        {"Graph source", Color::Yellow, Action::CycleTrafficSource, Id::Main, false, true},
     };
     static const std::vector<Item> display = {
         {"Brightness", Color::Green, Action::Brightness, Id::Main, false, true},

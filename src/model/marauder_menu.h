@@ -29,6 +29,7 @@ enum class MarauderMenuAction {
     None,
     OpenWifiScan,
     OpenTraffic,
+    CycleTrafficSource,
     OpenAdapters,
     OpenDiagnostics,
     CycleBatteryDisplay,

@@ -220,7 +220,9 @@ private:
         if (view_model_.current_page() == model::AppPage::Dashboard) {
             if (key == LV_KEY_ENTER) {
                 const auto index = view_model_.marauder_menu_selected_index();
-                const auto warning = view_model_.collection_warning(view_model_.marauder_menu_item(index).radio);
+                const auto& item = view_model_.marauder_menu_item(index);
+                const auto warning = view_model_.collection_warning(
+                    item.action == model::MarauderMenuAction::OpenTraffic ? view_model_.traffic_requirement() : item.radio);
                 if (warning.empty()) view_model_.marauder_menu_activate();
                 else show_confirmation(warning, "Enter Adapters", DialogAction::OpenAdapters);
             }

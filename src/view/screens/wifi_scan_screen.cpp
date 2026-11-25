@@ -39,6 +39,8 @@ void WifiScanScreen::build_content(lv_obj_t* content) {
         lv_label_set_long_mode(row.name, LV_LABEL_LONG_DOT);
         row.metric = label(row.box, 194, 4, 108, 10);
         lv_obj_set_style_text_align(row.metric, LV_TEXT_ALIGN_RIGHT, 0);
+        row.detail = label(row.box, 7, 13, 296, 9);
+        lv_obj_add_flag(row.detail, LV_OBJ_FLAG_HIDDEN);
     }
     reactive::observe_obj(content, view_model().inventory_subject(), [](lv_observer_t* o, lv_subject_t*) {
         static_cast<WifiScanScreen*>(lv_observer_get_user_data(o))->render();
@@ -53,35 +55,73 @@ void WifiScanScreen::render() {
     const bool details = (mode == 1 || mode == 3) && cursor < items.size();
     const auto* clients = cursor < items.size() ? &items[cursor].clients : nullptr;
     const bool client_list = mode == 2 && clients;
-    const auto selected = client_list || mode == 3 ? vm.wifi_client_cursor() : cursor;
-    const auto total = (client_list || mode == 3) && clients ? clients->size() : items.size();
+    const bool operations = mode == 4 || mode == 5;
+    const bool feed = mode == 6;
+    const auto selected = operations ? vm.wifi_operation_cursor() : client_list || mode == 3 ? vm.wifi_client_cursor() : cursor;
+    const auto total = operations ? (mode == 4 ? size_t{3} : size_t{2}) :
+        (client_list || mode == 3) && clients ? clients->size() : items.size();
     const auto colors = view::palette(vm.is_dark_mode());
     auto accent = colors.success;
-    lv_label_set_text(title_, mode == 3 ? "Client info" : client_list ? "Observed clients" :
+    lv_label_set_text(title_, feed ? (vm.wifi_feed_station() ? "Station traffic" : "AP traffic") :
+                      mode == 5 ? "Station operations" : mode == 4 ? "AP operations" :
+                      mode == 3 ? "Client info" : client_list ? "Observed clients" :
                       details ? vm.wifi_info_tab() == 1 ? "AP authentication" :
                                 vm.wifi_info_tab() == 2 ? "AP encryption" : "Access point info" :
                       "Access points");
     lv_obj_set_style_text_color(title_, colors.text, 0);
-    const auto count = !vm.wifi_error().empty() ? "Capture failed" :
+    const auto count = feed ? std::to_string(vm.wifi_feed_count()) + " frames" :
+        !vm.wifi_error().empty() ? "Capture failed" :
         (mode == 0 && items.empty()) ? "Listening" : total == 0 ? "0 seen" :
         std::to_string(selected + 1) + " / " + std::to_string(total);
     lv_label_set_text(count_, count.c_str());
     lv_obj_set_style_text_color(count_, accent, 0);
     if (mode != last_mode_) { first_ = 0; last_mode_ = mode; }
-    if (selected < first_) first_ = selected;
-    if (selected >= first_ + rows_.size()) first_ = selected + 1 - rows_.size();
-    first_ = std::min(first_, total > rows_.size() ? total - rows_.size() : size_t{0});
+    if (!feed) {
+        if (selected < first_) first_ = selected;
+        if (selected >= first_ + rows_.size()) first_ = selected + 1 - rows_.size();
+        first_ = std::min(first_, total > rows_.size() ? total - rows_.size() : size_t{0});
+    }
+    const auto& frames = vm.wifi_feed_frames();
+    const auto feed_end = frames.size() > vm.wifi_feed_offset() ? frames.size() - vm.wifi_feed_offset() : size_t{0};
+    const auto feed_start = feed_end > rows_.size() ? feed_end - rows_.size() : size_t{0};
     for (size_t i = 0; i < rows_.size(); ++i) {
         auto& row = rows_[i];
-        const auto index = first_ + i;
-        if (details || index >= total) { lv_obj_add_flag(row.box, LV_OBJ_FLAG_HIDDEN); continue; }
+        const auto index = feed ? feed_start + i : first_ + i;
+        if (details || (feed ? index >= feed_end : index >= total)) { lv_obj_add_flag(row.box, LV_OBJ_FLAG_HIDDEN); continue; }
         lv_obj_remove_flag(row.box, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_set_style_bg_color(row.box, index == selected ? colors.button : colors.surface, 0);
-        lv_obj_set_style_border_color(row.box, index == selected ? accent : colors.border, 0);
-        const auto name = client_list ? (*clients)[index].mac : items[index].ssid;
+        const bool compact = feed || operations;
+        lv_obj_set_y(row.box, (compact ? 36 : 21) + static_cast<int>(i) * (compact ? 21 : 25));
+        lv_obj_set_height(row.box, compact ? 20 : 23);
+        lv_obj_set_style_bg_color(row.box, !feed && index == selected ? colors.button : colors.surface, 0);
+        lv_obj_set_style_border_color(row.box, feed ? (index + 1 == feed_end ? accent : colors.border) :
+                                             index == selected ? accent : colors.border, 0);
+        if (feed) {
+            const auto& frame = frames[index];
+            lv_obj_remove_flag(row.detail, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_y(row.name, 0);
+            lv_obj_set_y(row.metric, 1);
+            lv_obj_set_y(row.detail, 11);
+            lv_label_set_text(row.name, frame.type.c_str());
+            const auto signal = frame.has_rssi ? std::to_string(frame.rssi) + " dBm" : "";
+            lv_label_set_text(row.metric, signal.c_str());
+            const std::string route = (frame.sender.empty() ? "?" : frame.sender) + std::string(" > ") +
+                (frame.receiver.empty() ? "?" : frame.receiver);
+            lv_label_set_text(row.detail, route.c_str());
+            lv_obj_set_style_text_color(row.detail, colors.text_disabled, 0);
+            lv_obj_set_style_text_color(row.name, accent, 0);
+            lv_obj_set_style_text_color(row.metric, colors.text_disabled, 0);
+            continue;
+        }
+        lv_obj_add_flag(row.detail, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_y(row.name, 3);
+        lv_obj_set_y(row.metric, 4);
+        const std::string name = operations ?
+            (mode == 4 ? (index == 0 ? "Information" : index == 1 ? "Observed clients" : "Traffic filter") :
+                         (index == 0 ? "Information" : "Traffic filter")) :
+            client_list ? (*clients)[index].mac : items[index].ssid;
         lv_label_set_text(row.name, name.c_str());
         lv_obj_set_style_text_color(row.name, colors.text, 0);
-        const auto metric = client_list ?
+        const auto metric = operations ? (name == "Traffic filter" ? "LIVE" : "VIEW") : client_list ?
             std::to_string((*clients)[index].frames) + " fr  " +
                 ((*clients)[index].has_rssi ? std::to_string((*clients)[index].rssi) + "dBm" : "RSSI ?") :
             "CH " + std::to_string(items[index].channel) + "  " +
@@ -90,7 +130,17 @@ void WifiScanScreen::render() {
         lv_obj_set_style_text_color(row.metric, index == selected ? accent : colors.text_disabled, 0);
     }
     std::string message;
-    if (mode == 3 && clients && vm.wifi_client_cursor() < clients->size()) {
+    if (feed && cursor < items.size()) {
+        const auto channel = items[cursor].channel;
+        message = "CH " + std::to_string(channel) + "   " + vm.wifi_feed_target() +
+            (vm.wifi_tuned_frequency() == static_cast<unsigned>(items[cursor].frequency_mhz) ?
+                (vm.wifi_feed_offset() ? "   HISTORY" : "   LIVE") : "   TUNING");
+        if (!vm.wifi_error().empty()) message = vm.wifi_error();
+        if (frames.empty() && vm.wifi_error().empty()) message = "CH " + std::to_string(channel) + "   Waiting for frames";
+    } else if (operations && cursor < items.size()) {
+        message = mode == 4 ? items[cursor].ssid + "   CH " + std::to_string(items[cursor].channel) :
+            clients && vm.wifi_client_cursor() < clients->size() ? (*clients)[vm.wifi_client_cursor()].mac : "";
+    } else if (mode == 3 && clients && vm.wifi_client_cursor() < clients->size()) {
         const auto& client = (*clients)[vm.wifi_client_cursor()];
         message = client.mac + "\n" + client.vendor.substr(0, 40) +
             "\nRSSI  " + (client.has_rssi ? std::to_string(client.rssi) + " dBm" : "Not observed uplink") +
@@ -126,11 +176,12 @@ void WifiScanScreen::render() {
             "No access points found";
     }
     lv_obj_set_style_text_color(message_, colors.text, 0);
-    auto* message_font = assets().load_standard_font(mode == 1 && vm.wifi_info_tab() ? 10 : 12);
+    auto* message_font = assets().load_standard_font(feed || (mode == 1 && vm.wifi_info_tab()) ? 10 : 12);
     lv_obj_set_style_text_font(message_, message_font ? message_font : LV_FONT_DEFAULT, 0);
     lv_label_set_text(message_, message.c_str());
-    set_key_guide(mode == 3 ? "Esc Clients" : mode == 2 ? "F/X Browse  Enter Info  Esc AP" :
-                  mode == 1 ? "D Security  Enter Clients  Esc List" :
+    set_key_guide(feed ? "F/X Scroll  Esc Operations" : operations ? "F/X Browse  Enter Open  Esc Back" :
+                  mode == 3 ? "Esc Operations" : mode == 2 ? "F/X Browse  Enter Operations  Esc AP" :
+                  mode == 1 ? "D Security  Esc Operations" :
                   "F/X Browse  Enter Info  D Restart  Esc Back");
 }
 }

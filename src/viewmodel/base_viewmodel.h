@@ -25,6 +25,7 @@
 #include <chrono>
 #include <thread>
 #include <vector>
+#include <deque>
 
 namespace viewmodel {
 
@@ -57,6 +58,10 @@ public:
     size_t wifi_cursor() const { return wifi_scan_detail_index_; }
     const auto& wifi_error() const { return wifi_scan_error_; }
     void step_traffic_channel(int direction) { traffic_step_ += direction; }
+    model::RadioRequirement traffic_requirement() const {
+        return model_.traffic_monitor_source() ? model::RadioRequirement::Monitor : model::RadioRequirement::Selected;
+    }
+    bool traffic_monitor_source() const { return model_.traffic_monitor_source(); }
     bool traffic_can_tune() const {
         return !monitor_job_.valid() && !monitor_owner_.empty() && monitor_owner_ == model_.selected_adapter_id();
     }
@@ -113,6 +118,13 @@ public:
     int wifi_view() const { return wifi_view_; }
     int wifi_info_tab() const { return wifi_info_tab_; }
     size_t wifi_client_cursor() const { return wifi_client_index_; }
+    size_t wifi_operation_cursor() const { return wifi_operation_index_; }
+    const auto& wifi_feed_frames() const { return wifi_feed_frames_; }
+    size_t wifi_feed_offset() const { return wifi_feed_offset_; }
+    uint64_t wifi_feed_count() const { return wifi_feed_count_; }
+    const auto& wifi_feed_target() const { return wifi_feed_target_; }
+    bool wifi_feed_station() const { return wifi_feed_station_; }
+    unsigned wifi_tuned_frequency() const { return wifi_tuned_frequency_; }
     void wifi_back();
     void advance_wifi_info_tab();
     bool system_details_open() const { return system_info_.details_expanded(); }
@@ -188,16 +200,24 @@ private:
     int wifi_view_{0};
     int wifi_info_tab_{0};
     std::size_t wifi_client_index_{};
+    std::size_t wifi_operation_index_{};
+    std::string wifi_feed_target_;
+    bool wifi_feed_station_{};
+    std::deque<platform::wireless::FrameSummary> wifi_feed_frames_;
+    std::size_t wifi_feed_offset_{};
+    uint64_t wifi_feed_count_{};
     std::atomic<bool> wifi_capture_stop_{false};
     std::atomic<bool> wifi_capture_failed_{false};
     std::atomic<bool> wifi_scan_running_{false};
     std::mutex wifi_scan_mutex_;
     std::vector<platform::wireless::FrameObservation> incoming_frames_;
+    std::vector<platform::wireless::FrameSummary> incoming_summaries_;
     std::thread wifi_scan_thread_;
     std::vector<unsigned> wifi_frequencies_;
     std::future<std::string> wifi_hop_job_;
     std::size_t wifi_hop_index_{};
     unsigned wifi_tuned_frequency_{};
+    unsigned wifi_tune_failed_frequency_{};
     uint32_t wifi_hop_tick_{};
     lv_timer_t* wifi_scan_timer_{nullptr};
 };
