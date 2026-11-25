@@ -6,133 +6,108 @@
 
 #include "asset_manager.h"
 #include "bindings.h"
-#include "display_format.h"
 #include "theme.h"
 
 #include <string>
 
 namespace screen {
 namespace {
-constexpr uint32_t kMarauderBlack = 0x000000;
-constexpr uint32_t kMarauderWhite = 0xffffff;
-constexpr uint32_t kMarauderDarkGray = 0x303030;
-constexpr uint32_t kMarauderLightGray = 0xd6d3d6;
-
-lv_color_t menu_color(model::MarauderMenuColor color) {
+lv_color_t accent(model::MarauderMenuColor color) {
+    using Color = model::MarauderMenuColor;
     switch (color) {
-        case model::MarauderMenuColor::White: return lv_color_hex(0xffffff);
-        case model::MarauderMenuColor::Cyan: return lv_color_hex(0x00ffff);
-        case model::MarauderMenuColor::Blue: return lv_color_hex(0x2196f3);
-        case model::MarauderMenuColor::Red: return lv_color_hex(0xff0000);
-        case model::MarauderMenuColor::Green: return lv_color_hex(0x00ff00);
-        case model::MarauderMenuColor::LightGrey: return lv_color_hex(kMarauderLightGray);
-        case model::MarauderMenuColor::Magenta: return lv_color_hex(0xff00ff);
-        case model::MarauderMenuColor::Purple: return lv_color_hex(0xb050ff);
-        case model::MarauderMenuColor::Orange: return lv_color_hex(0xffb600);
-        case model::MarauderMenuColor::Yellow: return lv_color_hex(0xffff00);
+        case Color::Green: return lv_color_hex(0xa6cead);
+        case Color::Cyan: return lv_color_hex(0x94c8c9);
+        case Color::Blue: return lv_color_hex(0xa1b7dc);
+        case Color::Red: return lv_color_hex(0xd99d9e);
+        case Color::Magenta: return lv_color_hex(0xcca0bd);
+        case Color::Purple: return lv_color_hex(0xbca8d2);
+        case Color::Orange: case Color::Yellow: return lv_color_hex(0xd3ba96);
+        default: return lv_color_hex(0xb9c1c8);
     }
-    return lv_color_hex(kMarauderWhite);
 }
-
+constexpr const char* root_marks[] = {
+    LV_SYMBOL_WIFI, LV_SYMBOL_BLUETOOTH, LV_SYMBOL_GPS,
+    LV_SYMBOL_DRIVE, LV_SYMBOL_SETTINGS, LV_SYMBOL_USB
+};
 }
 
 DashboardScreen::DashboardScreen(viewmodel::BaseViewModel& view_model, app::AssetManager& assets)
-    : BaseScreen(view_model, assets) {
-    init();
-}
+    : BaseScreen(view_model, assets) { init(); }
 
 DashboardScreen::~DashboardScreen() {
     if (menu_observer_) lv_observer_remove(menu_observer_);
 }
 
 void DashboardScreen::build_content(lv_obj_t* content) {
-    panel_ = lv_obj_create(content);
-    lv_obj_remove_style_all(panel_);
-    lv_obj_set_size(panel_, LV_PCT(100), LV_PCT(100));
-    lv_obj_set_style_pad_hor(panel_, 8, 0);
-    lv_obj_set_style_pad_ver(panel_, 2, 0);
-    lv_obj_set_style_pad_row(panel_, 1, 0);
-    lv_obj_set_flex_flow(panel_, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(panel_, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
-    lv_obj_clear_flag(panel_, LV_OBJ_FLAG_SCROLLABLE);
+    panel_ = content;
+    auto* small = assets().load_standard_font(10, app::StandardFontWeight::Regular);
+    auto* title = assets().load_standard_font(13);
+    menu_title_ = lv_label_create(content);
+    lv_obj_set_pos(menu_title_, 7, 3);
+    lv_obj_set_style_text_font(menu_title_, small ? small : &lv_font_montserrat_10, 0);
+    footer_ = lv_label_create(content);
+    lv_obj_align(footer_, LV_ALIGN_TOP_RIGHT, -7, 3);
+    lv_obj_set_style_text_font(footer_, small ? small : &lv_font_montserrat_10, 0);
 
-    menu_title_ = lv_label_create(panel_);
-    lv_obj_set_size(menu_title_, LV_PCT(100), 15);
-    auto* title_font = assets().load_standard_font(11);
-    lv_obj_set_style_text_font(menu_title_, title_font ? title_font : &lv_font_montserrat_10, 0);
-    lv_obj_set_style_text_letter_space(menu_title_, 1, 0);
-
-    auto* row_font = assets().load_standard_font(11, app::StandardFontWeight::Regular);
-    for (std::size_t index = 0; index < rows_.size(); ++index) {
-        rows_[index] = lv_obj_create(panel_);
-        lv_obj_remove_style_all(rows_[index]);
-        lv_obj_set_size(rows_[index], LV_PCT(100), 14);
-        lv_obj_set_style_radius(rows_[index], 1, 0);
-        lv_obj_set_style_pad_hor(rows_[index], 4, 0);
-        lv_obj_clear_flag(rows_[index], LV_OBJ_FLAG_SCROLLABLE);
-
-        row_labels_[index] = lv_label_create(rows_[index]);
-        lv_obj_set_width(row_labels_[index], LV_PCT(100));
-        lv_label_set_long_mode(row_labels_[index], LV_LABEL_LONG_DOT);
-        lv_obj_set_style_text_font(row_labels_[index], row_font ? row_font : &lv_font_montserrat_10, 0);
-        lv_obj_align(row_labels_[index], LV_ALIGN_LEFT_MID, 0, 0);
+    for (std::size_t i = 0; i < rows_.size(); ++i) {
+        auto* tile = rows_[i] = lv_obj_create(content);
+        lv_obj_remove_style_all(tile);
+        lv_obj_clear_flag(tile, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_style_bg_opa(tile, LV_OPA_COVER, 0);
+        lv_obj_set_style_radius(tile, 5, 0);
+        marks_[i] = lv_label_create(tile);
+        lv_obj_set_style_text_font(marks_[i], &lv_font_montserrat_14, 0);
+        lv_obj_set_pos(marks_[i], 6, 3);
+        row_labels_[i] = lv_label_create(tile);
+        lv_label_set_long_mode(row_labels_[i], LV_LABEL_LONG_DOT);
+        lv_obj_set_style_text_font(row_labels_[i], title ? title : &lv_font_montserrat_14, 0);
+        lv_obj_align(row_labels_[i], LV_ALIGN_BOTTOM_LEFT, 6, -3);
     }
-
-    footer_ = lv_label_create(panel_);
-    lv_obj_set_size(footer_, LV_PCT(100), 22);
-    lv_label_set_long_mode(footer_, LV_LABEL_LONG_WRAP);
-    auto* footer_font = assets().load_standard_font(9, app::StandardFontWeight::Regular);
-    lv_obj_set_style_text_font(footer_, footer_font ? footer_font : &lv_font_montserrat_10, 0);
-
-    menu_observer_ = reactive::observe_obj(panel_,
-                                           view_model().marauder_menu_generation_subject(),
-                                           menu_changed_cb,
-                                           this);
-    render_menu();
+    menu_observer_ = reactive::observe_obj(content, view_model().marauder_menu_generation_subject(), menu_changed_cb, this);
+    reactive::observe_obj(content, view_model().dark_mode_subject(), menu_changed_cb, this);
 }
 
 void DashboardScreen::render_menu() {
-    if (!panel_) return;
-    const auto background = lv_color_hex(kMarauderBlack);
-    const auto muted_text = lv_color_hex(kMarauderLightGray);
-
-    lv_obj_set_style_bg_color(panel_, background, 0);
-    lv_obj_set_style_bg_opa(panel_, LV_OPA_COVER, 0);
-    lv_label_set_text(menu_title_, view_model().marauder_menu_title());
-    lv_obj_set_style_text_color(menu_title_, muted_text, 0);
-
-    const auto count = view_model().marauder_menu_item_count();
-    const auto selected = view_model().marauder_menu_selected_index();
-    for (std::size_t index = 0; index < rows_.size(); ++index) {
-        if (index >= count) {
-            lv_obj_add_flag(rows_[index], LV_OBJ_FLAG_HIDDEN);
+    const auto colors = view::palette(view_model().is_dark_mode());
+    const bool root = view_model().marauder_menu_at_root();
+    const int columns = root ? 3 : 2;
+    const int width = (308 - (columns - 1) * 4) / columns;
+    lv_label_set_text(menu_title_, root ? "Launcher" : view_model().marauder_menu_title());
+    const auto position = std::to_string(view_model().marauder_menu_selected_index() + 1) + " / " +
+                          std::to_string(view_model().marauder_menu_item_count());
+    lv_label_set_text(footer_, position.c_str());
+    set_key_guide(root ? "F/X  Move      C/Enter  Open      Esc  Exit" :
+                         "F/X  Move      C/Enter  Open      Z/Esc  Back");
+    lv_obj_set_style_text_color(menu_title_, colors.text, 0);
+    lv_obj_set_style_text_color(footer_, colors.text_disabled, 0);
+    for (std::size_t i = 0; i < rows_.size(); ++i) {
+        auto* tile = rows_[i];
+        if (i >= view_model().marauder_menu_item_count()) {
+            lv_obj_add_flag(tile, LV_OBJ_FLAG_HIDDEN);
             continue;
         }
-        lv_obj_remove_flag(rows_[index], LV_OBJ_FLAG_HIDDEN);
-        const auto& item = view_model().marauder_menu_item(index);
-        const auto item_color = menu_color(item.color);
-        const auto label = viewmodel::format::menu_row_label(item.label, item.available);
-        lv_label_set_text(row_labels_[index], label.c_str());
-
-        const bool active = index == selected;
-        lv_obj_set_style_bg_opa(rows_[index], active ? LV_OPA_COVER : LV_OPA_TRANSP, 0);
-        lv_obj_set_style_bg_color(rows_[index], item.available ? item_color : lv_color_hex(kMarauderDarkGray), 0);
-        lv_obj_set_style_border_width(rows_[index], 0, 0);
-        lv_obj_set_style_text_color(row_labels_[index],
-                                    active && item.available ? lv_color_hex(kMarauderBlack) :
-                                    item.available ? item_color : muted_text,
-                                    0);
+        lv_obj_remove_flag(tile, LV_OBJ_FLAG_HIDDEN);
+        const auto& item = view_model().marauder_menu_item(i);
+        const bool focused = i == view_model().marauder_menu_selected_index();
+        auto ink = accent(item.color);
+        if (!view_model().is_dark_mode()) ink = lv_color_mix(colors.text, ink, 128);
+        lv_obj_set_pos(tile, 6 + (i % columns) * (width + 4), 20 + (i / columns) * 51);
+        lv_obj_set_size(tile, width, 47);
+        lv_obj_set_style_bg_color(tile, focused ? lv_color_mix(ink, colors.button, 32) : colors.button, 0);
+        lv_obj_set_style_border_width(tile, focused ? 2 : 1, 0);
+        lv_obj_set_style_border_color(tile, focused ? ink : colors.border, 0);
+        lv_label_set_text(marks_[i], root ? root_marks[i] :
+                          !item.available ? LV_SYMBOL_MINUS : item.opens_submenu ? LV_SYMBOL_DIRECTORY : LV_SYMBOL_RIGHT);
+        lv_obj_set_style_text_color(marks_[i], item.available ? ink : colors.text_disabled, 0);
+        std::string label(item.label);
+        if (!item.available) label += "  (soon)";
+        lv_label_set_text(row_labels_[i], label.c_str());
+        lv_obj_set_width(row_labels_[i], width - 16);
+        lv_obj_set_style_text_color(row_labels_[i], item.available ? colors.text : colors.text_disabled, 0);
     }
-
-    lv_label_set_text(footer_, view_model().marauder_menu_at_root()
-        ? "F/X MOVE  C/ENTER SELECT\nESC EXIT"
-        : "F/X MOVE  C/ENTER SELECT\nZ/ESC BACK");
-    lv_obj_set_style_text_color(footer_, muted_text, 0);
 }
 
 void DashboardScreen::menu_changed_cb(lv_observer_t* observer, lv_subject_t*) {
-    auto* screen = static_cast<DashboardScreen*>(lv_observer_get_user_data(observer));
-    if (screen) screen->render_menu();
+    static_cast<DashboardScreen*>(lv_observer_get_user_data(observer))->render_menu();
 }
-
 } // namespace screen

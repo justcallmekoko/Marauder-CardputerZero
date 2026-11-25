@@ -7,7 +7,8 @@ namespace view {
 
 constexpr int kScreenWidth = 320;
 constexpr int kScreenHeight = 170;
-constexpr int kTitleBarHeight = 30;
-constexpr int kContentHeight = kScreenHeight - kTitleBarHeight;
+constexpr int kTitleBarHeight = 26;
+constexpr int kGuideHeight = 20;
+constexpr int kContentHeight = kScreenHeight - kTitleBarHeight - kGuideHeight;
 
 } // namespace view

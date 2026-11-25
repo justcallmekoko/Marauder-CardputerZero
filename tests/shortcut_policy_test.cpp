@@ -25,6 +25,6 @@ int main() {
         assert(navigation_action(key) == NavigationAction::None);
     }
 
-    static_assert(view::kContentHeight == 140, "content must reclaim the removed 30 px footer");
+    static_assert(view::kContentHeight == 124, "reserve room for status and shortcut bars");
     return 0;
 }

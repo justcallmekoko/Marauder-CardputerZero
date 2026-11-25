@@ -21,7 +21,7 @@ bool select_index(MarauderMenuModel& menu, std::size_t index) {
 
 int main() {
     MarauderMenuModel menu;
-    if (menu.item_count() != 5 || menu.selected_index() != 0 || menu.depth() != 1) return 1;
+    if (menu.item_count() != 6 || menu.selected_index() != 0 || menu.depth() != 1) return 1;
     if (std::string(menu.title()) != "MARAUDER") return 21;
     const MarauderMenuColor root_colors[] = {
         MarauderMenuColor::Green,
@@ -29,12 +29,13 @@ int main() {
         MarauderMenuColor::Red,
         MarauderMenuColor::Blue,
         MarauderMenuColor::LightGrey,
+        MarauderMenuColor::Purple,
     };
     for (std::size_t index = 0; index < menu.item_count(); ++index) {
         if (menu.item(index).color != root_colors[index]) return 22;
     }
     menu.previous();
-    if (menu.selected_index() != 4) return 2;
+    if (menu.selected_index() != 5 || menu.activate() != MarauderMenuAction::OpenAdapters) return 2;
     menu.next();
     if (menu.selected_index() != 0) return 3;
 

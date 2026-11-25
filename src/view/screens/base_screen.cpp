@@ -45,7 +45,24 @@ void BaseScreen::init() {
     lv_obj_clear_flag(content_, LV_OBJ_FLAG_SCROLLABLE);
     reactive::bind_theme(content_, view_model_.dark_mode_subject(), reactive::ThemeRole::Surface);
 
+    key_guide_ = lv_label_create(root_);
+    lv_obj_set_size(key_guide_, LV_PCT(100), view::kGuideHeight);
+    lv_obj_align(key_guide_, LV_ALIGN_BOTTOM_MID, 0, 0);
+    lv_obj_set_style_text_align(key_guide_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_pad_top(key_guide_, 3, 0);
+    lv_obj_set_style_text_font(key_guide_, &lv_font_montserrat_10, 0);
+    const auto colors = view::palette(view_model_.is_dark_mode());
+    lv_obj_set_style_text_color(key_guide_, colors.text, 0);
+    lv_obj_set_style_bg_color(key_guide_, colors.bar, 0);
+    lv_obj_set_style_bg_opa(key_guide_, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_side(key_guide_, LV_BORDER_SIDE_TOP, 0);
+    lv_obj_set_style_border_width(key_guide_, 1, 0);
+    lv_obj_set_style_border_color(key_guide_, colors.border, 0);
     build_content(content_);
+}
+
+void BaseScreen::set_key_guide(const char* text) {
+    lv_label_set_text(key_guide_, text);
 }
 
 lv_obj_t* BaseScreen::root() const {

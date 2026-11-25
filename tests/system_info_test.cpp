@@ -145,12 +145,11 @@ bool wifi_details_are_single_record_and_bounded() {
             if (other != index && !expect(text.find(networks[other].ssid) == std::string::npos,
                                          "Wi-Fi details leaked another record")) return false;
         }
-        if (!expect(text.find("F/X ITEM  C/ENTER SCAN") != std::string::npos &&
-                    text.find("Z/ESC BACK  D SUMMARY") != std::string::npos,
-                    "Wi-Fi detail controls are incorrect")) return false;
+        if (!expect(text.find("IF wlan0  ready") != std::string::npos,
+                    "Wi-Fi detail interface status is missing")) return false;
     }
     const auto summary = viewmodel::format::wifi_scan_page("wlan0", networks, "", false, false, 0);
-    return bounded(summary, 9) && expect(summary.find("Z/ESC BACK  D DETAILS") != std::string::npos,
+    return bounded(summary, 9) && expect(summary.find("NETWORKS  strongest first") != std::string::npos,
                                          "Wi-Fi summary return state is incorrect");
 }
 

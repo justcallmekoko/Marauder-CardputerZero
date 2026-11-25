@@ -330,9 +330,7 @@ void BaseViewModel::publish_adapter_detail() {
             << "MAC " << (adapter.permanent_mac ? "PERMANENT" : "ASSIGNED") << '\n'
             << "Monitor " << platform::wireless::capability_label(adapter.monitor_mode) << '\n'
             << "Injection " << platform::wireless::capability_label(adapter.injection) << '\n'
-            << adapter.capability_note << '\n'
-            << "F/X ITEM C/ENTER SELECT\n"
-            << "Z/ESC BACK D SUMMARY";
+            << adapter.capability_note;
     }
     adapter_detail_subject_.set(out.str().c_str());
 }

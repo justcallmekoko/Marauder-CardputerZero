@@ -34,11 +34,13 @@ protected:
 
     viewmodel::BaseViewModel& view_model();
     app::AssetManager& assets();
+    void set_key_guide(const char* text);
 
 private:
     viewmodel::BaseViewModel& view_model_;
     app::AssetManager& assets_;
     lv_obj_t* root_{nullptr};
+    lv_obj_t* key_guide_{nullptr};
     lv_obj_t* content_{nullptr};
     std::unique_ptr<view::widgets::TitleBar> title_bar_;
 };

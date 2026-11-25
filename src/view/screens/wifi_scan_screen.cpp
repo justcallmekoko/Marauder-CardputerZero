@@ -15,6 +15,7 @@ WifiScanScreen::WifiScanScreen(viewmodel::BaseViewModel& view_model, app::AssetM
 }
 
 void WifiScanScreen::build_content(lv_obj_t* content) {
+    set_key_guide("F/X  Browse    Enter  Rescan    D  Details    Esc  Back");
     auto* panel = lv_obj_create(content);
     lv_obj_remove_style_all(panel);
     lv_obj_set_size(panel, LV_PCT(100), LV_PCT(100));

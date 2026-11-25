@@ -64,6 +64,10 @@ public:
     void previous_system_info_page();
     void next_system_info_page();
     void toggle_system_info_details();
+    const auto& adapters() const { return adapters_; }
+    std::size_t adapter_cursor() const { return highlighted_adapter_; }
+    bool adapter_details_open() const { return adapter_details_expanded_; }
+    const std::string& selected_radio_id() const { return model_.selected_adapter_id(); }
     void refresh_adapters();
     void previous_adapter();
     void next_adapter();

@@ -20,6 +20,7 @@ DiagnosticsScreen::~DiagnosticsScreen() {
 }
 
 void DiagnosticsScreen::build_content(lv_obj_t* content) {
+    set_key_guide("F/X  Page    Enter  Refresh    D  Details    Esc  Back");
     scroll_ = lv_obj_create(content);
     lv_obj_remove_style_all(scroll_);
     lv_obj_set_size(scroll_, LV_PCT(100), LV_PCT(100));

@@ -187,8 +187,6 @@ std::string system_info_page(const platform::diagnostics::Snapshot& snapshot,
     for (std::size_t index = begin; index < end; ++index) {
         out << bounded_line(category_item(snapshot, navigation.page(), index, navigation.details_expanded())) << '\n';
     }
-    out << "F/X PAGE  C/ENTER REFRESH\n"
-        << "Z/ESC BACK  D " << (navigation.details_expanded() ? "LESS" : "MORE");
     return out.str();
 }
 
@@ -201,8 +199,7 @@ std::string wifi_scan_page(const std::string& interface_name,
     std::ostringstream out;
     if (interface_name.empty()) {
         out << "WIFI SCAN\n"
-            << bounded_line(error.empty() ? "Select an adapter in Device > Setup" : error)
-            << "\nC/ENTER RESCAN  Z/ESC BACK";
+            << bounded_line(error.empty() ? "Select an adapter in Device > Setup" : error);
         return out.str();
     }
     if (details) {
@@ -219,9 +216,7 @@ std::string wifi_scan_page(const std::string& interface_name,
                 << "SIGNAL " << network.signal_percent << "%  CHANNEL " << network.channel << '\n'
                 << "FREQ " << network.frequency_mhz << " MHz\n";
         }
-        out << bounded_line("IF " + interface_name + "  " + (running ? "scanning" : error.empty() ? "ready" : "error")) << '\n'
-            << "F/X ITEM  C/ENTER SCAN\n"
-            << "Z/ESC BACK  D SUMMARY";
+        out << bounded_line("IF " + interface_name + "  " + (running ? "scanning" : error.empty() ? "ready" : "error"));
         return out.str();
     }
 
@@ -239,8 +234,6 @@ std::string wifi_scan_page(const std::string& interface_name,
                             network.ssid + " " + network.security) << '\n';
     }
     if (begin == end && !running && error.empty()) out << "No networks found\n";
-    out << "F/X PAGE  C/ENTER RESCAN\n"
-        << "Z/ESC BACK  D DETAILS";
     return out.str();
 }
 

@@ -21,6 +21,7 @@ const std::vector<Item>& items_for(Id menu) {
         {"GPS", Color::Red, Action::None, Id::Gps, true, true},
         {"Device", Color::Blue, Action::None, Id::Device, true, true},
         {"Settings", Color::LightGrey, Action::None, Id::Settings, true, true},
+        {"Radios", Color::Purple, Action::OpenAdapters, Id::Main, false, true},
     };
     static const std::vector<Item> wifi = {
         {"Scanners", Color::Orange, Action::None, Id::WifiScanners, true, true},
