@@ -49,12 +49,10 @@ void WifiScanScreen::render() {
     auto& vm = view_model();
     const auto& items = vm.wifi_items();
     const auto cursor = vm.wifi_cursor();
-    const bool stations = vm.station_list();
     const bool details = vm.wifi_details_open() && cursor < items.size();
     const auto colors = view::palette(vm.is_dark_mode());
-    auto accent = stations ? colors.info : colors.success;
-    lv_label_set_text(title_, stations ? (details ? "Station info" : "Hotspot stations") :
-                                         (details ? "Access point info" : "Access points"));
+    auto accent = colors.success;
+    lv_label_set_text(title_, details ? "Access point info" : "Access points");
     lv_obj_set_style_text_color(title_, colors.text, 0);
     const auto count = vm.scanning() ? (items.empty() ? "Searching" : "Refreshing") : !vm.wifi_error().empty() ? "Refresh failed" :
         items.empty() ? "0 seen" : std::to_string(cursor + 1) + " / " + std::to_string(items.size());
@@ -73,7 +71,7 @@ void WifiScanScreen::render() {
         lv_obj_set_style_border_color(row.box, index == cursor ? accent : colors.border, 0);
         lv_label_set_text(row.name, item.ssid.c_str());
         lv_obj_set_style_text_color(row.name, colors.text, 0);
-        const auto metric = (stations ? std::string{} : "CH " + std::to_string(item.channel) + "   ") +
+        const auto metric = ("CH " + std::to_string(item.channel) + "   ") +
             (item.rssi ? std::to_string(item.rssi) + " dBm" : "RSSI unknown");
         lv_label_set_text(row.metric, metric.c_str());
         lv_obj_set_style_text_color(row.metric, index == cursor ? accent : colors.text_disabled, 0);
@@ -81,15 +79,13 @@ void WifiScanScreen::render() {
     std::string message;
     if (details) {
         const auto& item = items[cursor];
-        message = stations ? item.bssid : item.ssid + "\n" + item.bssid;
+        message = item.ssid + "\n" + item.bssid;
         message += "\nVendor  " + (item.vendor.empty() ? std::string("Pending") : item.vendor.substr(0, 40));
-        if (stations) message += "\nRX  " + (item.rx_packets.empty() ? "unknown" : item.rx_packets) +
-            "    TX  " + (item.tx_packets.empty() ? "unknown" : item.tx_packets) + " packets";
-        else message += "\nCH " + std::to_string(item.channel) + "    " + std::to_string(item.frequency_mhz) +
+        message += "\nCH " + std::to_string(item.channel) + "    " + std::to_string(item.frequency_mhz) +
             " MHz    " + std::to_string(item.rssi) + " dBm\n" + item.security;
     } else if (items.empty()) {
         message = !vm.wifi_error().empty() ? vm.wifi_error() : vm.scanning() ? "Refreshing inventory..." :
-            stations ? "No stations connected to this hotspot" : "No access points found";
+            "No access points found";
     }
     lv_obj_set_style_text_color(message_, colors.text, 0);
     lv_label_set_text(message_, message.c_str());

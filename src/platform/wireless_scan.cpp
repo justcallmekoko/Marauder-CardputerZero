@@ -205,17 +205,7 @@ bool parse_access_point(std::string_view reply, WifiNetwork& ap) {
     return true;
 }
 
-bool parse_hotspot_station(std::string_view reply, WifiNetwork& station) {
-    station.bssid = std::string(reply.substr(0, reply.find('\n')));
-    if (!mac_address(station.bssid)) return false;
-    station.ssid = station.bssid;
-    station.rx_packets = field(reply, "rx_packets");
-    station.tx_packets = field(reply, "tx_packets");
-    number(field(reply, "signal"), station.rssi);
-    return true;
-}
-
-WifiScanResult scan_wifi_networks(const std::string& interface_name, bool stations,
+WifiScanResult scan_wifi_networks(const std::string& interface_name,
                                  const std::function<void(WifiNetwork)>& discovered) {
     if (!safe_interface_name(interface_name)) return {{}, "Invalid adapter name"};
 #if !defined(__linux__)
@@ -223,13 +213,7 @@ WifiScanResult scan_wifi_networks(const std::string& interface_name, bool statio
 #else
     const std::string path = "/run/wpa_supplicant/" + interface_name;
     Control wifi(path);
-    Control hotspot("/run/hostapd/" + interface_name);
-    Control* source = &wifi;
-    if (stations) {
-        if (hotspot.ready) source = &hotspot;
-        else if (field(wifi.query("STATUS"), "mode") != "AP")
-            return {{}, "Select an adapter hosting a hotspot"};
-    } else {
+    {
         if (!wifi.ready) return {{}, "WiFi service unavailable"};
         Control events(path);
         if (events.query("ATTACH") != "OK\n") return {{}, "Cannot watch WiFi scan"};
@@ -269,18 +253,18 @@ WifiScanResult scan_wifi_networks(const std::string& interface_name, bool statio
         }
     }
     WifiScanResult result;
-    std::string next = stations ? "STA-FIRST" : "BSS FIRST";
+    std::string next = "BSS FIRST";
     for (size_t i = 0; i < 1024; ++i) {
-        const auto reply = source->query(next);
+        const auto reply = wifi.query(next);
         if (reply == "FAIL\n" || reply == "\n") break;
         // wpa_supplicant signals the end of its BSS table with an empty datagram.
         if (reply.empty()) break;
         WifiNetwork item;
-        if (!(stations ? parse_hotspot_station(reply, item) : parse_access_point(reply, item)))
+        if (!parse_access_point(reply, item))
             return {{}, "Cannot read radio inventory"};
-        if (discovered && !stations) discovered(item);
+        if (discovered) discovered(item);
         item.vendor = registered_vendor(item.bssid);
-        next = stations ? "STA-NEXT " + item.bssid : "BSS NEXT-" + field(reply,"id");
+        next = "BSS NEXT-" + field(reply,"id");
         result.networks.push_back(std::move(item));
     }
     return result;

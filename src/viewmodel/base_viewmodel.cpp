@@ -117,14 +117,7 @@ void BaseViewModel::show_adapters_page() {
     model_.set_current_page(model::AppPage::Adapters);
     publish_navigation();
 }
-void BaseViewModel::show_wifi_scan_page(bool stations) {
-    if (stations != stations_) {
-        wifi_networks_.clear();
-        wifi_scan_detail_index_ = 0;
-        wifi_scan_details_expanded_ = false;
-        wifi_scan_error_.clear();
-        stations_ = stations;
-    }
+void BaseViewModel::show_wifi_scan_page() {
     model_.set_current_page(model::AppPage::WifiScan);
     publish_navigation();
     if (wifi_networks_.empty() && !wifi_scan_running_) start_wifi_scan();
@@ -488,13 +481,12 @@ void BaseViewModel::start_wifi_scan() {
     wifi_scan_running_ = true;
     wifi_scan_ready_ = false;
     publish_wifi_scan();
-    collecting_stations_ = stations_;
     const auto interface_name = wifi_scan_interface_;
     try {
-        wifi_scan_thread_ = std::thread([this, interface_name, stations = stations_] {
+        wifi_scan_thread_ = std::thread([this, interface_name] {
             platform::wireless::WifiScanResult result;
             try {
-                result = platform::wireless::scan_wifi_networks(interface_name, stations,
+                result = platform::wireless::scan_wifi_networks(interface_name,
                     [this](platform::wireless::WifiNetwork ap) {
                         std::lock_guard<std::mutex> lock(wifi_scan_mutex_);
                         incoming_aps_.push_back(std::move(ap));
@@ -606,7 +598,7 @@ void BaseViewModel::finish_wifi_scan_if_ready() {
             std::lock_guard<std::mutex> lock(wifi_scan_mutex_);
             incoming.swap(incoming_aps_);
         }
-        if (incoming.empty() || collecting_stations_ != stations_ || wifi_scan_interface_.empty()) return;
+        if (incoming.empty() || wifi_scan_interface_.empty()) return;
         bool changed = false;
         for (auto& ap : incoming) {
             const auto known = std::find_if(wifi_networks_.begin(), wifi_networks_.end(),
@@ -632,11 +624,6 @@ void BaseViewModel::finish_wifi_scan_if_ready() {
     const auto selected = std::find_if(adapters_.begin(), adapters_.end(), [&](const auto& adapter) {
         return adapter.stable_id == model_.selected_adapter_id();
     });
-    if (collecting_stations_ != stations_) {
-        wifi_scan_running_ = false;
-        if (current_page() == model::AppPage::WifiScan) start_wifi_scan();
-        return;
-    }
     if (selected != adapters_.end() && selected->interface_name == completed_interface) {
         wifi_scan_interface_ = completed_interface;
         wifi_scan_error_ = std::move(completed.error);
