@@ -156,15 +156,16 @@ def preference_file(device):
 def remember(device, action):
     path = preference_file(device)
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(mode="w", dir=path.parent, delete=False) as out:
-        temp = Path(out.name)
-        try:
+    out = tempfile.NamedTemporaryFile(mode="w", dir=path.parent, delete=False)
+    temp = Path(out.name)
+    try:
+        with out:
             out.write(action)
             out.flush()
             os.fsync(out.fileno())
-            os.replace(temp, path)
-        finally:
-            temp.unlink(missing_ok=True)
+        os.replace(temp, path)
+    finally:
+        temp.unlink(missing_ok=True)
 
 def restore(devices):
     requested = {}
