@@ -21,7 +21,7 @@ int main() {
         beacon[13 + 16 + i] = ap[i];
     }
     beacon[13 + 34] = 0x10;
-    beacon.insert(beacon.end(), {0, 4, 'T', 'e', 's', 't',
+    beacon.insert(beacon.end(), {0, 4, 'T', 'e', 's', 't', 3, 1, 1,
         48, 20, 1, 0, 0, 15, 172, 4, 1, 0, 0, 15, 172, 4,
         1, 0, 0, 15, 172, 2, 0, 0});
     FrameObservation observed;
@@ -30,6 +30,12 @@ int main() {
     assert(observed.ssid == "Test" && observed.security == "WPA2 Personal");
     assert(observed.security_info.akm == "PSK" && observed.security_info.pairwise == "CCMP-128");
     assert(observed.frequency_mhz == 2437 && observed.has_rssi && observed.rssi == -48);
+    assert(observed.advertised_frequency_mhz == 2412);
+    auto ht_beacon = beacon;
+    ht_beacon[13 + 36 + 6] = 61; // HT Operation primary channel, without DS Parameters.
+    ht_beacon[13 + 36 + 8] = 36;
+    assert(parse_monitor_frame(ht_beacon.data(), ht_beacon.size(), observed));
+    assert(observed.advertised_frequency_mhz == 5180);
     platform::wireless::FrameSummary summary;
     assert(parse_frame_summary(beacon.data(), beacon.size(), summary));
     assert(summary.type == "Beacon" && summary.sender == observed.bssid);

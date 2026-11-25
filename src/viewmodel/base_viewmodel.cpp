@@ -799,12 +799,16 @@ void BaseViewModel::finish_wifi_scan_if_ready() {
             ap->security_info = frame.security_info;
             if (frame.has_rssi) { ap->rssi = frame.rssi; ap->has_rssi = true; }
         }
-        // Data-frame radiotap channels can reflect a hop transition. Once the AP
-        // advertises its channel, do not let later data frames move the target.
-        if (frame.frequency_mhz && (frame.beacon || !ap->frequency_mhz)) {
+        // Radiotap can report the tuned channel for an adjacent-channel AP.
+        // Prefer the primary channel advertised in the beacon/response IEs.
+        if (frame.advertised_frequency_mhz) {
+            ap->frequency_mhz = frame.advertised_frequency_mhz;
+            ap->channel_advertised = true;
+        } else if (frame.frequency_mhz && !ap->channel_advertised &&
+                   (frame.beacon || !ap->frequency_mhz)) {
             ap->frequency_mhz = frame.frequency_mhz;
-            ap->channel = platform::wireless::channel_number(frame.frequency_mhz);
         }
+        ap->channel = platform::wireless::channel_number(ap->frequency_mhz);
         if (frame.client.empty()) continue;
         auto client = std::find_if(ap->clients.begin(), ap->clients.end(), [&](const auto& item) { return item.mac == frame.client; });
         if (client == ap->clients.end()) {

@@ -103,6 +103,7 @@ bool parse_monitor_frame(const uint8_t* bytes, std::size_t size, FrameObservatio
         out.security_info = interpret_security((le16(frame + 34) & 0x10) != 0,
                                                frame + 36, length - 36);
         out.security = out.security_info.summary;
+        unsigned ds_channel{}, ht_channel{};
         for (std::size_t pos = 36; pos + 2 <= length;) {
             const unsigned tag = frame[pos], count = frame[pos + 1];
             pos += 2;
@@ -113,8 +114,14 @@ bool parse_monitor_frame(const uint8_t* bytes, std::size_t size, FrameObservatio
                     out.ssid += c >= 32 && c < 127 ? static_cast<char>(c) : '?';
                 }
             }
+            if (tag == 3 && count == 1) ds_channel = frame[pos];
+            if (tag == 61 && count >= 1) ht_channel = frame[pos];
             pos += count;
         }
+        const unsigned primary = ds_channel ? ds_channel : ht_channel;
+        if (primary == 14) out.advertised_frequency_mhz = 2484;
+        else if (primary >= 1 && primary <= 13) out.advertised_frequency_mhz = 2407 + 5 * primary;
+        else if (primary >= 30 && primary <= 177) out.advertised_frequency_mhz = 5000 + 5 * primary;
     } else if (type == 2) {
         if (to_ds == from_ds) return false;
         bssid = to_ds ? frame + 4 : frame + 10;

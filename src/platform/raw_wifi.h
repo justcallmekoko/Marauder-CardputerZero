@@ -14,6 +14,7 @@ struct FrameObservation {
     std::string security;
     SecurityInfo security_info;
     int frequency_mhz{};
+    int advertised_frequency_mhz{};
     int rssi{};
     bool has_rssi{};
     bool client_transmitted{};
