@@ -18,8 +18,12 @@ private:
     void sample();
     void draw(double value, double scale);
     unsigned frequency_{};
+    unsigned requested_{}, issued_{};
+    bool tune_failed_{};
+    std::future<std::string> tuning_;
     platform::wireless::ChannelSample previous_channel_{};
-    std::vector<platform::wireless::ChannelSample> channels_;
+    std::vector<unsigned> channels_;
+    uint32_t sample_tick_{};
     std::future<std::vector<platform::wireless::ChannelSample>> survey_;
     lv_obj_t* title_{};
     std::string interface_;

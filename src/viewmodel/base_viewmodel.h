@@ -55,7 +55,11 @@ public:
     const auto& wifi_items() const { return wifi_networks_; }
     size_t wifi_cursor() const { return wifi_scan_detail_index_; }
     const auto& wifi_error() const { return wifi_scan_error_; }
-    void step_traffic_channel(int direction) { traffic_step_ = direction; }
+    void step_traffic_channel(int direction) { traffic_step_ += direction; }
+    bool traffic_can_tune() const {
+        return !monitor_job_.valid() && !monitor_owner_.empty() && monitor_owner_ == model_.selected_adapter_id();
+    }
+    std::string tune_traffic_channel(unsigned mhz) { return monitor_session_.tune(mhz); }
     int take_traffic_step() { int step = traffic_step_; traffic_step_ = 0; return step; }
     bool scanning() const { return wifi_scan_running_; }
     lv_subject_t* inventory_subject() { return inventory_generation_.native(); }

@@ -106,14 +106,27 @@ MonitorModeProbe probe_monitor_mode(const std::string& phy_name) {
         return {CapabilityState::Unknown, "PHY query failed; radio unchanged"};
     }
 
+    std::vector<unsigned> frequencies;
+    std::istringstream lines(output);
+    for (std::string line; std::getline(lines, line);) {
+        std::istringstream fields(line);
+        std::string star, unit;
+        double mhz;
+        if (fields >> star >> mhz >> unit && star == "*" && unit == "MHz" &&
+            line.find("(disabled)") == std::string::npos && mhz > 0 && mhz <= 71000 &&
+            mhz == static_cast<unsigned>(mhz))
+            frequencies.push_back(static_cast<unsigned>(mhz));
+    }
+    std::sort(frequencies.begin(), frequencies.end());
+    frequencies.erase(std::unique(frequencies.begin(), frequencies.end()), frequencies.end());
     const auto state = monitor_mode_from_iw_phy_info(output);
     if (state == CapabilityState::Supported) {
-        return {state, "Kernel advertises monitor mode", frequency_bands(output)};
+        return {state, "Kernel advertises monitor mode", frequency_bands(output), frequencies};
     }
     if (state == CapabilityState::Unsupported) {
-        return {state, "Kernel lacks monitor mode", frequency_bands(output)};
+        return {state, "Kernel lacks monitor mode", frequency_bands(output), frequencies};
     }
-    return {state, "PHY modes unknown; radio unchanged", frequency_bands(output)};
+    return {state, "PHY modes unknown; radio unchanged", frequency_bands(output), frequencies};
 }
 
 } // namespace platform::wireless

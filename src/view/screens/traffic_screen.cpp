@@ -19,7 +19,10 @@ TrafficScreen::~TrafficScreen() {
 void TrafficScreen::build_content(lv_obj_t* content) {
     const auto colors = view::palette(view_model().is_dark_mode());
     for (const auto& adapter : view_model().adapters()) {
-        if (adapter.stable_id == view_model().selected_radio_id()) interface_ = adapter.interface_name;
+        if (adapter.stable_id == view_model().selected_radio_id()) {
+            interface_ = adapter.interface_name;
+            channels_ = adapter.frequencies;
+        }
     }
     auto* title = title_ = lv_label_create(content);
     view_model().take_traffic_step();
@@ -49,7 +52,7 @@ void TrafficScreen::build_content(lv_obj_t* content) {
     sample();
     timer_ = lv_timer_create([](lv_timer_t* timer) {
         static_cast<TrafficScreen*>(lv_timer_get_user_data(timer))->sample();
-    }, 1000, this);
+    }, 100, this);
 }
 
 void TrafficScreen::draw(double value, double scale) {
@@ -64,48 +67,66 @@ void TrafficScreen::draw(double value, double scale) {
 }
 
 void TrafficScreen::sample() {
-    bool fresh = false;
-    if (survey_.valid() && survey_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
-        channels_ = survey_.get();
-        fresh = true;
+    const int step = view_model().take_traffic_step();
+    if (step && !channels_.empty()) {
+        auto it = std::find(channels_.begin(), channels_.end(), requested_);
+        const int count = static_cast<int>(channels_.size());
+        const int pos = it == channels_.end() ? (step > 0 ? -1 : 0) : static_cast<int>(it - channels_.begin());
+        requested_ = channels_[((pos + step % count) % count + count) % count];
+        tune_failed_ = false;
     }
-    if (!survey_.valid()) {
-        survey_ = std::async(std::launch::async, platform::wireless::channel_survey, interface_);
-    }
-    const auto found = std::find_if(channels_.begin(), channels_.end(),
-        [&](const auto& item) { return item.mhz == frequency_; });
-    const int current = found == channels_.end() ? 0 : 1 + int(found - channels_.begin());
-    const int choices = int(channels_.size()) + 1;
-    const int index = (current + view_model().take_traffic_step() + choices) % choices;
-    const unsigned frequency = index ? channels_[index - 1].mhz : 0;
-    if (frequency != frequency_) {
-        frequency_ = frequency;
+    if (tuning_.valid()) {
+        if (tuning_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return;
+        const auto reply = tuning_.get();
+        if (reply == "OK") frequency_ = issued_;
+        else {
+            frequency_ = 0;
+            tune_failed_ = issued_ == requested_;
+            lv_label_set_text(status_, reply.c_str());
+        }
+        have_sample_ = false;
+        previous_channel_ = {};
         history_.fill(0);
         draw(0, 100);
-        previous_channel_ = {};
-        have_sample_ = false;
+        if (survey_.valid()) survey_.get(); // Discard any survey started before the switch.
+        sample_tick_ = lv_tick_get() - 1000;
     }
-    set_key_guide(choices > 1 ? "Z/C Channel    Esc Back" : "Interface packets/s    Esc Back");
-    if (index) {
-        const auto& channel = channels_[index - 1];
-        const unsigned number = platform::wireless::channel_number(frequency_);
-        if (number) {
-            const char* band = frequency_ < 2500 ? "2.4" : frequency_ < 5000 ? "4.9" :
-                               frequency_ < 5935 ? "5" : frequency_ < 8000 ? "6" : "60";
-            lv_label_set_text_fmt(title_, "Channel %u   %s GHz", number, band);
-        } else lv_label_set_text(title_, "Channel unknown");
-        lv_label_set_text(status_, "Waiting for driver airtime sample");
-        if (fresh && previous_channel_.mhz == frequency_ && channel.active > previous_channel_.active &&
-            channel.busy >= previous_channel_.busy) {
-            const double busy = std::min(100.0, 100.0 * (channel.busy - previous_channel_.busy) /
-                                                   (channel.active - previous_channel_.active));
-            draw(busy, 100);
-            lv_label_set_text_fmt(status_, "%d%% busy airtime", static_cast<int>(std::round(busy)));
-        }
-        previous_channel_ = channel;
+    if (tune_failed_) return;
+    if (requested_ && requested_ != frequency_) {
+        issued_ = requested_;
+        lv_label_set_text_fmt(title_, "Tuning channel %u", platform::wireless::channel_number(issued_));
+        lv_label_set_text(status_, "Waiting for radio");
+        tuning_ = std::async(std::launch::async, [this, mhz = issued_] {
+            return view_model().tune_traffic_channel(mhz);
+        });
         return;
     }
-    lv_label_set_text_fmt(title_, "RX + TX packets   %s", interface_.c_str());
+    set_key_guide(channels_.empty() ? "Interface packets/s    Esc Back" : "Z/C Tune channel    Esc Back");
+    if (lv_tick_elaps(sample_tick_) < 1000) return;
+    sample_tick_ = lv_tick_get();
+    if (frequency_) {
+        const char* band = frequency_ < 2500 ? "2.4" : frequency_ < 5000 ? "4.9" :
+                           frequency_ < 5935 ? "5" : frequency_ < 8000 ? "6" : "60";
+        lv_label_set_text_fmt(title_, "Channel %u   %s GHz", platform::wireless::channel_number(frequency_), band);
+    } else lv_label_set_text_fmt(title_, "RX + TX packets   %s", interface_.c_str());
+    std::string busy_text = "--% busy";
+    if (frequency_) {
+        if (survey_.valid() && survey_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+            for (const auto& channel : survey_.get()) {
+                if (channel.mhz != frequency_) continue;
+                if (previous_channel_.mhz == frequency_ && channel.active > previous_channel_.active &&
+                    channel.busy >= previous_channel_.busy) {
+                    const double busy = std::min(100.0, 100.0 * (channel.busy - previous_channel_.busy) /
+                                                              (channel.active - previous_channel_.active));
+                    busy_text = std::to_string(std::llround(busy)) + "% busy";
+                }
+                previous_channel_ = channel;
+                break;
+            }
+        }
+        if (!survey_.valid())
+            survey_ = std::async(std::launch::async, platform::wireless::channel_survey, interface_);
+    }
     uint64_t rx{}, tx{};
     const std::string path = "/sys/class/net/" + interface_ + "/statistics/";
     if (!(std::ifstream(path + "rx_packets") >> rx) || !(std::ifstream(path + "tx_packets") >> tx)) {
@@ -115,7 +136,7 @@ void TrafficScreen::sample() {
             lv_obj_set_height(bar, 1);
             lv_obj_set_y(bar, 83);
         }
-        lv_label_set_text(status_, "Adapter counters unavailable");
+        lv_label_set_text(status_, (busy_text + "    -- pkt/s").c_str());
         return;
     }
     const uint32_t elapsed = lv_tick_elaps(tick_);
@@ -123,7 +144,8 @@ void TrafficScreen::sample() {
         const double rate = (double(rx - previous_rx_) + double(tx - previous_tx_)) * 1000 / elapsed;
         draw(rate, 0);
         const double peak = *std::max_element(history_.begin(), history_.end());
-        const auto text = std::to_string(std::llround(rate)) + " pkt/s     Peak " + std::to_string(std::llround(peak));
+        const auto text = std::to_string(std::llround(rate)) + " pkt/s     " +
+            (frequency_ ? busy_text : "Peak " + std::to_string(std::llround(peak)));
         lv_label_set_text(status_, text.c_str());
     } else {
         lv_label_set_text(status_, "Sampling...");

@@ -121,6 +121,7 @@ Catalog enumerate() {
         adapter.stable_id = stable_identity(adapter);
         const auto monitor_probe = probe_monitor_mode(adapter.phy_name);
         adapter.bands = monitor_probe.bands;
+        adapter.frequencies = monitor_probe.frequencies;
         adapter.monitor_mode = monitor_probe.state;
         adapter.injection = CapabilityState::Unverified;
         adapter.capability_note = monitor_probe.note;

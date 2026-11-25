@@ -50,6 +50,24 @@ std::string MonitorSession::start(const std::string& name) {
 #endif
 }
 
+std::string MonitorSession::tune(unsigned mhz) {
+#if defined(__linux__) && !USE_DESKTOP
+    const auto command = std::to_string(mhz) + "\n";
+    if (channel_ < 0 || send(channel_, command.data(), command.size(), MSG_NOSIGNAL) != static_cast<ssize_t>(command.size()))
+        return "Monitor session unavailable";
+    std::string reply;
+    char c;
+    while (reply.size() < 64) {
+        const auto n = recv(channel_, &c, 1, 0);
+        if (n < 0 && errno == EINTR) continue;
+        if (n != 1) return "Monitor helper disconnected";
+        if (c == '\n') return reply;
+        reply += c;
+    }
+#endif
+    return "Channel tune unavailable";
+}
+
 std::string MonitorSession::stop() {
 #if defined(__linux__) && !USE_DESKTOP
     if (channel_ >= 0) {

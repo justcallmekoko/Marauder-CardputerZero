@@ -19,6 +19,7 @@ public:
     ~MonitorSession();
     std::string start(const std::string& name);
     std::string stop();
+    std::string tune(unsigned mhz);
 private:
     int channel_{-1}, child_{-1};
 };

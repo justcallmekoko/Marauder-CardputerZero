@@ -271,7 +271,8 @@ private:
 
         if (view_model_.current_page() == model::AppPage::Traffic &&
             (action == NavigationAction::Back || action == NavigationAction::Primary) && key != LV_KEY_ENTER) {
-            view_model_.step_traffic_channel(action == NavigationAction::Back ? -1 : 1);
+            if (view_model_.traffic_can_tune()) view_model_.step_traffic_channel(action == NavigationAction::Back ? -1 : 1);
+            else show_confirmation("Enable monitor mode to tune channels", "Enter Adapters", DialogAction::OpenAdapters);
             return true;
         }
         if (view_model_.current_page() == model::AppPage::WifiScan) {

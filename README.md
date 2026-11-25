@@ -54,7 +54,7 @@ The GPS badge shows Off, Wait, No data, Busy, or the number of satellites used i
 
 Open **WiFi → General → Adapter Setup** to choose the WiFi interface used by the app. The border follows keyboard focus, and an asterisk marks the interface selected for use. Press `Enter` to select the highlighted adapter or `D` to inspect its details.
 
-Under **WiFi > Networks > Access Points**, the list shows cached APs as soon as the Wi-Fi service supplies them, adds new discoveries during refresh, and reconciles the results after each scan. Scans repeat every 20 seconds while browsing. Use F/X to highlight a network, Enter to inspect its managed-scan details, Esc to return, and D to rescan. The C++ collector speaks to the local Wi-Fi service directly and parses its discovery records. The AP inventory scrolls one row at a time. In Adapters, M switches the selected idle adapter into monitor mode. M again or exiting the app releases it. **WiFi > Activity > Traffic graph** plots the selected adapter’s received and transmitted packets per second over the last 30 samples. The graph uses interface counters and scales to the visible peak. On drivers that report channel surveys, Z/C selects a channel by number and band and plots changes in busy airtime. Sampling follows the driver’s channel visits. Choosing an adapter with a live Wi-Fi connection, a hosted hotspot, or an unknown connection state prompts for confirmation. Adapter details show monitor capability and current monitor status.
+Under **WiFi > Networks > Access Points**, the list shows cached APs as soon as the Wi-Fi service supplies them, adds new discoveries during refresh, and reconciles the results after each scan. Scans repeat every 20 seconds while browsing. Use F/X to highlight a network, Enter to inspect its managed-scan details, Esc to return, and D to rescan. The C++ collector speaks to the local Wi-Fi service directly and parses its discovery records. The AP inventory scrolls one row at a time. In Adapters, M switches the selected idle adapter into monitor mode. M again or exiting the app releases it. **WiFi > Activity > Traffic graph** plots the selected adapter’s received and transmitted packets per second over the last 30 samples. The graph uses interface counters and scales to the visible peak. With monitor mode enabled in Adapters, Z/C tunes the radio to an enabled channel. The graph plots interface packets per second and shows driver-reported busy airtime alongside the rate. A dash means the driver has no fresh measurement. Choosing an adapter with a live Wi-Fi connection, a hosted hotspot, or an unknown connection state prompts for confirmation. Adapter details show monitor capability and current monitor status.
 
 Monitor switching requires one-time administrator enrollment for the local operator. The approved sudo command is only `/usr/lib/marauder/monitor-session`. For example, a sudoers entry for the account `operator` is `operator ALL=(root) NOPASSWD: /usr/lib/marauder/monitor-session`. Install the package before enrolling the user. The helper accepts a wireless interface name and restores its mode when the app closes its session.
 
@@ -100,7 +100,7 @@ cmake --build --preset linux-x86-64-dbg
 cmake --workflow --preset cp0-cross-package
 ```
 
-The expected artifact is `dist/Marauder_0.6.21_rev1_arm64.deb`. Packaging and deployment remain separate actions.
+The expected artifact is `dist/Marauder_0.6.22_rev1_arm64.deb`. Packaging and deployment remain separate actions.
 
 ## Safety and scope
 

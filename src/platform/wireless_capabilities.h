@@ -6,6 +6,7 @@
 
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace platform::wireless {
 
@@ -20,6 +21,7 @@ struct MonitorModeProbe {
     CapabilityState state{CapabilityState::Unknown};
     std::string note;
     std::string bands;
+    std::vector<unsigned> frequencies;
 };
 
 std::string frequency_bands(const std::string& info);

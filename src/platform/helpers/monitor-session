@@ -53,7 +53,27 @@ def lease(name):
             if not re.search(r"^\s*type monitor$", run(IW, "dev", name, "info"), re.M):
                 raise ValueError("Mode change unconfirmed")
             print("Monitor on", flush=True)
-            sys.stdin.buffer.read(1)
+            allowed = {int(match.group(1)) for line in modes.splitlines()
+                       if "(disabled)" not in line
+                       and (match := re.match(r"\s*\* (\d+)(?:\.0+)? MHz \[", line))}
+            while request := sys.stdin.buffer.readline(32):
+                if not re.fullmatch(rb"[0-9]{3,5}\n", request):
+                    break
+                freq = int(request)
+                if socket.if_nametoindex(name) != index or (link / "phy80211").resolve() != phy:
+                    break
+                try:
+                    if freq not in allowed:
+                        raise ValueError("Channel unavailable")
+                    info = run(IW, "dev", name, "info")
+                    if not re.search(r"^\s*type monitor$", info, re.M):
+                        raise ValueError("Monitor mode required")
+                    run(IW, "dev", name, "set", "freq", str(freq))
+                    info = run(IW, "dev", name, "info")
+                    tuned = re.search(r"^\s*channel \d+ \((\d+) MHz\)", info, re.M)
+                    print("OK" if tuned and int(tuned[1]) == freq else "Tune unconfirmed", flush=True)
+                except (ValueError, subprocess.SubprocessError):
+                    print("Channel tune failed", flush=True)
         finally:
             if socket.if_nametoindex(name) == index:
                 failures = []
