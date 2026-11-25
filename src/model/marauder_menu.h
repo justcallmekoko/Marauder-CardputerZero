@@ -20,6 +20,8 @@ enum class MarauderMenuId {
     Gps,
     Device,
     Settings,
+    RadioSetup,
+    FilesAndMemory,
 };
 
 enum class MarauderMenuAction {
@@ -28,6 +30,11 @@ enum class MarauderMenuAction {
     OpenAdapters,
     OpenDiagnostics,
     CycleBatteryDisplay,
+    EnableWifi,
+    EnableBluetooth,
+    EnableGps,
+    CycleStorage,
+    CycleCache,
 };
 
 enum class MarauderMenuColor {

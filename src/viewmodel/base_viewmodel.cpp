@@ -7,6 +7,9 @@
 
 #include "display_format.h"
 #include "system_diagnostics.h"
+#include "radio_power.h"
+#include "src/misc/cache/instance/lv_image_cache.h"
+#include <chrono>
 
 #include <algorithm>
 #include <sstream>
@@ -29,6 +32,7 @@ BaseViewModel::BaseViewModel()
       adapter_detail_subject_("Collecting wireless adapters..."),
       wifi_scan_subject_("SELECT AN ADAPTER FIRST"),
       quit_requested_subject_(false) {
+    lv_image_cache_resize(model_.cache_kib() * 1024U, false);
     wifi_scan_timer_ = lv_timer_create(wifi_scan_timer_cb, 100, this);
     refresh_diagnostics();
 }
@@ -84,7 +88,15 @@ void BaseViewModel::move_menu_focus(int dx, int dy) {
         marauder_menu_generation_subject_.set(marauder_menu_generation_subject_.value() + 1);
 }
 void BaseViewModel::marauder_menu_activate() {
+    using Action = model::MarauderMenuAction;
     const auto action = marauder_menu_.activate();
+    if (action == Action::CycleStorage || action == Action::CycleCache) {
+        const bool storage = action == Action::CycleStorage;
+        const bool saved = storage ? model_.cycle_storage() : model_.cycle_cache();
+        if (saved && !storage) lv_image_cache_resize(model_.cache_kib() * 1024U, true);
+        resource_message_ = !saved ? "Could not save preference" : !storage ? "Image cache limit applied" :
+            model_.screenshots_in_documents() ? "~/Documents/Marauder" : "~/Pictures/Screenshots";
+    }
     if (action == model::MarauderMenuAction::CycleBatteryDisplay) {
         model_.cycle_battery_display();
         battery_display_subject_.set(static_cast<int>(model_.battery_display()));
@@ -100,11 +112,47 @@ void BaseViewModel::marauder_menu_activate() {
         case model::MarauderMenuAction::OpenDiagnostics:
             show_diagnostics_page();
             break;
+        case Action::EnableWifi:
+        case Action::EnableBluetooth:
+        case Action::EnableGps:
+            if (!radio_job_.valid()) {
+                const auto radio = action == Action::EnableWifi ? platform::Radio::Wifi :
+                    action == Action::EnableBluetooth ? platform::Radio::Bluetooth : platform::Radio::Gps;
+                try {
+                    radio_message_ = "Checking radio...";
+                    radio_job_ = std::async(std::launch::async, platform::enable_radio, radio);
+                } catch (const std::system_error&) { radio_message_ = "Radio worker unavailable"; }
+                marauder_menu_generation_subject_.set(marauder_menu_generation_subject_.value() + 1);
+            }
+            break;
+        case Action::CycleStorage:
+        case Action::CycleCache:
         case model::MarauderMenuAction::CycleBatteryDisplay:
         case model::MarauderMenuAction::None:
             break;
     }
 }
+const char* BaseViewModel::settings_message() const {
+    if (marauder_menu_.current_menu() == model::MarauderMenuId::RadioSetup) return radio_message_.c_str();
+    if (marauder_menu_.current_menu() == model::MarauderMenuId::FilesAndMemory) return resource_message_.c_str();
+    return "";
+}
+
+std::string BaseViewModel::setting_value(model::MarauderMenuAction action) const {
+    if (action == model::MarauderMenuAction::CycleStorage)
+        return model_.screenshots_in_documents() ? "Documents" : "Pictures";
+    if (action == model::MarauderMenuAction::CycleCache)
+        return model_.cache_kib() ? std::to_string(model_.cache_kib()) + " KiB" : "Off";
+    return {};
+}
+
+void BaseViewModel::finish_radio_setting() {
+    if (!radio_job_.valid() || radio_job_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return;
+    try { radio_message_ = radio_job_.get(); }
+    catch (const std::exception&) { radio_message_ = "Radio request failed"; }
+    marauder_menu_generation_subject_.set(marauder_menu_generation_subject_.value() + 1);
+}
+
 bool BaseViewModel::marauder_menu_back() {
     if (!marauder_menu_.back()) return false;
     marauder_menu_generation_subject_.set(marauder_menu_generation_subject_.value() + 1);
@@ -255,7 +303,10 @@ void BaseViewModel::request_quit() { quit_requested_subject_.set(true); }
 
 void BaseViewModel::wifi_scan_timer_cb(lv_timer_t* timer) {
     auto* self = static_cast<BaseViewModel*>(lv_timer_get_user_data(timer));
-    if (self) self->finish_wifi_scan_if_ready();
+    if (self) {
+        self->finish_wifi_scan_if_ready();
+        self->finish_radio_setting();
+    }
 }
 
 void BaseViewModel::finish_wifi_scan_if_ready() {

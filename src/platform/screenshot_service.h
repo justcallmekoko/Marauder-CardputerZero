@@ -16,6 +16,6 @@ struct CaptureResult {
     std::string error;
 };
 
-CaptureResult capture_active_screen();
+CaptureResult capture_active_screen(bool documents);
 
 } // namespace platform::screenshot

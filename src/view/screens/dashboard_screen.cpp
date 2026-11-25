@@ -75,7 +75,8 @@ void DashboardScreen::render_menu() {
     lv_label_set_text(menu_title_, root ? "Launcher" : view_model().marauder_menu_title());
     const auto position = std::to_string(view_model().marauder_menu_selected_index() + 1) + " / " +
                           std::to_string(view_model().marauder_menu_item_count());
-    lv_label_set_text(footer_, position.c_str());
+    const char* message = view_model().settings_message();
+    lv_label_set_text(footer_, *message ? message : position.c_str());
     set_key_guide(root ? "F/X Up/Down  Z/C Left/Right  Enter Open  Esc Exit" :
                          "F/X Up/Down  Z/C Left/Right  Enter Open  Esc Back");
     lv_obj_set_style_text_color(menu_title_, colors.text, 0);
@@ -102,6 +103,13 @@ void DashboardScreen::render_menu() {
         std::string label(item.label);
         if (item.action == model::MarauderMenuAction::CycleBatteryDisplay)
             label += std::string(": ") + model::battery_display_name(view_model().battery_display());
+        const auto value = view_model().setting_value(item.action);
+        if (!value.empty()) {
+            lv_label_set_text(marks_[i], value.c_str());
+            lv_obj_set_style_text_font(marks_[i], &lv_font_montserrat_10, 0);
+        } else {
+            lv_obj_set_style_text_font(marks_[i], &lv_font_montserrat_14, 0);
+        }
         if (!item.available) label += "  (soon)";
         lv_label_set_text(row_labels_[i], label.c_str());
         lv_obj_set_width(row_labels_[i], width - 16);

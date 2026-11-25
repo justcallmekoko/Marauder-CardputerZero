@@ -82,7 +82,19 @@ int main() {
     menu.activate();
     if (menu.activate() != MarauderMenuAction::CycleBatteryDisplay) return 18;
     menu.next();
-    if (menu.selected_index() != 1 || menu.item_count() != 2 || menu.activate() != MarauderMenuAction::OpenAdapters) return 19;
+    if (menu.item_count() != 4 || menu.activate() != MarauderMenuAction::None) return 19;
+    if (menu.item_count() != 4 || menu.activate() != MarauderMenuAction::EnableWifi) return 33;
+    menu.move(1, 0);
+    if (menu.activate() != MarauderMenuAction::EnableBluetooth) return 34;
+    menu.move(-1, 0);
+    menu.move(0, 1);
+    if (menu.activate() != MarauderMenuAction::EnableGps) return 35;
+    menu.back();
+    menu.next();
+    menu.activate();
+    if (menu.activate() != MarauderMenuAction::CycleStorage) return 36;
+    menu.next();
+    if (menu.activate() != MarauderMenuAction::CycleCache) return 37;
 
     return 0;
 }

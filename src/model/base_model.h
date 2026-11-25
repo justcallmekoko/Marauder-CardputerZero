@@ -24,6 +24,10 @@ public:
     BaseModel();
     BatteryDisplay battery_display() const { return battery_display_; }
     void cycle_battery_display();
+    bool screenshots_in_documents() const { return documents_; }
+    unsigned cache_kib() const { return cache_kib_; }
+    bool cycle_storage();
+    bool cycle_cache();
     const char* app_title() const;
     bool dark_mode() const;
     AppPage current_page() const;
@@ -33,6 +37,8 @@ public:
     void set_selected_adapter_id(std::string stable_id);
 
 private:
+    bool documents_{false};
+    unsigned cache_kib_{0};
     BatteryDisplay battery_display_{BatteryDisplay::Both};
     AppPage current_page_{AppPage::Dashboard};
     std::string selected_adapter_id_;

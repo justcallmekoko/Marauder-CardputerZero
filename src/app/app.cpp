@@ -72,7 +72,7 @@ private:
     bool handle_key(uint32_t key, bool long_pressed) {
         if (key == platform::kKeyPrintScreen) {
             if (!long_pressed) {
-                const auto result = platform::screenshot::capture_active_screen();
+                const auto result = platform::screenshot::capture_active_screen(view_model_.screenshots_in_documents());
                 if (result.success) {
                     LOG_INFO("screenshot saved: {}", result.path);
                     toast_->show_highlighted("Saved to ",

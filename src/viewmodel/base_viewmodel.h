@@ -19,6 +19,7 @@
 #include <atomic>
 #include <cstddef>
 #include <mutex>
+#include <future>
 #include <thread>
 #include <vector>
 
@@ -70,6 +71,9 @@ public:
     std::size_t adapter_cursor() const { return highlighted_adapter_; }
     bool adapter_details_open() const { return adapter_details_expanded_; }
     const std::string& selected_radio_id() const { return model_.selected_adapter_id(); }
+    bool screenshots_in_documents() const { return model_.screenshots_in_documents(); }
+    std::string setting_value(model::MarauderMenuAction action) const;
+    const char* settings_message() const;
     void refresh_adapters();
     void previous_adapter();
     void next_adapter();
@@ -91,6 +95,10 @@ private:
     void finish_wifi_scan_if_ready();
     static void wifi_scan_timer_cb(lv_timer_t* timer);
 
+    void finish_radio_setting();
+    std::future<std::string> radio_job_;
+    std::string radio_message_;
+    std::string resource_message_;
     model::BaseModel model_;
     model::MarauderMenuModel marauder_menu_;
     reactive::StringSubject<32> title_subject_;
