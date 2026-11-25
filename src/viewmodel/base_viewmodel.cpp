@@ -697,6 +697,7 @@ void BaseViewModel::publish_adapter_detail() {
             << "Injection " << platform::wireless::capability_label(adapter.injection) << '\n'
             << adapter.capability_note;
     }
+    if (!adapter_error_.empty()) out << '\n' << adapter_error_;
     adapter_detail_subject_.set(out.str().c_str());
 }
 

@@ -50,7 +50,7 @@ constexpr std::array<HelpRow, 5> kAdapterRows = {{
     {"F / X", "Previous / next adapter"},
     {"C / ENTER", "Select adapter"},
     {"D", "More / summary"},
-    {"HELP", "Context help"},
+    {"M", "Toggle selected monitor mode"},
 }};
 
 constexpr std::array<HelpRow, 5> kWifiScanRows = {{
