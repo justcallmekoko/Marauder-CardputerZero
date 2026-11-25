@@ -75,10 +75,6 @@ bool parse_monitor_frame(const uint8_t* bytes, std::size_t size, FrameObservatio
         bssid = to_ds ? frame + 4 : frame + 10;
         client = to_ds ? frame + 10 : frame + 4;
         out.client_transmitted = to_ds;
-    } else if (type == 0 && (subtype == 0 || subtype == 2)) {
-        bssid = frame + 16;
-        client = frame + 10;
-        out.client_transmitted = true;
     } else return false;
     if (!bssid || !individual(bssid)) return false;
     out.bssid = address(bssid);

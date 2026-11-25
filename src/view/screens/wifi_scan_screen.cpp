@@ -99,7 +99,8 @@ void WifiScanScreen::render() {
         message += "\nVendor  " + item.vendor.substr(0, 40);
         message += "\nCH " + std::to_string(item.channel) + "    " +
             (item.has_rssi ? std::to_string(item.rssi) + " dBm" : "RSSI unknown");
-        message += "\n" + item.security + "   " + std::to_string(item.frames) + " frames";
+        message += "\n" + (item.security.empty() ? "Security unknown" : item.security) +
+            "   " + std::to_string(item.frames) + " frames";
         message += "\n" + std::to_string(item.clients.size()) + " observed clients";
     } else if (client_list && clients->empty()) {
         message = "No client frames observed yet";
