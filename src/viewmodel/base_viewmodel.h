@@ -186,6 +186,7 @@ private:
     int wifi_view_{0};
     std::size_t wifi_client_index_{};
     std::atomic<bool> wifi_capture_stop_{false};
+    std::atomic<bool> wifi_capture_failed_{false};
     std::atomic<bool> wifi_scan_running_{false};
     std::mutex wifi_scan_mutex_;
     std::vector<platform::wireless::FrameObservation> incoming_frames_;

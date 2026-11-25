@@ -19,6 +19,7 @@
 #include <system_error>
 #include <iterator>
 #if defined(__linux__) && !USE_DESKTOP
+#include <cerrno>
 #include <poll.h>
 #include <unistd.h>
 #endif
@@ -520,6 +521,7 @@ void BaseViewModel::start_wifi_scan() {
     wifi_client_index_ = 0;
     wifi_view_ = 0;
     wifi_capture_stop_ = false;
+    wifi_capture_failed_ = false;
     wifi_hop_index_ = 0;
     wifi_tuned_frequency_ = 0;
     wifi_hop_tick_ = 0;
@@ -531,13 +533,18 @@ void BaseViewModel::start_wifi_scan() {
             while (!wifi_capture_stop_) {
                 pollfd ready{capture, POLLIN, 0};
                 const int status = poll(&ready, 1, 150);
-                if (status <= 0) continue;
+                if (status < 0) { if (errno == EINTR) continue; break; }
+                if (status == 0) continue;
+                if (ready.revents & (POLLERR | POLLHUP | POLLNVAL)) break;
+                if (!(ready.revents & POLLIN)) continue;
                 const auto count = read(capture, bytes, sizeof(bytes));
+                if (count <= 0) break;
                 platform::wireless::FrameObservation observation;
-                if (count <= 0 || !platform::wireless::parse_monitor_frame(bytes, static_cast<size_t>(count), observation)) continue;
+                if (!platform::wireless::parse_monitor_frame(bytes, static_cast<size_t>(count), observation)) continue;
                 std::lock_guard<std::mutex> lock(wifi_scan_mutex_);
                 if (incoming_frames_.size() < 1024) incoming_frames_.push_back(std::move(observation));
             }
+            if (!wifi_capture_stop_) wifi_capture_failed_ = true;
             close(capture);
 #endif
         });
@@ -672,6 +679,11 @@ void BaseViewModel::wifi_scan_timer_cb(lv_timer_t* timer) {
             self->publish_adapter_detail();
         }
         self->finish_wifi_scan_if_ready();
+        if (self->wifi_capture_failed_.exchange(false)) {
+            self->stop_wifi_capture();
+            self->wifi_scan_error_ = "Monitor capture stopped";
+            self->publish_wifi_scan();
+        }
         self->advance_wifi_channel();
         self->finish_radio_setting();
         self->update_gps_status();
