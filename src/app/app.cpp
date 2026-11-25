@@ -60,7 +60,7 @@ void quit_requested_observer(lv_observer_t* observer, lv_subject_t* subject) {
 class ShortcutController {
 public:
     ShortcutController(viewmodel::BaseViewModel& view_model, AssetManager& assets)
-        : view_model_(view_model),
+        : view_model_(view_model), assets_(assets),
           toast_(std::make_unique<view::widgets::Toast>(lv_layer_top(), view_model, assets)),
           help_popup_(std::make_unique<view::widgets::HelpPopup>(lv_layer_top(), view_model, assets)) {
         toast_->build();
@@ -70,11 +70,66 @@ public:
 
     ~ShortcutController() {
         platform::clear_global_key_listener(global_key_listener, this);
+        if (exit_dialog_) lv_obj_delete(exit_dialog_);
     }
 
 private:
+    void show_exit_dialog() {
+        const auto colors = view::palette(view_model_.is_dark_mode());
+        exit_dialog_ = lv_obj_create(lv_layer_top());
+        lv_obj_remove_style_all(exit_dialog_);
+        lv_obj_set_size(exit_dialog_, LV_PCT(100), LV_PCT(100));
+        lv_obj_set_style_bg_color(exit_dialog_, lv_color_black(), 0);
+        lv_obj_set_style_bg_opa(exit_dialog_, LV_OPA_80, 0);
+        lv_obj_clear_flag(exit_dialog_, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_add_flag(exit_dialog_, LV_OBJ_FLAG_CLICKABLE);
+
+        auto* panel = lv_obj_create(exit_dialog_);
+        lv_obj_remove_style_all(panel);
+        lv_obj_set_size(panel, 248, 88);
+        lv_obj_center(panel);
+        lv_obj_clear_flag(panel, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_style_radius(panel, 6, 0);
+        lv_obj_set_style_bg_color(panel, colors.surface, 0);
+        lv_obj_set_style_bg_opa(panel, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_width(panel, 1, 0);
+        lv_obj_set_style_border_color(panel, colors.border, 0);
+
+        auto* title = lv_label_create(panel);
+        lv_label_set_text(title, "Exit Marauder?");
+        auto* font = assets_.load_standard_font(16);
+        lv_obj_set_style_text_font(title, font ? font : LV_FONT_DEFAULT, 0);
+        lv_obj_set_style_text_color(title, colors.text, 0);
+        lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 12);
+
+        const auto add_shortcut = [&](const char* text, lv_align_t align, int x, lv_color_t color) {
+            auto* label = lv_label_create(panel);
+            lv_label_set_text(label, text);
+            auto* key_font = assets_.load_standard_font(12);
+            lv_obj_set_style_text_font(label, key_font ? key_font : LV_FONT_DEFAULT, 0);
+            lv_obj_set_style_text_color(label, color, 0);
+            lv_obj_set_style_bg_color(label, color, 0);
+            lv_obj_set_style_bg_opa(label, LV_OPA_10, 0);
+            lv_obj_set_style_pad_hor(label, 8, 0);
+            lv_obj_set_style_pad_ver(label, 4, 0);
+            lv_obj_set_style_radius(label, 3, 0);
+            lv_obj_align(label, align, x, -12);
+        };
+        add_shortcut("Esc  Cancel", LV_ALIGN_BOTTOM_LEFT, 12, colors.text);
+        add_shortcut("Enter  Exit", LV_ALIGN_BOTTOM_RIGHT, -12, colors.warning);
+    }
+
     bool handle_key(uint32_t key, bool long_pressed) {
         if (view_model_.wake_display()) return true;
+        if (exit_dialog_) {
+            if (!long_pressed && key == LV_KEY_ENTER) {
+                view_model_.request_quit();
+            } else if (!long_pressed && key == LV_KEY_ESC) {
+                lv_obj_delete(exit_dialog_);
+                exit_dialog_ = nullptr;
+            }
+            return true;
+        }
         if (view_model_.editing_credential()) {
             if (!long_pressed) view_model_.credential_key(key);
             return true;
@@ -126,7 +181,7 @@ private:
                                   view_model_.marauder_menu_at_root())) {
                 case EscapeAction::ExitApplication:
                     toast_->hide();
-                    view_model_.request_quit();
+                    show_exit_dialog();
                     break;
                 case EscapeAction::BackMenu:
                     view_model_.marauder_menu_back();
@@ -199,6 +254,8 @@ private:
     }
 
     viewmodel::BaseViewModel& view_model_;
+    AssetManager& assets_;
+    lv_obj_t* exit_dialog_ = nullptr;
     std::unique_ptr<view::widgets::Toast> toast_;
     std::unique_ptr<view::widgets::HelpPopup> help_popup_;
 };
