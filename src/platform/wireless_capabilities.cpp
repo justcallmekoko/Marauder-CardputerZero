@@ -22,29 +22,6 @@ std::string trim(std::string value) {
     return value;
 }
 
-std::string frequency_bands(const std::string& info) {
-    struct Band { int low, high; const char* name; bool seen; };
-    Band bands[] = {{750, 999, "Sub-1", false}, {2400, 2500, "2.4", false},
-                    {4900, 5924, "5", false}, {5925, 7125, "6", false},
-                    {57000, 71000, "60", false}};
-    std::istringstream lines(info);
-    for (std::string line; std::getline(lines, line);) {
-        std::istringstream fields(line);
-        std::string star, unit;
-        int frequency;
-        if (!(fields >> star >> frequency >> unit) || star != "*" || unit != "MHz") continue;
-        for (auto& band : bands)
-            if (frequency >= band.low && frequency <= band.high) band.seen = true;
-    }
-    std::string result;
-    for (const auto& band : bands) {
-        if (!band.seen) continue;
-        if (!result.empty()) result += " / ";
-        result += band.name;
-    }
-    return result.empty() ? result : result + " GHz";
-}
-
 bool safe_phy_name(const std::string& value) {
     return !value.empty() && std::all_of(value.begin(), value.end(), [](unsigned char ch) {
         return std::isalnum(ch) != 0 || ch == '_' || ch == '-' || ch == '.';
@@ -59,6 +36,29 @@ std::string iw_binary() {
 }
 
 } // namespace
+
+std::string frequency_bands(const std::string& info) {
+    struct Band { int low, high; const char* name; bool seen; };
+    Band bands[] = {{750, 999, "Sub-1", false}, {2400, 2500, "2.4", false},
+                    {4900, 5924, "5", false}, {5925, 7125, "6", false},
+                    {57000, 71000, "60", false}};
+    std::istringstream lines(info);
+    for (std::string line; std::getline(lines, line);) {
+        std::istringstream fields(line);
+        std::string star, unit;
+        double frequency;
+        if (!(fields >> star >> frequency >> unit) || star != "*" || unit != "MHz") continue;
+        for (auto& band : bands)
+            if (frequency >= band.low && frequency <= band.high) band.seen = true;
+    }
+    std::string result;
+    for (const auto& band : bands) {
+        if (!band.seen) continue;
+        if (!result.empty()) result += " / ";
+        result += band.name;
+    }
+    return result.empty() ? result : result + " GHz";
+}
 
 CapabilityState monitor_mode_from_iw_phy_info(std::string_view output) {
     bool in_modes = false;

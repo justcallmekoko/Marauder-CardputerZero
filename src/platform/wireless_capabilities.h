@@ -22,6 +22,7 @@ struct MonitorModeProbe {
     std::string bands;
 };
 
+std::string frequency_bands(const std::string& info);
 CapabilityState monitor_mode_from_iw_phy_info(std::string_view output);
 MonitorModeProbe probe_monitor_mode(const std::string& phy_name);
 
