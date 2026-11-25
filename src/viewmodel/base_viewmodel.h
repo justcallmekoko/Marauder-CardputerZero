@@ -73,6 +73,7 @@ public:
     void previous_system_info_page();
     void next_system_info_page();
     void toggle_system_info_details();
+    const auto& adapter_error() const { return adapter_error_; }
     const auto& adapters() const { return adapters_; }
     std::size_t adapter_cursor() const { return highlighted_adapter_; }
     bool adapter_details_open() const { return adapter_details_expanded_; }
@@ -119,7 +120,7 @@ private:
     void sync_gps_rows();
     reactive::StringSubject<16> gps_status_{"Off"};
     platform::GpsSession gps_session_;
-    std::string gps_id_;
+    std::string gps_id_, radio_session_;
     void finish_radio_setting();
     void load_radios(std::string key, bool enabled);
     std::future<platform::RadioInventory> radio_job_;

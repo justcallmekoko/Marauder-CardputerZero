@@ -129,6 +129,8 @@ bool BaseModel::set_trusted_profile(const std::string& uuid) {
 }
 
 BaseModel::BaseModel() {
+    std::ifstream selection(preference_path("wifi-adapter"));
+    std::getline(selection, selected_adapter_id_);
     brightness_ = load_choice("brightness", brightness_levels);
     dim_seconds_ = load_choice("idle-seconds", dim_delays);
     reserve_mib_ = load_choice("reserve-mib", reserves);
@@ -187,8 +189,10 @@ void BaseModel::toggle_page() {
     }
 }
 const std::string& BaseModel::selected_adapter_id() const { return selected_adapter_id_; }
-void BaseModel::set_selected_adapter_id(std::string stable_id) {
+bool BaseModel::set_selected_adapter_id(std::string stable_id) {
+    if (!replace_preference(preference_path("wifi-adapter"), stable_id.rfind("ifindex:", 0) == 0 ? "" : stable_id)) return false;
     selected_adapter_id_ = std::move(stable_id);
+    return true;
 }
 
 } // namespace model

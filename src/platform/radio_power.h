@@ -25,5 +25,7 @@ private:
     int child_{-1};
     std::string pending_;
 };
-RadioInventory read_radios(std::string id, bool enable);
+std::string begin_radio_session();
+void end_radio_session(const std::string& directory);
+RadioInventory read_radios(std::string id, bool enable, const std::string& directory);
 }

@@ -2,6 +2,7 @@
 #include "radio_power.h"
 #include "wireless_adapters.h"
 #include <cstdio>
+#include <cstdlib>
 #include <sstream>
 
 #if defined(__linux__) && !USE_DESKTOP
@@ -73,11 +74,31 @@ std::string GpsSession::poll() {
     return state;
 }
 
-RadioInventory read_radios(std::string id, bool enable) {
+std::string begin_radio_session() {
+#if defined(__linux__) && !USE_DESKTOP
+    char directory[] = "/tmp/marauder-radios-XXXXXX";
+    if (mkdtemp(directory)) return directory;
+#endif
+    return {};
+}
+
+void end_radio_session(const std::string& directory) {
+#if defined(__linux__) && !USE_DESKTOP
+    if (directory.empty()) return;
+    const auto cmd = "/usr/bin/timeout 25 /usr/lib/marauder/radio-inventory --session " + directory + " --release";
+    if (std::system(cmd.c_str()) != 0)
+        std::fputs("Marauder: radio cleanup incomplete\n", stderr);
+    rmdir(directory.c_str());
+#endif
+}
+
+RadioInventory read_radios(std::string id, bool enable, const std::string& directory) {
 #if !defined(__linux__) || USE_DESKTOP
     return {"Device radios unavailable", {}};
 #else
     std::string command = "/usr/bin/timeout 20 /usr/bin/python3 -I /usr/lib/marauder/radio-inventory";
+    if (directory.empty()) return {"Radio session unavailable", {}};
+    command += " --session " + directory;
     if (id.empty()) command += " --restore";
     else {
         if (id.size() != 64 || id.find_first_not_of("0123456789abcdef") != std::string::npos)

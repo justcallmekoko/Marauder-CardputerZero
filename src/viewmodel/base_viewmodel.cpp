@@ -73,6 +73,7 @@ BaseViewModel::BaseViewModel()
     gps_id_ = model::saved_gps_id();
     if (!gps_id_.empty())
         gps_status_.set(gps_session_.start(gps_id_) ? "Wait" : "Unavailable");
+    radio_session_ = platform::begin_radio_session();
     refresh_radios();
     activity_tick_ = lv_tick_get();
     if (model_.brightness() && original_light_ >= 0 && light_max_ > 0)
@@ -87,6 +88,9 @@ BaseViewModel::~BaseViewModel() {
         wifi_scan_timer_ = nullptr;
     }
     if (wifi_scan_thread_.joinable()) wifi_scan_thread_.join();
+    if (radio_job_.valid()) radio_job_.wait();
+    gps_session_.stop();
+    platform::end_radio_session(radio_session_);
 }
 lv_subject_t* BaseViewModel::title_subject() { return title_subject_.native(); }
 lv_subject_t* BaseViewModel::dark_mode_subject() { return dark_mode_subject_.native(); }
@@ -256,7 +260,7 @@ void BaseViewModel::load_radios(std::string key, bool enabled) {
     if (radio_busy()) return;
     radio_list_.message = key.empty() ? "Refreshing" : "Applying";
     try {
-        radio_job_ = std::async(std::launch::async, platform::read_radios, std::move(key), enabled);
+        radio_job_ = std::async(std::launch::async, platform::read_radios, std::move(key), enabled, radio_session_);
     } catch (const std::system_error&) { radio_list_.message = "Worker unavailable"; }
     marauder_menu_generation_subject_.set(marauder_menu_generation_subject_.value() + 1);
 }
@@ -372,6 +376,10 @@ void BaseViewModel::refresh_adapters() {
     } else if (highlighted_adapter_ >= adapters_.size()) {
         highlighted_adapter_ = adapters_.size() - 1;
     }
+    const auto saved = std::find_if(adapters_.begin(), adapters_.end(), [&](const auto& adapter) {
+        return adapter.stable_id == model_.selected_adapter_id();
+    });
+    if (saved != adapters_.end()) highlighted_adapter_ = saved - adapters_.begin();
     adapter_details_expanded_ = false;
     publish_adapter_detail();
 }
@@ -393,7 +401,14 @@ void BaseViewModel::next_adapter() {
 void BaseViewModel::select_highlighted_adapter() {
     if (adapters_.empty()) return;
     const auto& adapter = adapters_[highlighted_adapter_];
-    if (model_.selected_adapter_id() != adapter.stable_id) {
+    const bool changed = model_.selected_adapter_id() != adapter.stable_id;
+    if (!model_.set_selected_adapter_id(adapter.stable_id)) {
+        adapter_error_ = "Could not save WiFi selection";
+        publish_adapter_detail();
+        return;
+    }
+    adapter_error_.clear();
+    if (changed) {
         wifi_networks_.clear();
         wifi_scan_interface_.clear();
         wifi_scan_error_.clear();
@@ -401,7 +416,6 @@ void BaseViewModel::select_highlighted_adapter() {
         wifi_scan_detail_index_ = 0;
         wifi_scan_details_expanded_ = false;
     }
-    model_.set_selected_adapter_id(adapter.stable_id);
     publish_adapter_detail();
     publish_wifi_scan();
 }

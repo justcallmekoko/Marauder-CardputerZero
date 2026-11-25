@@ -6,6 +6,8 @@ from pathlib import Path
 import hashlib
 import json
 import os
+import re
+import stat
 import socket
 import struct
 import subprocess
@@ -137,17 +139,69 @@ def change(device, enable):
         return
     if device.kind == "GPS":
         raise ValueError("GPS is session-local")
-    switch = Path(device.switch)
-    index = int(switch.name.removeprefix("rfkill"))
-    with open("/dev/rfkill","wb",buffering=0) as f:
-        f.write(struct.pack("=IBBBB",index,0,2,int(not enable),0))
-    if device.kind=="Bluetooth" and enable:
-        for _ in range(8):
-            result=subprocess.run(["/usr/bin/busctl","--system","--timeout=1","set-property","org.bluez",
-                                   "/org/bluez/"+device.name,"org.bluez.Adapter1","Powered","b","true"],capture_output=True)
-            if result.returncode==0:
-                break
-            time.sleep(.15)
+    set_soft(device, not enable)
+    if device.kind == "Bluetooth" and enable:
+        set_power(device, True)
+
+def set_soft(device, blocked):
+    index = int(Path(device.switch).name.removeprefix("rfkill"))
+    with open("/dev/rfkill", "wb", buffering=0) as f:
+        f.write(struct.pack("=IBBBB", index, 0, 2, int(blocked), 0))
+
+def set_power(device, enabled):
+    for _ in range(8):
+        result = subprocess.run(["/usr/bin/busctl", "--system", "--timeout=1", "set-property",
+                                 "org.bluez", "/org/bluez/"+device.name, "org.bluez.Adapter1",
+                                 "Powered", "b", "true" if enabled else "false"], capture_output=True)
+        if result.returncode == 0:
+            return
+        time.sleep(.15)
+    raise OSError("Bluetooth power change failed")
+
+def snapshot(directory, devices):
+    for d in devices:
+        if not d.switch or d.kind == "GPS":
+            continue
+        saved = directory / d.key
+        if saved.exists():
+            continue
+        soft = text(Path(d.switch) / "soft")
+        power = bluetooth_power(d.name) if d.kind == "Bluetooth" and soft == "0" else "-"
+        if soft in ("0", "1") and power in ("On", "Off", "-"):
+            saved.write_text(soft + " " + power)
+
+def apply(device, enabled, directory):
+    if directory and device.state in ("On", "Off") and (device.state == "On") != enabled:
+        if not (directory / device.key).is_file():
+            raise ValueError("No original radio state")
+        (directory / (device.key + ".changed")).touch()
+    change(device, enabled)
+
+def release(directory):
+    devices = {d.key: d for d in inventory() if d.kind != "GPS"}
+    ok = True
+    for marker in directory.glob("*.changed"):
+        d = devices.get(marker.stem)
+        if not d or not d.switch:
+            continue
+        try:
+            soft, power = (directory / d.key).read_text().split()
+            if text(Path(d.switch) / "soft") != soft:
+                set_soft(d, soft == "1")
+            if d.kind == "Bluetooth" and power in ("On", "Off") and bluetooth_power(d.name) != power:
+                set_power(d, power == "On")
+            for _ in range(5):
+                if text(Path(d.switch) / "soft") == soft and (power == "-" or bluetooth_power(d.name) == power):
+                    break
+                time.sleep(.1)
+            else:
+                ok = False
+        except (ValueError, OSError, subprocess.SubprocessError):
+            ok = False
+    for file in directory.iterdir():
+        if re.fullmatch(r"[0-9a-f]{64}(?:\.changed)?", file.name):
+            file.unlink()
+    return ok
 
 def preference_file(device):
     root = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
@@ -167,7 +221,7 @@ def remember(device, action):
     finally:
         temp.unlink(missing_ok=True)
 
-def restore(devices):
+def restore(devices, directory=None):
     requested = {}
     for d in devices:
         if d.kind == "GPS":
@@ -177,7 +231,7 @@ def restore(devices):
             continue
         requested[d.key] = wanted
         try:
-            change(d, wanted == "on")
+            apply(d, wanted == "on", directory)
         except (ValueError, OSError, subprocess.SubprocessError):
             continue
     if not requested:
@@ -194,17 +248,31 @@ def emit(fields):
     print("\t".join(" ".join(str(x).split())[:180] for x in fields))
 
 if __name__=="__main__":
+    directory = None
+    args = sys.argv[1:]
+    if len(args) >= 2 and args[0] == "--session":
+        directory = Path(args[1])
+        if directory.parent != Path("/tmp") or not re.fullmatch(r"marauder-radios-[A-Za-z0-9]{6}", directory.name):
+            sys.exit("Invalid radio session")
+        info = directory.lstat()
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
+            sys.exit("Invalid session ownership")
+        args = args[2:]
+    if args == ["--release"] and directory is not None:
+        sys.exit(0 if release(directory) else 1)
     result=""
     devices=inventory()
-    if sys.argv[1:] == ["--restore"]:
-        devices, result = restore(devices)
-    if len(sys.argv)==3:
-        key,action=sys.argv[1:]
+    if directory:
+        snapshot(directory, devices)
+    if args == ["--restore"]:
+        devices, result = restore(devices, directory)
+    if len(args)==2:
+        key,action=args
         device=next((d for d in devices if d.key==key),None)
         try:
             if device is None or action not in ("on","off"):
                 raise ValueError("Device changed")
-            change(device,action=="on")
+            apply(device,action=="on",directory)
             for _ in range(4):
                 devices=inventory()
                 if any(d.key==key and d.state.lower()==action for d in devices):

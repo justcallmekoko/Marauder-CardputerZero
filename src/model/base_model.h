@@ -50,7 +50,7 @@ public:
     void set_current_page(AppPage page);
     void toggle_page();
     const std::string& selected_adapter_id() const;
-    void set_selected_adapter_id(std::string stable_id);
+    bool set_selected_adapter_id(std::string stable_id);
 
 private:
     unsigned brightness_{0}, dim_seconds_{0}, reserve_mib_{64};

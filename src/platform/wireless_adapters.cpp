@@ -55,14 +55,14 @@ bool meaningful_serial(const std::string& serial) {
 }
 
 std::string stable_identity(const AdapterInfo& adapter) {
-    if (adapter.bus_type == "USB" && meaningful_serial(adapter.serial)) {
-        return "usb:" + adapter.vendor_id + ':' + adapter.product_id + ':' + adapter.serial;
-    }
     if (adapter.permanent_mac && !adapter.mac_address.empty()) {
         return "mac:" + adapter.mac_address;
     }
+    if (adapter.bus_type == "USB" && meaningful_serial(adapter.serial)) {
+        return "usb:" + adapter.vendor_id + ':' + adapter.product_id + ':' + adapter.serial;
+    }
     if (!adapter.device_path.empty()) {
-        return "path:" + adapter.device_path;
+        return "path:" + adapter.vendor_id + ":" + adapter.product_id + ":" + adapter.device_path;
     }
     return "ifindex:" + adapter.ifindex;
 }

@@ -96,7 +96,7 @@ void AdaptersScreen::render() {
     if (!summary) return;
     const auto& radio = radios[cursor];
     const auto title = "Radio adapters    " + std::to_string(cursor + 1) + " / " + std::to_string(radios.size());
-    lv_label_set_text(heading_, title.c_str());
+    lv_label_set_text(heading_, vm.adapter_error().empty() ? title.c_str() : vm.adapter_error().c_str());
     lv_obj_set_style_text_color(heading_, colors.text_disabled, 0);
     const bool active = radio.stable_id == vm.selected_radio_id();
     const std::string description = std::string(active ? "SELECTED" : "AVAILABLE") + "\n" +

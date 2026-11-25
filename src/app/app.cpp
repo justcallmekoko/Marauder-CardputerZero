@@ -5,6 +5,7 @@
  */
 
 #include "app.h"
+#include <csignal>
 
 #include "asset_manager.h"
 #include "help_popup.h"
@@ -45,6 +46,9 @@
 
 namespace app {
 namespace {
+
+volatile std::sig_atomic_t stopping = 0;
+void stop_signal(int) { stopping = 1; }
 
 void quit_requested_observer(lv_observer_t* observer, lv_subject_t* subject) {
     auto* running = static_cast<bool*>(lv_observer_get_user_data(observer));
@@ -237,6 +241,9 @@ int Application::run() {
     logger::Logger::init();
     logger::Logger::set_tag("template");
 
+    stopping = 0;
+    std::signal(SIGTERM, stop_signal);
+    std::signal(SIGINT, stop_signal);
     lv_init();
 
     AssetManager assets;
@@ -276,7 +283,7 @@ int Application::run() {
 
     LOG_INFO("LVGL app started at {}x{}", lv_display_get_horizontal_resolution(display),
              lv_display_get_vertical_resolution(display));
-    while (running
+    while (running && !stopping
 #if USE_DESKTOP
            && simulator_frame.process_events()
 #endif
