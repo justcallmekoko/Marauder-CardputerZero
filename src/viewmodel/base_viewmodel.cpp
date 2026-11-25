@@ -774,8 +774,7 @@ void BaseViewModel::finish_wifi_scan_if_ready() {
     if (wifi_view_ == 6 && !wifi_feed_target_.empty() && wifi_scan_detail_index_ < wifi_networks_.size()) {
         const int channel = wifi_networks_[wifi_scan_detail_index_].frequency_mhz;
         for (auto& frame : summaries) {
-            if (frame.sender != wifi_feed_target_ && frame.receiver != wifi_feed_target_) continue;
-            if (channel && frame.frequency_mhz && frame.frequency_mhz != channel) continue;
+            if (!platform::wireless::frame_matches_target(frame, wifi_feed_target_, channel)) continue;
             ++wifi_feed_count_;
             if (wifi_feed_frames_.size() == 128) wifi_feed_frames_.pop_front();
             wifi_feed_frames_.push_back(std::move(frame));

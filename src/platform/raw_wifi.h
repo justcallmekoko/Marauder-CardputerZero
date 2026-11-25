@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include "wifi_security.h"
 
 namespace platform::wireless {
@@ -30,6 +31,7 @@ struct FrameSummary {
 
 // Extract only the MAC header for the live, address-filtered frame feed.
 bool parse_frame_summary(const uint8_t* bytes, std::size_t size, FrameSummary& out);
+bool frame_matches_target(const FrameSummary& frame, std::string_view mac, int frequency_mhz);
 
 // Parse only 802.11 header and management tags. Payload bytes are never retained.
 bool parse_monitor_frame(const uint8_t* bytes, std::size_t size, FrameObservation& out);

@@ -7,6 +7,7 @@
 using platform::wireless::FrameObservation;
 using platform::wireless::parse_monitor_frame;
 using platform::wireless::parse_frame_summary;
+using platform::wireless::frame_matches_target;
 
 int main() {
     // Radiotap with channel 6 and -48 dBm, followed by a beacon.
@@ -44,6 +45,10 @@ int main() {
     assert(observed.rssi == -60);
     assert(parse_frame_summary(uplink.data(), uplink.size(), summary));
     assert(summary.type == "Data" && summary.sender == observed.client && summary.receiver == observed.bssid);
+    assert(frame_matches_target(summary, observed.client, 2437));
+    assert(frame_matches_target(summary, observed.bssid, 2437));
+    assert(!frame_matches_target(summary, observed.client, 2462));
+    assert(!frame_matches_target(summary, "AA:BB:CC:DD:EE:FF", 2437));
 
     uplink[14] = 0x02; // From DS: AP transmitter, client receiver.
     for (int i = 0; i < 6; ++i) { uplink[13 + 4 + i] = client[i]; uplink[13 + 10 + i] = ap[i]; }

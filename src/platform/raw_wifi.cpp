@@ -78,6 +78,11 @@ bool parse_frame_summary(const uint8_t* bytes, std::size_t size, FrameSummary& o
     return true;
 }
 
+bool frame_matches_target(const FrameSummary& frame, std::string_view mac, int frequency_mhz) {
+    return !mac.empty() && (frame.sender == mac || frame.receiver == mac) &&
+           (!frequency_mhz || !frame.frequency_mhz || frame.frequency_mhz == frequency_mhz);
+}
+
 bool parse_monitor_frame(const uint8_t* bytes, std::size_t size, FrameObservation& out) {
     out = {};
     std::size_t header{};
