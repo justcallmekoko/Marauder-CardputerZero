@@ -49,47 +49,67 @@ void WifiScanScreen::render() {
     auto& vm = view_model();
     const auto& items = vm.wifi_items();
     const auto cursor = vm.wifi_cursor();
-    const bool details = vm.wifi_details_open() && cursor < items.size();
+    const int mode = vm.wifi_view();
+    const bool details = (mode == 1 || mode == 3) && cursor < items.size();
+    const auto* clients = cursor < items.size() ? &items[cursor].clients : nullptr;
+    const bool client_list = mode == 2 && clients;
+    const auto selected = client_list || mode == 3 ? vm.wifi_client_cursor() : cursor;
+    const auto total = (client_list || mode == 3) && clients ? clients->size() : items.size();
     const auto colors = view::palette(vm.is_dark_mode());
     auto accent = colors.success;
-    lv_label_set_text(title_, details ? "Access point info" : "Access points");
+    lv_label_set_text(title_, mode == 3 ? "Client info" : client_list ? "Observed clients" : details ? "Access point info" : "Access points");
     lv_obj_set_style_text_color(title_, colors.text, 0);
-    const auto count = vm.scanning() ? (items.empty() ? "Searching" : "Refreshing") : !vm.wifi_error().empty() ? "Refresh failed" :
-        items.empty() ? "0 seen" : std::to_string(cursor + 1) + " / " + std::to_string(items.size());
+    const auto count = !vm.wifi_error().empty() ? "Capture failed" :
+        (mode == 0 && items.empty()) ? "Listening" : total == 0 ? "0 seen" :
+        std::to_string(selected + 1) + " / " + std::to_string(total);
     lv_label_set_text(count_, count.c_str());
     lv_obj_set_style_text_color(count_, accent, 0);
-    if (cursor < first_) first_ = cursor;
-    if (cursor >= first_ + rows_.size()) first_ = cursor + 1 - rows_.size();
-    first_ = std::min(first_, items.size() > rows_.size() ? items.size() - rows_.size() : size_t{0});
+    if (mode != last_mode_) { first_ = 0; last_mode_ = mode; }
+    if (selected < first_) first_ = selected;
+    if (selected >= first_ + rows_.size()) first_ = selected + 1 - rows_.size();
+    first_ = std::min(first_, total > rows_.size() ? total - rows_.size() : size_t{0});
     for (size_t i = 0; i < rows_.size(); ++i) {
         auto& row = rows_[i];
         const auto index = first_ + i;
-        if (details || index >= items.size()) { lv_obj_add_flag(row.box, LV_OBJ_FLAG_HIDDEN); continue; }
+        if (details || index >= total) { lv_obj_add_flag(row.box, LV_OBJ_FLAG_HIDDEN); continue; }
         lv_obj_remove_flag(row.box, LV_OBJ_FLAG_HIDDEN);
-        const auto& item = items[index];
-        lv_obj_set_style_bg_color(row.box, index == cursor ? colors.button : colors.surface, 0);
-        lv_obj_set_style_border_color(row.box, index == cursor ? accent : colors.border, 0);
-        lv_label_set_text(row.name, item.ssid.c_str());
+        lv_obj_set_style_bg_color(row.box, index == selected ? colors.button : colors.surface, 0);
+        lv_obj_set_style_border_color(row.box, index == selected ? accent : colors.border, 0);
+        const auto name = client_list ? (*clients)[index].mac : items[index].ssid;
+        lv_label_set_text(row.name, name.c_str());
         lv_obj_set_style_text_color(row.name, colors.text, 0);
-        const auto metric = ("CH " + std::to_string(item.channel) + "   ") +
-            (item.rssi ? std::to_string(item.rssi) + " dBm" : "RSSI unknown");
+        const auto metric = client_list ?
+            std::to_string((*clients)[index].frames) + " fr  " +
+                ((*clients)[index].has_rssi ? std::to_string((*clients)[index].rssi) + "dBm" : "RSSI ?") :
+            "CH " + std::to_string(items[index].channel) + "  " +
+                (items[index].has_rssi ? std::to_string(items[index].rssi) + "dBm" : "RSSI ?");
         lv_label_set_text(row.metric, metric.c_str());
-        lv_obj_set_style_text_color(row.metric, index == cursor ? accent : colors.text_disabled, 0);
+        lv_obj_set_style_text_color(row.metric, index == selected ? accent : colors.text_disabled, 0);
     }
     std::string message;
-    if (details) {
+    if (mode == 3 && clients && vm.wifi_client_cursor() < clients->size()) {
+        const auto& client = (*clients)[vm.wifi_client_cursor()];
+        message = client.mac + "\n" + client.vendor.substr(0, 40) +
+            "\nRSSI  " + (client.has_rssi ? std::to_string(client.rssi) + " dBm" : "Not observed uplink") +
+            "\nFrames  " + std::to_string(client.frames) +
+            "\nAP  " + items[cursor].ssid;
+    } else if (mode == 1 && cursor < items.size()) {
         const auto& item = items[cursor];
         message = item.ssid + "\n" + item.bssid;
-        message += "\nVendor  " + (item.vendor.empty() ? std::string("Pending") : item.vendor.substr(0, 40));
-        message += "\nCH " + std::to_string(item.channel) + "    " + std::to_string(item.frequency_mhz) +
-            " MHz    " + std::to_string(item.rssi) + " dBm\n" + item.security;
-    } else if (items.empty()) {
-        message = !vm.wifi_error().empty() ? vm.wifi_error() : vm.scanning() ? "Refreshing inventory..." :
+        message += "\nVendor  " + item.vendor.substr(0, 40);
+        message += "\nCH " + std::to_string(item.channel) + "    " +
+            (item.has_rssi ? std::to_string(item.rssi) + " dBm" : "RSSI unknown");
+        message += "\n" + item.security + "   " + std::to_string(item.frames) + " frames";
+        message += "\n" + std::to_string(item.clients.size()) + " observed clients";
+    } else if (client_list && clients->empty()) {
+        message = "No client frames observed yet";
+    } else if (mode == 0 && items.empty()) {
+        message = !vm.wifi_error().empty() ? vm.wifi_error() : vm.scanning() ? "Listening on supported channels..." :
             "No access points found";
     }
     lv_obj_set_style_text_color(message_, colors.text, 0);
     lv_label_set_text(message_, message.c_str());
-    set_key_guide(details ? "F/X Browse    D Refresh    Esc List" : items.empty() ? "D Refresh    Esc Back" :
-                  "F/X Browse    Enter Info    D Refresh    Esc Back");
+    set_key_guide(mode == 3 ? "Esc Clients" : mode == 2 ? "F/X Browse  Enter Info  Esc AP" :
+                  mode == 1 ? "Enter Clients  Esc List" : "F/X Browse  Enter Info  Esc Back");
 }
 }

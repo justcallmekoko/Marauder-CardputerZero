@@ -2,7 +2,7 @@
 
 Native C++17/LVGL 9.5 port of ESP32 Marauder for the ARM64 Linux-based Cardputer Zero.
 
-> Status: early development. The current milestone includes read-only diagnostics, adapter selection and capability reporting, plus managed-mode Wi-Fi scanning. Bluetooth, LoRa, GNSS logging, monitor-mode capture, and packet operations are not implemented yet.
+> Status: early development. The current milestone includes diagnostics, radio setup, monitor-mode switching, and live access point and observed client lists from raw frames.
 
 ## Current milestone
 
@@ -13,7 +13,7 @@ Native C++17/LVGL 9.5 port of ESP32 Marauder for the ARM64 Linux-based Cardputer
 - Keyboard-driven adapter browsing and in-app selection without changing interface state
 - Viewport-safe summary/details paging for adapter information (`D` toggles pages)
 - Read-only kernel capability probing for monitor-mode support; injection remains unverified until an explicit hardware test
-- Non-blocking managed-mode Wi-Fi scanning on the selected adapter, with scrolling results and offline vendor lookup
+- Live C++ radiotap and 802.11 frame parsing on the selected monitor-mode adapter, with scrolling AP and observed-client lists, RSSI, frame counts, and offline vendor lookup
 - Direct menu navigation with the printed `Z`/`X`/`C`/`F` arrow cluster, `Enter` for the primary action, and `D` for details on supported screens
 - APPLaunch icon uses the white JCMK LLC mark on a black background
 - Read-only inventory of:
@@ -60,7 +60,7 @@ Monitor switching requires one-time administrator enrollment for the local opera
 
 The bottom strip shows the current screen’s shortcuts. System Info is canonically located at **Device > System Info** and exposes Summary, System, Interfaces, USB/Peripherals, and Tools pages. On Adapters and System Info, `D` toggles details/summary. On System Info, `F`/`X` changes page, `C`/`Enter` refreshes, and `Z`/`Esc` returns to Device with its selection retained.
 
-Managed-mode scans use the target’s existing NetworkManager service when available; the Cardputer Zero base image has been validated with it. Scans do not enable monitor mode and do not test injection.
+Open **WiFi → Networks → Access Points** after selecting an adapter and enabling monitor mode. The app tunes through the adapter's supported channels and adds APs as beacon, response, or data frames arrive. Enter opens AP information, then the observed-client list, then client information. The app pins the AP's channel while its information or clients are open. Client RSSI is shown only when a frame transmitted by that client was observed. Frame counts include observed retransmissions and are not an association guarantee. Leaving the screen closes capture; exiting also restores the adapter through the monitor session.
 
 ## Architecture
 
@@ -100,7 +100,7 @@ cmake --build --preset linux-x86-64-dbg
 cmake --workflow --preset cp0-cross-package
 ```
 
-The expected artifact is `dist/Marauder_0.6.22_rev1_arm64.deb`. Packaging and deployment remain separate actions.
+The expected artifact is `dist/Marauder_0.6.23_rev1_arm64.deb`. Packaging and deployment remain separate actions.
 
 ## Safety and scope
 

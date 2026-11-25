@@ -20,6 +20,7 @@ public:
     std::string start(const std::string& name);
     std::string stop();
     std::string tune(unsigned mhz);
+    int capture_socket();
 private:
     int channel_{-1}, child_{-1};
 };

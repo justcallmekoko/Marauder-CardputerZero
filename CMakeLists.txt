@@ -6,7 +6,7 @@
 
 cmake_minimum_required(VERSION 3.31)
 
-project(marauder_cardputerzero VERSION 0.6.22 LANGUAGES C CXX)
+project(marauder_cardputerzero VERSION 0.6.23 LANGUAGES C CXX)
 
 include(CTest)
 find_package(Threads REQUIRED)
@@ -624,6 +624,9 @@ target_link_libraries(${PROJECT_NAME}
 )
 
 if(BUILD_TESTING AND USE_DESKTOP)
+    add_executable(raw_wifi_test tests/raw_wifi_test.cpp src/platform/raw_wifi.cpp)
+    target_include_directories(raw_wifi_test PRIVATE src/platform)
+    add_test(NAME raw_wifi_test COMMAND raw_wifi_test)
     add_executable(wireless_capabilities_test
         tests/wireless_capabilities_test.cpp
         src/platform/wireless_capabilities.cpp

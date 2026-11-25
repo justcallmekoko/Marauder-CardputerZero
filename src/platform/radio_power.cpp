@@ -7,6 +7,7 @@
 
 #if defined(__linux__) && !USE_DESKTOP
 #include <cerrno>
+#include <cstring>
 #include <spawn.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
@@ -66,6 +67,33 @@ std::string MonitorSession::tune(unsigned mhz) {
     }
 #endif
     return "Channel tune unavailable";
+}
+
+int MonitorSession::capture_socket() {
+#if defined(__linux__) && !USE_DESKTOP
+    constexpr char command[] = "CAPTURE\n";
+    if (channel_ < 0 || send(channel_, command, sizeof(command) - 1, MSG_NOSIGNAL) != static_cast<ssize_t>(sizeof(command) - 1))
+        return -1;
+    char reply[64]{};
+    char control[CMSG_SPACE(sizeof(int))]{};
+    iovec payload{reply, sizeof(reply)};
+    msghdr message{};
+    message.msg_iov = &payload;
+    message.msg_iovlen = 1;
+    message.msg_control = control;
+    message.msg_controllen = sizeof(control);
+    const auto count = recvmsg(channel_, &message, MSG_CMSG_CLOEXEC);
+    if (count < 3 || std::strncmp(reply, "FD\n", 3) != 0) return -1;
+    for (auto* item = CMSG_FIRSTHDR(&message); item; item = CMSG_NXTHDR(&message, item)) {
+        if (item->cmsg_level == SOL_SOCKET && item->cmsg_type == SCM_RIGHTS &&
+            item->cmsg_len >= CMSG_LEN(sizeof(int))) {
+            int fd;
+            std::memcpy(&fd, CMSG_DATA(item), sizeof(fd));
+            return fd;
+        }
+    }
+#endif
+    return -1;
 }
 
 std::string MonitorSession::stop() {

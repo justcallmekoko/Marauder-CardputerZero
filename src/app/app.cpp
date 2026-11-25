@@ -192,7 +192,7 @@ private:
 
         if (key == LV_KEY_ESC && !long_pressed) {
             if (view_model_.current_page() == model::AppPage::WifiScan && view_model_.wifi_details_open()) {
-                view_model_.toggle_wifi_scan_details();
+                view_model_.wifi_back();
                 return true;
             }
             switch (escape_action(view_model_.current_page(),
@@ -280,7 +280,7 @@ private:
             if (action == NavigationAction::Next) { view_model_.next_wifi_scan_page(); return true; }
             if (action == NavigationAction::Primary) { view_model_.toggle_wifi_scan_details(); return true; }
             if (action == NavigationAction::Details) {
-                const auto warning = view_model_.collection_warning(model::RadioRequirement::Managed);
+                const auto warning = view_model_.collection_warning(model::RadioRequirement::Monitor);
                 if (warning.empty()) view_model_.start_wifi_scan();
                 else show_confirmation(warning, "Enter Adapters", DialogAction::OpenAdapters);
                 return true;

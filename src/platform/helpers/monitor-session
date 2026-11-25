@@ -1,6 +1,7 @@
 #!/usr/bin/python3 -I
 """Hold an idle adapter in monitor mode for the lifetime of the caller's pipe."""
 import fcntl
+import array
 import os
 from pathlib import Path
 import re
@@ -57,11 +58,23 @@ def lease(name):
                        if "(disabled)" not in line
                        and (match := re.match(r"\s*\* (\d+)(?:\.0+)? MHz \[", line))}
             while request := sys.stdin.buffer.readline(32):
+                if socket.if_nametoindex(name) != index or (link / "phy80211").resolve() != phy:
+                    break
+                if request == b"CAPTURE\n":
+                    try:
+                        if not re.search(r"^\s*type monitor$", run(IW, "dev", name, "info"), re.M):
+                            raise ValueError("Monitor mode required")
+                        with socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.htons(3)) as capture:
+                            capture.bind((name, 0))
+                            with socket.socket(fileno=os.dup(1)) as channel:
+                                channel.sendmsg([b"FD\n"], [(socket.SOL_SOCKET, socket.SCM_RIGHTS,
+                                    array.array("i", [capture.fileno()]))])
+                    except (OSError, ValueError, subprocess.SubprocessError):
+                        print("Capture unavailable", flush=True)
+                    continue
                 if not re.fullmatch(rb"[0-9]{3,5}\n", request):
                     break
                 freq = int(request)
-                if socket.if_nametoindex(name) != index or (link / "phy80211").resolve() != phy:
-                    break
                 try:
                     if freq not in allowed:
                         raise ValueError("Channel unavailable")

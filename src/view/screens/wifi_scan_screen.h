@@ -14,5 +14,6 @@ private:
     std::array<Row, 4> rows_{};
     lv_obj_t *title_{}, *count_{}, *message_{};
     size_t first_{};
+    int last_mode_{-1};
 };
 }

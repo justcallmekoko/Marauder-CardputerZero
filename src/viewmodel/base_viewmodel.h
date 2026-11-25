@@ -16,6 +16,7 @@
 #include "wireless_adapters.h"
 #include "wireless_scan.h"
 #include "radio_power.h"
+#include "raw_wifi.h"
 
 #include <atomic>
 #include <cstddef>
@@ -109,6 +110,9 @@ public:
     void select_highlighted_adapter();
     void toggle_adapter_details();
     bool wifi_details_open() const { return wifi_scan_details_expanded_; }
+    int wifi_view() const { return wifi_view_; }
+    size_t wifi_client_cursor() const { return wifi_client_index_; }
+    void wifi_back();
     bool system_details_open() const { return system_info_.details_expanded(); }
     void start_wifi_scan();
     void previous_wifi_scan_page();
@@ -128,6 +132,8 @@ private:
     void publish_diagnostics();
     void publish_wifi_scan();
     void finish_wifi_scan_if_ready();
+    void stop_wifi_capture();
+    void advance_wifi_channel();
     static void wifi_scan_timer_cb(lv_timer_t* timer);
 
     void update_gps_status();
@@ -177,14 +183,18 @@ private:
     std::string wifi_scan_error_;
     std::size_t wifi_scan_detail_index_{0};
     bool wifi_scan_details_expanded_{false};
+    int wifi_view_{0};
+    std::size_t wifi_client_index_{};
+    std::atomic<bool> wifi_capture_stop_{false};
     std::atomic<bool> wifi_scan_running_{false};
-    std::atomic<bool> wifi_scan_ready_{false};
     std::mutex wifi_scan_mutex_;
-    platform::wireless::WifiScanResult pending_wifi_scan_;
-    std::string pending_wifi_scan_interface_;
-    std::vector<platform::wireless::WifiNetwork> incoming_aps_;
+    std::vector<platform::wireless::FrameObservation> incoming_frames_;
     std::thread wifi_scan_thread_;
-    uint32_t last_wifi_scan_tick_{};
+    std::vector<unsigned> wifi_frequencies_;
+    std::future<std::string> wifi_hop_job_;
+    std::size_t wifi_hop_index_{};
+    unsigned wifi_tuned_frequency_{};
+    uint32_t wifi_hop_tick_{};
     lv_timer_t* wifi_scan_timer_{nullptr};
 };
 

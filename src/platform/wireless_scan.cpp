@@ -114,6 +114,14 @@ std::string registered_vendor(const std::string& address) {
 #endif
 } // namespace
 
+std::string vendor_for_mac(const std::string& address) {
+#if !defined(_WIN32)
+    return registered_vendor(address);
+#else
+    return "Unknown";
+#endif
+}
+
 namespace {
 std::string field(std::string_view reply, std::string_view key) {
     while (!reply.empty()) {

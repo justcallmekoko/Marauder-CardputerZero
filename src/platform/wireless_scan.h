@@ -15,6 +15,13 @@ enum class ConnectionUse { Idle, Connected, Hotspot, Unknown };
 ConnectionUse connection_use(const std::string& interface_name);
 
 struct WifiNetwork {
+    struct Client {
+        std::string mac;
+        std::string vendor;
+        int rssi{};
+        bool has_rssi{};
+        unsigned frames{};
+    };
     std::string bssid;
     std::string ssid;
     int channel{0};
@@ -23,6 +30,9 @@ struct WifiNetwork {
     std::string security;
     std::string vendor{};
     int rssi{0};
+    bool has_rssi{};
+    unsigned frames{};
+    std::vector<Client> clients;
 };
 
 struct WifiScanResult {
@@ -31,6 +41,7 @@ struct WifiScanResult {
 };
 
 bool parse_access_point(std::string_view reply, WifiNetwork& ap);
+std::string vendor_for_mac(const std::string& address);
 WifiScanResult scan_wifi_networks(const std::string& interface_name,
                                  const std::function<void(WifiNetwork)>& discovered = {});
 
