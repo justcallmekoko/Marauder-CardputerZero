@@ -31,6 +31,14 @@ public:
     void cycle_battery_display();
     bool screenshots_in_documents() const { return documents_; }
     unsigned cache_kib() const { return cache_kib_; }
+    unsigned brightness() const { return brightness_; }
+    unsigned dim_seconds() const { return dim_seconds_; }
+    unsigned reserve_mib() const { return reserve_mib_; }
+    const std::string& trusted_profile() const { return trusted_profile_; }
+    bool cycle_brightness();
+    bool cycle_dim();
+    bool cycle_reserve();
+    bool set_trusted_profile(const std::string& uuid);
     bool cycle_storage();
     bool cycle_cache();
     const char* app_title() const;
@@ -42,6 +50,8 @@ public:
     void set_selected_adapter_id(std::string stable_id);
 
 private:
+    unsigned brightness_{0}, dim_seconds_{0}, reserve_mib_{64};
+    std::string trusted_profile_;
     bool documents_{false};
     unsigned cache_kib_{0};
     BatteryDisplay battery_display_{BatteryDisplay::Both};

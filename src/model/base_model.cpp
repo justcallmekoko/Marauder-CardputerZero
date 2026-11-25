@@ -6,6 +6,8 @@
 #include "base_model.h"
 
 #include <cstdlib>
+#include <algorithm>
+#include <iterator>
 #include <filesystem>
 #include <fstream>
 #include <unistd.h>
@@ -83,7 +85,42 @@ const char* battery_display_name(BatteryDisplay mode) {
     }
 }
 
+namespace {
+constexpr unsigned brightness_levels[] = {0, 25, 50, 75, 100};
+constexpr unsigned dim_delays[] = {0, 30, 60, 120, 300};
+constexpr unsigned reserves[] = {64, 128, 256, 512, 0};
+
+template <size_t N>
+unsigned load_choice(const char* key, const unsigned (&options)[N]) {
+    const auto value = read_value(key);
+    for (auto option : options) if (value == std::to_string(option)) return option;
+    return options[0];
+}
+
+template <size_t N>
+bool cycle_choice(const char* key, unsigned& current, const unsigned (&options)[N]) {
+    const auto index = std::find(std::begin(options), std::end(options), current) - options;
+    const auto next = options[(index + 1) % N];
+    if (!save_value(key, std::to_string(next))) return false;
+    current = next;
+    return true;
+}
+}
+
+bool BaseModel::cycle_brightness() { return cycle_choice("brightness", brightness_, brightness_levels); }
+bool BaseModel::cycle_dim() { return cycle_choice("idle-seconds", dim_seconds_, dim_delays); }
+bool BaseModel::cycle_reserve() { return cycle_choice("reserve-mib", reserve_mib_, reserves); }
+bool BaseModel::set_trusted_profile(const std::string& uuid) {
+    if (!save_value("trusted-wifi-uuid", uuid)) return false;
+    trusted_profile_ = uuid;
+    return true;
+}
+
 BaseModel::BaseModel() {
+    brightness_ = load_choice("brightness", brightness_levels);
+    dim_seconds_ = load_choice("idle-seconds", dim_delays);
+    reserve_mib_ = load_choice("reserve-mib", reserves);
+    trusted_profile_ = read_value("trusted-wifi-uuid");
     documents_ = read_value("screenshot-folder") == "Documents";
     const auto cache = read_value("image-cache-kib");
     if (cache == "256") cache_kib_ = 256;

@@ -40,11 +40,15 @@ The adapter layer enumerates Linux wireless interfaces, correlates USB metadata,
 
 The launcher has four tiles. Use `F/X` for up/down and `Z/C` for left/right. `Enter` opens the focused tile and `Esc` returns from submenus. At the launcher root, `Esc` exits. Unimplemented functions carry a “soon” label.
 
-The menu text uses the classic 5×7 glyphs from the Cardputer firmware. Under **Device → Battery display**, press `Enter` to cycle through icon, percentage, and both. The choice is saved per user. Battery indicators are red at 20% or below, amber through 50%, and green above 50%.
+The menu text uses the classic 5×7 glyphs from the Cardputer firmware. Under **Device → Display and power → Battery display**, press `Enter` to cycle through icon, percentage, and both. The choice is saved per user. Battery indicators are red at 20% or below, amber through 50%, and green above 50%.
 
-**Device → Radio setup** lists WiFi, Bluetooth and GPS devices. Browse with F/X, toggle the highlighted adapter with Enter, and refresh after connecting hardware with D. GPS selection is local to the running app. Select a USB or Cap/Grove port to read it. Marauder listens through gpsd when it already manages that port. Otherwise it checks serial data for checksum-valid NMEA. Disable GPS or exit to release the reader, restore serial settings, and return connector power to its initial state.
+**Device → Radios and GPS → Radio setup** lists WiFi, Bluetooth and GPS devices. Browse with F/X, toggle the highlighted adapter with Enter, and refresh after connecting hardware with D. GPS selection is local to the running app. Select a USB or Cap/Grove port to read it. Marauder listens through gpsd when it already manages that port. Otherwise it checks serial data for checksum-valid NMEA. Disable GPS or exit to release the reader, restore serial settings, and return connector power to its initial state.
 
-**Device → API credentials** stores a WiGLE API name and token and a WDGWars API key in separate owner-only files under the app configuration directory. Type a replacement and press Enter to save, or Esc to cancel. Del followed by Enter removes a saved field.
+**Device → Accounts and uploads** stores a WiGLE API name and token and a WDGWars API key in separate owner-only files under the app configuration directory. Type a replacement and press Enter to save, or Esc to cancel. Del followed by Enter removes a saved field.
+
+Display and power offers System, 25%, 50%, 75%, and 100% brightness. Idle dimming defaults to Never. The first key wakes the screen and exiting restores the entry brightness.
+Storage and memory groups the screenshot destination, free-space reserve (64 MiB by default), and image cache. Screenshots check the destination volume before writing.
+Accounts and uploads defaults to Manual. Select Upload policy, review the active NetworkManager WiFi profile, and press Enter again to trust it for future automatic uploads. Select the policy again to revert to Manual. This version stores the policy locally and has no uploader or survey logger.
 
 The GPS badge shows Off, Wait, No data, Busy, or the number of satellites used in the current fix. It shows Fix until the receiver supplies a count. A valid sentence can confirm a receiver even before a satellite fix. USB serial bridges appear as candidates until receiver data is recognized.
 
@@ -92,7 +96,7 @@ cmake --build --preset linux-x86-64-dbg
 cmake --workflow --preset cp0-cross-package
 ```
 
-The expected artifact is `dist/Marauder_0.6.11_rev1_arm64.deb`. Packaging and deployment remain separate actions.
+The expected artifact is `dist/Marauder_0.6.12_rev1_arm64.deb`. Packaging and deployment remain separate actions.
 
 ## Safety and scope
 

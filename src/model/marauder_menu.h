@@ -20,6 +20,8 @@ enum class MarauderMenuId {
     Gps,
     Device,
     Accounts,
+    Radios,
+    Display,
     FilesAndMemory,
 };
 
@@ -32,6 +34,10 @@ enum class MarauderMenuAction {
     OpenRadioSetup,
     CycleStorage,
     CycleCache,
+    Brightness,
+    DimDelay,
+    Reserve,
+    UploadPolicy,
     WigleName,
     WigleToken,
     WdgKey,

@@ -71,26 +71,23 @@ int main() {
     // Device and Settings expose the currently implemented actions.
     select_index(menu, 3);
     menu.activate();
-    if (menu.columns() != 1 || menu.item_count() != 6 || menu.activate() != MarauderMenuAction::OpenRadioSetup) return 16;
-    menu.move(0, 1);
-    if (menu.activate() != MarauderMenuAction::OpenAdapters) return 17;
-    menu.next();
-    if (menu.activate() != MarauderMenuAction::CycleBatteryDisplay) return 18;
-    menu.next();
-    menu.activate();
-    if (menu.activate() != MarauderMenuAction::CycleStorage) return 36;
-    menu.next();
-    if (menu.activate() != MarauderMenuAction::CycleCache) return 37;
-    menu.back();
-    menu.next();
-    menu.activate();
-    if (menu.activate() != MarauderMenuAction::WigleName) return 38;
-    menu.next();
-    if (menu.activate() != MarauderMenuAction::WigleToken) return 39;
-    menu.next();
-    if (menu.activate() != MarauderMenuAction::WdgKey) return 40;
-    menu.back();
-    menu.next();
+    if (menu.columns() != 1 || menu.item_count() != 5) return 16;
+    const std::vector<std::vector<MarauderMenuAction>> groups = {
+        {MarauderMenuAction::OpenRadioSetup, MarauderMenuAction::OpenAdapters},
+        {MarauderMenuAction::Brightness, MarauderMenuAction::DimDelay, MarauderMenuAction::CycleBatteryDisplay},
+        {MarauderMenuAction::CycleStorage, MarauderMenuAction::Reserve, MarauderMenuAction::CycleCache},
+        {MarauderMenuAction::UploadPolicy, MarauderMenuAction::WigleName, MarauderMenuAction::WigleToken, MarauderMenuAction::WdgKey}
+    };
+    for (const auto& group : groups) {
+        menu.activate();
+        if (menu.item_count() != group.size() || menu.columns() != 1) return 17;
+        for (auto action : group) {
+            if (menu.activate() != action) return 18;
+            menu.next();
+        }
+        menu.back();
+        menu.next();
+    }
     if (menu.activate() != MarauderMenuAction::OpenDiagnostics) return 41;
     return 0;
 }

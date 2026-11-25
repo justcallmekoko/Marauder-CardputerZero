@@ -99,6 +99,8 @@ public:
     void previous_wifi_scan_page();
     void next_wifi_scan_page();
     void toggle_wifi_scan_details();
+    unsigned reserve_mib() const { return model_.reserve_mib(); }
+    bool wake_display();
     void request_quit();
 
 private:
@@ -123,7 +125,14 @@ private:
     std::future<platform::RadioInventory> radio_job_;
     platform::RadioInventory radio_list_;
     std::size_t radio_cursor_{0};
-    std::string resource_message_;
+    std::string resource_message_, pending_uuid_, pending_network_;
+    int original_light_{-1}, light_max_{0}, before_dim_{-1};
+    bool changed_light_{false};
+    uint32_t activity_tick_{};
+    bool set_light(int value);
+    void idle_display();
+    void choose_upload_policy();
+    std::string resource_error_;
     model::BaseModel model_;
     model::MarauderMenuModel marauder_menu_;
     reactive::StringSubject<32> title_subject_;

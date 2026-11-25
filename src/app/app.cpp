@@ -70,13 +70,14 @@ public:
 
 private:
     bool handle_key(uint32_t key, bool long_pressed) {
+        if (view_model_.wake_display()) return true;
         if (view_model_.editing_credential()) {
             if (!long_pressed) view_model_.credential_key(key);
             return true;
         }
         if (key == platform::kKeyPrintScreen) {
             if (!long_pressed) {
-                const auto result = platform::screenshot::capture_active_screen(view_model_.screenshots_in_documents());
+                const auto result = platform::screenshot::capture_active_screen(view_model_.screenshots_in_documents(), view_model_.reserve_mib());
                 if (result.success) {
                     LOG_INFO("screenshot saved: {}", result.path);
                     toast_->show_highlighted("Saved to ",

@@ -58,14 +58,23 @@ const std::vector<Item>& items_for(Id menu) {
         {"Track", Color::Orange, Action::None, Id::Main, false, false},
     };
     static const std::vector<Item> device = {
-        {"Radio setup", Color::Cyan, Action::OpenRadioSetup, Id::Main, false, true},
-        {"WiFi adapter", Color::Green, Action::OpenAdapters, Id::Main, false, true},
-        {"Battery display", Color::Green, Action::CycleBatteryDisplay, Id::Main, false, true},
-        {"Files and RAM", Color::Blue, Action::None, Id::FilesAndMemory, true, true},
-        {"API credentials", Color::Magenta, Action::None, Id::Accounts, true, true},
+        {"Radios and GPS", Color::Cyan, Action::None, Id::Radios, true, true},
+        {"Display and power", Color::Green, Action::None, Id::Display, true, true},
+        {"Storage and memory", Color::Blue, Action::None, Id::FilesAndMemory, true, true},
+        {"Accounts and uploads", Color::Magenta, Action::None, Id::Accounts, true, true},
         {"System Info", Color::Purple, Action::OpenDiagnostics, Id::Main, false, true},
     };
+    static const std::vector<Item> radios = {
+        {"Radio setup", Color::Cyan, Action::OpenRadioSetup, Id::Main, false, true},
+        {"WiFi adapter", Color::Green, Action::OpenAdapters, Id::Main, false, true},
+    };
+    static const std::vector<Item> display = {
+        {"Brightness", Color::Green, Action::Brightness, Id::Main, false, true},
+        {"Dim after", Color::Green, Action::DimDelay, Id::Main, false, true},
+        {"Battery display", Color::Green, Action::CycleBatteryDisplay, Id::Main, false, true},
+    };
     static const std::vector<Item> accounts = {
+        {"Upload policy", Color::Purple, Action::UploadPolicy, Id::Main, false, true},
         {"WiGLE API name", Color::Cyan, Action::WigleName, Id::Main, false, true},
         {"WiGLE API token", Color::Cyan, Action::WigleToken, Id::Main, false, true},
         {"WDGWars API key", Color::Magenta, Action::WdgKey, Id::Main, false, true},
@@ -73,6 +82,7 @@ const std::vector<Item>& items_for(Id menu) {
 
     static const std::vector<Item> files_memory = {
         {"Screenshots", Color::Blue, Action::CycleStorage, Id::Main, false, true},
+        {"Keep free", Color::Blue, Action::Reserve, Id::Main, false, true},
         {"Image cache", Color::Purple, Action::CycleCache, Id::Main, false, true},
     };
     switch (menu) {
@@ -86,6 +96,8 @@ const std::vector<Item>& items_for(Id menu) {
         case Id::Bluetooth: return bluetooth;
         case Id::Gps: return gps;
         case Id::Device: return device;
+        case Id::Radios: return radios;
+        case Id::Display: return display;
         case Id::Accounts: return accounts;
     }
     return main;
@@ -102,8 +114,10 @@ const char* title_for(Id menu) {
         case Id::Bluetooth: return "Bluetooth";
         case Id::Gps: return "GPS";
         case Id::Device: return "Device";
-        case Id::Accounts: return "API credentials";
-        case Id::FilesAndMemory: return "Files and RAM";
+        case Id::Radios: return "Radios and GPS";
+        case Id::Display: return "Display and power";
+        case Id::Accounts: return "Accounts and uploads";
+        case Id::FilesAndMemory: return "Storage and memory";
     }
     return "MARAUDER";
 }
@@ -124,6 +138,8 @@ const MarauderMenuItem& MarauderMenuModel::item(std::size_t index) const {
 }
 std::size_t MarauderMenuModel::columns() const {
     switch (current_menu()) {
+        case MarauderMenuId::Radios:
+        case MarauderMenuId::Display:
         case MarauderMenuId::Device:
         case MarauderMenuId::FilesAndMemory:
         case MarauderMenuId::Accounts: return 1;

@@ -10,6 +10,8 @@
 #include "radio_power.h"
 #include "src/misc/cache/instance/lv_image_cache.h"
 #include <chrono>
+#include <fstream>
+#include <cstdio>
 
 #include <algorithm>
 #include <sstream>
@@ -17,6 +19,38 @@
 
 namespace viewmodel {
 namespace {
+constexpr const char* brightness_path = "/sys/class/backlight/backlight/brightness";
+int backlight_value(const char* path) {
+    int n = -1;
+    std::ifstream(path) >> n;
+    return n;
+}
+
+std::pair<std::string,std::string> active_wifi_profile() {
+#if defined(__linux__) && !USE_DESKTOP
+    FILE* pipe = popen("LC_ALL=C /usr/bin/nmcli -w 1 -t -e no -f TYPE,UUID,NAME connection show --active 2>/dev/null", "r");
+    if (!pipe) return {};
+    std::pair<std::string,std::string> profile;
+    char buffer[1024];
+    unsigned count = 0;
+    while (std::fgets(buffer, sizeof(buffer), pipe)) {
+        std::string line(buffer);
+        const std::string prefix = "802-11-wireless:";
+        if (line.compare(0, prefix.size(), prefix) != 0) continue;
+        const auto sep = line.find(':', prefix.size());
+        if (sep == std::string::npos) continue;
+        auto uuid = line.substr(prefix.size(), sep - prefix.size());
+        if (uuid.size() != 36 || uuid.find_first_not_of("abcdefABCDEF0123456789-") != std::string::npos) continue;
+        auto name = line.substr(sep + 1);
+        name.erase(name.find_last_not_of("\r\n") + 1);
+        profile = {uuid, name};
+        ++count;
+    }
+    if (pclose(pipe) == 0 && count == 1) return profile;
+#endif
+    return {};
+}
+
 int page_to_int(model::AppPage page) { return static_cast<int>(page); }
 }
 
@@ -34,10 +68,16 @@ BaseViewModel::BaseViewModel()
       quit_requested_subject_(false) {
     lv_image_cache_resize(model_.cache_kib() * 1024U, false);
     wifi_scan_timer_ = lv_timer_create(wifi_scan_timer_cb, 100, this);
+    original_light_ = backlight_value(brightness_path);
+    light_max_ = backlight_value("/sys/class/backlight/backlight/max_brightness");
+    activity_tick_ = lv_tick_get();
+    if (model_.brightness() && original_light_ >= 0 && light_max_ > 0)
+        set_light(std::max(1, static_cast<int>(model_.brightness()) * light_max_ / 100));
     refresh_diagnostics();
 }
 
 BaseViewModel::~BaseViewModel() {
+    if (changed_light_) set_light(original_light_);
     if (wifi_scan_timer_) {
         lv_timer_delete(wifi_scan_timer_);
         wifi_scan_timer_ = nullptr;
@@ -82,6 +122,7 @@ std::size_t BaseViewModel::marauder_menu_selected_index() const { return maraude
 bool BaseViewModel::marauder_menu_at_root() const { return !marauder_menu_.can_go_back(); }
 bool BaseViewModel::marauder_menu_can_go_back() const { return marauder_menu_.can_go_back(); }
 void BaseViewModel::move_menu_focus(int dx, int dy) {
+    pending_uuid_.clear(); pending_network_.clear(); resource_error_.clear();
     const auto previous = marauder_menu_.selected_index();
     marauder_menu_.move(dx, dy);
     if (previous != marauder_menu_.selected_index())
@@ -126,6 +167,16 @@ void BaseViewModel::credential_key(uint32_t key) {
 void BaseViewModel::marauder_menu_activate() {
     using Action = model::MarauderMenuAction;
     const auto action = marauder_menu_.activate();
+    resource_error_.clear();
+    if (action == Action::Brightness) {
+        if (light_max_ <= 0 || original_light_ < 0) resource_error_ = "Backlight unavailable";
+        else if (!model_.cycle_brightness()) resource_error_ = "Could not save preference";
+        else if (!set_light(model_.brightness() ? std::max(1, light_max_ * static_cast<int>(model_.brightness()) / 100) : original_light_))
+            resource_error_ = "Backlight write failed";
+    }
+    if (action == Action::DimDelay && !model_.cycle_dim()) resource_error_ = "Could not save preference";
+    if (action == Action::Reserve && !model_.cycle_reserve()) resource_error_ = "Could not save preference";
+    if (action == Action::UploadPolicy) choose_upload_policy();
     if (credential_action(action, credential_field_)) {
         credential_open_ = true;
         clear_credential_ = false;
@@ -163,6 +214,10 @@ void BaseViewModel::marauder_menu_activate() {
         case Action::WigleToken:
         case Action::WdgKey:
         case Action::CycleStorage:
+        case Action::Brightness:
+        case Action::DimDelay:
+        case Action::Reserve:
+        case Action::UploadPolicy:
         case Action::CycleCache:
         case model::MarauderMenuAction::CycleBatteryDisplay:
         case model::MarauderMenuAction::None:
@@ -170,11 +225,19 @@ void BaseViewModel::marauder_menu_activate() {
     }
 }
 const char* BaseViewModel::settings_message() const {
+    if (!resource_error_.empty()) return resource_error_.c_str();
+    if (!pending_uuid_.empty()) return "Enter to trust WiFi";
     if (marauder_menu_.current_menu() == model::MarauderMenuId::FilesAndMemory) return resource_message_.c_str();
     return "";
 }
 
 std::string BaseViewModel::setting_value(model::MarauderMenuAction action) const {
+    using Action = model::MarauderMenuAction;
+    if (action == Action::Brightness) return model_.brightness() ? std::to_string(model_.brightness()) + "%" : "System";
+    if (action == Action::DimDelay) return model_.dim_seconds() ? std::to_string(model_.dim_seconds()) + " sec" : "Never";
+    if (action == Action::Reserve) return model_.reserve_mib() ? std::to_string(model_.reserve_mib()) + " MiB" : "Off";
+    if (action == Action::UploadPolicy) return !pending_uuid_.empty() ? pending_network_ :
+        model_.trusted_profile().empty() ? "Manual" : "Trusted WiFi";
     model::Credential field;
     if (credential_action(action, field)) return model::credential_saved(field) ? "Saved" : "Not set";
     if (action == model::MarauderMenuAction::CycleBatteryDisplay) return model::battery_display_name(model_.battery_display());
@@ -254,6 +317,7 @@ void BaseViewModel::finish_radio_setting() {
 }
 
 bool BaseViewModel::marauder_menu_back() {
+    pending_uuid_.clear(); pending_network_.clear(); resource_error_.clear();
     if (!marauder_menu_.back()) return false;
     marauder_menu_generation_subject_.set(marauder_menu_generation_subject_.value() + 1);
     return true;
@@ -399,11 +463,56 @@ void BaseViewModel::toggle_wifi_scan_details() {
     publish_wifi_scan();
 }
 
+bool BaseViewModel::set_light(int value) {
+    if (value < 0 || light_max_ <= 0) return false;
+    std::ofstream file(brightness_path);
+    file << value;
+    file.close();
+    if (!file) return false;
+    changed_light_ = value != original_light_;
+    return true;
+}
+
+bool BaseViewModel::wake_display() {
+    activity_tick_ = lv_tick_get();
+    if (before_dim_ < 0) return false;
+    if (set_light(before_dim_)) before_dim_ = -1;
+    return true;
+}
+
+void BaseViewModel::idle_display() {
+    if (!model_.dim_seconds() || before_dim_ >= 0 || light_max_ <= 0 ||
+        lv_tick_elaps(activity_tick_) < model_.dim_seconds() * 1000) return;
+    const int current = backlight_value(brightness_path);
+    const int target = std::max(1, current / 5);
+    if (current > target && set_light(target)) before_dim_ = current;
+    else activity_tick_ = lv_tick_get();
+}
+
+void BaseViewModel::choose_upload_policy() {
+    if (!model_.trusted_profile().empty()) {
+        if (!model_.set_trusted_profile("")) resource_error_ = "Could not save policy";
+        return;
+    }
+    const auto profile = active_wifi_profile();
+    if (profile.first.empty()) {
+        resource_error_ = "Connect one WiFi network";
+        pending_uuid_.clear();
+    } else if (profile.first == pending_uuid_) {
+        if (!model_.set_trusted_profile(pending_uuid_)) resource_error_ = "Could not save policy";
+        pending_uuid_.clear();
+    } else {
+        pending_uuid_ = profile.first;
+        pending_network_ = profile.second;
+    }
+}
+
 void BaseViewModel::request_quit() { quit_requested_subject_.set(true); }
 
 void BaseViewModel::wifi_scan_timer_cb(lv_timer_t* timer) {
     auto* self = static_cast<BaseViewModel*>(lv_timer_get_user_data(timer));
     if (self) {
+        self->idle_display();
         self->finish_wifi_scan_if_ready();
         self->finish_radio_setting();
         self->update_gps_status();
