@@ -70,6 +70,10 @@ BaseViewModel::BaseViewModel()
     wifi_scan_timer_ = lv_timer_create(wifi_scan_timer_cb, 100, this);
     original_light_ = backlight_value(brightness_path);
     light_max_ = backlight_value("/sys/class/backlight/backlight/max_brightness");
+    gps_id_ = model::saved_gps_id();
+    if (!gps_id_.empty())
+        gps_status_.set(gps_session_.start(gps_id_) ? "Wait" : "Unavailable");
+    refresh_radios();
     activity_tick_ = lv_tick_get();
     if (model_.brightness() && original_light_ >= 0 && light_max_ > 0)
         set_light(std::max(1, static_cast<int>(model_.brightness()) * light_max_ / 100));
@@ -271,7 +275,10 @@ void BaseViewModel::toggle_radio() {
     const auto& radio = radios()[radio_cursor_];
     if (radio_busy()) return;
     if (radio.kind == "GPS") {
-        if (gps_id_ == radio.id) {
+        const auto next = gps_id_ == radio.id ? std::string{} : radio.id;
+        if (!model::save_gps_id(next)) {
+            radio_list_.message = "Could not save GPS";
+        } else if (next.empty()) {
             gps_session_.stop();
             gps_id_.clear();
             gps_status_.set("Off");
@@ -281,7 +288,7 @@ void BaseViewModel::toggle_radio() {
             gps_status_.set("Wait");
             radio_list_.message = "GPS selected";
         } else {
-            gps_id_.clear();
+            gps_id_ = next;
             gps_status_.set("Unavailable");
             radio_list_.message = "GPS reader unavailable";
         }
@@ -298,9 +305,20 @@ void BaseViewModel::update_gps_status() {
 }
 
 void BaseViewModel::sync_gps_rows() {
-    for (auto& d : radio_list_.devices) {
-        if (d.kind == "GPS") d.state = d.id == gps_id_ ? "On" : "Off";
+    auto& rows = radio_list_.devices;
+    rows.erase(std::remove_if(rows.begin(), rows.end(), [](const auto& d) {
+        return d.kind == "GPS" && d.name == "Saved GPS";
+    }), rows.end());
+    bool found = false;
+    for (auto& d : rows) {
+        if (d.kind != "GPS") continue;
+        d.state = d.id == gps_id_ ? "On" : "Off";
+        found |= d.id == gps_id_;
     }
+    if (!gps_id_.empty() && !found)
+        rows.push_back({gps_id_, "GPS", "Saved GPS", "Disconnected", "Waiting for receiver",
+                        "Enter to disable", "", "On", ""});
+    if (radio_cursor_ >= rows.size()) radio_cursor_ = rows.empty() ? 0 : rows.size() - 1;
 }
 
 void BaseViewModel::finish_radio_setting() {

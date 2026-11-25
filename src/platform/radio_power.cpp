@@ -78,7 +78,8 @@ RadioInventory read_radios(std::string id, bool enable) {
     return {"Device radios unavailable", {}};
 #else
     std::string command = "/usr/bin/timeout 20 /usr/bin/python3 -I /usr/lib/marauder/radio-inventory";
-    if (!id.empty()) {
+    if (id.empty()) command += " --restore";
+    else {
         if (id.size() != 64 || id.find_first_not_of("0123456789abcdef") != std::string::npos)
             return {"Invalid device", {}};
         command += " " + id + (enable ? " on" : " off");

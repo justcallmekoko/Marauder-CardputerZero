@@ -60,8 +60,7 @@ bool credential_saved(Credential field) {
     return lstat(path.c_str(), &info) == 0 && S_ISREG(info.st_mode) && info.st_size > 0;
 }
 
-bool store_credential(Credential field, const std::string& value) {
-    const auto path = credential_path(field);
+static bool replace_preference(const std::filesystem::path& path, const std::string& value) {
     if (path.empty()) return false;
     if (value.empty()) return unlink(path.c_str()) == 0 || errno == ENOENT;
     std::error_code error;
@@ -75,6 +74,19 @@ bool store_credential(Credential field, const std::string& value) {
     if (written && closed && rename(temp.c_str(), path.c_str()) == 0) return true;
     unlink(temp.c_str());
     return false;
+}
+
+bool store_credential(Credential field, const std::string& value) {
+    return replace_preference(credential_path(field), value);
+}
+
+std::string saved_gps_id() {
+    const auto id = read_value("gps-receiver");
+    return id.size() == 64 && id.find_first_not_of("0123456789abcdef") == std::string::npos ? id : "";
+}
+
+bool save_gps_id(const std::string& id) {
+    return replace_preference(preference_path("gps-receiver"), id);
 }
 
 const char* battery_display_name(BatteryDisplay mode) {

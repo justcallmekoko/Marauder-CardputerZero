@@ -11,6 +11,7 @@ import struct
 import subprocess
 import sys
 import time
+import tempfile
 
 SYS = Path("/sys/class")
 
@@ -28,6 +29,21 @@ def bus_info(path):
     if "/platform/" in str(path):
         return "Internal", "", ""
     return "Unknown bus", "", ""
+
+def hardware_identity(node, physical):
+    # USB tty, hci and phy numbers can change between launches.
+    for parent in (physical, *physical.parents):
+        if not (parent / "idVendor").exists():
+            continue
+        vendor = text(parent / "idVendor")
+        product = text(parent / "idProduct")
+        serial = text(parent / "serial")
+        interface = next((text(p / "bInterfaceNumber") for p in (physical, *physical.parents)
+                          if (p / "bInterfaceNumber").exists()), "")
+        location = serial if serial and serial.strip("0") else str(parent)
+        port = text(node / "device/port_number")
+        return "|".join((vendor, product, location, interface, port))
+    return str(physical)
 
 @dataclass
 class Device:
@@ -79,7 +95,7 @@ def inventory():
             driver = (physical / "driver").resolve().name if (physical / "driver").exists() else ""
             devices.append(Device(kind,node.name,location,product or ("WiFi adapter" if kind=="WiFi" else "Bluetooth controller"),
                                   driver or phy, "  ".join(filter(None,[ids,text(node/"address")])),state,
-                                  str(physical)+"/"+phy,str(switch or "")))
+                                  hardware_identity(node, physical),str(switch or "")))
     devices.extend(gps_ports(gps_devices()))
     return devices
 
@@ -106,7 +122,7 @@ def gps_ports(attached):
         devices.append(Device("GPS",port.name,location,record.get("driver") or product or "Serial receiver port",
                               "GPS receiver" if confirmed else "Unverified GPS port",ids or str(port),
                               "Off",
-                              str(physical)+"/"+port.name,record.get("path","")))
+                              hardware_identity(SYS / "tty" / port.name, physical),record.get("path","")))
     return devices
 
 def bluetooth_power(name):
@@ -133,12 +149,54 @@ def change(device, enable):
                 break
             time.sleep(.15)
 
+def preference_file(device):
+    root = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
+    return root / "marauder-cardputerzero" / "radio-states" / device.key
+
+def remember(device, action):
+    path = preference_file(device)
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(mode="w", dir=path.parent, delete=False) as out:
+        temp = Path(out.name)
+        try:
+            out.write(action)
+            out.flush()
+            os.fsync(out.fileno())
+            os.replace(temp, path)
+        finally:
+            temp.unlink(missing_ok=True)
+
+def restore(devices):
+    requested = {}
+    for d in devices:
+        if d.kind == "GPS":
+            continue
+        wanted = text(preference_file(d))
+        if wanted not in ("on", "off") or d.state.lower() == wanted:
+            continue
+        requested[d.key] = wanted
+        try:
+            change(d, wanted == "on")
+        except (ValueError, OSError, subprocess.SubprocessError):
+            continue
+    if not requested:
+        return devices, ""
+    for _ in range(4):
+        devices = inventory()
+        states = {d.key: d.state.lower() for d in devices}
+        if all(states.get(key) == wanted for key, wanted in requested.items()):
+            return devices, "Settings restored"
+        time.sleep(.15)
+    return devices, "Restore incomplete"
+
 def emit(fields):
     print("\t".join(" ".join(str(x).split())[:180] for x in fields))
 
 if __name__=="__main__":
     result=""
     devices=inventory()
+    if sys.argv[1:] == ["--restore"]:
+        devices, result = restore(devices)
     if len(sys.argv)==3:
         key,action=sys.argv[1:]
         device=next((d for d in devices if d.key==key),None)
@@ -149,7 +207,11 @@ if __name__=="__main__":
             for _ in range(4):
                 devices=inventory()
                 if any(d.key==key and d.state.lower()==action for d in devices):
-                    result=device.name+" "+("enabled" if action=="on" else "disabled")
+                    try:
+                        remember(device, action)
+                        result=device.name+" "+("enabled" if action=="on" else "disabled")
+                    except OSError:
+                        result="Changed but not saved"
                     break
                 time.sleep(.15)
             if not result: result="State unconfirmed"

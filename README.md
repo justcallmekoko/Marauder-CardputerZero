@@ -42,7 +42,7 @@ The launcher has four tiles. Use `F/X` for up/down and `Z/C` for left/right. `En
 
 The menu text uses the classic 5×7 glyphs from the Cardputer firmware. Under **Device → Display and power → Battery display**, press `Enter` to cycle through icon, percentage, and both. The choice is saved per user. Battery indicators are red at 20% or below, amber through 50%, and green above 50%.
 
-**Device → Radios and GPS → Radio setup** lists WiFi, Bluetooth and GPS devices. Browse with F/X, toggle the highlighted adapter with Enter, and refresh after connecting hardware with D. GPS selection is local to the running app. Select a USB or Cap/Grove port to read it. Marauder listens through gpsd when it already manages that port. Otherwise it checks serial data for checksum-valid NMEA. Disable GPS or exit to release the reader, restore serial settings, and return connector power to its initial state.
+**Device → Radios and GPS → Radio setup** lists WiFi, Bluetooth and GPS devices. Browse with F/X, toggle the highlighted adapter with Enter, and refresh after connecting hardware with D. Marauder remembers confirmed WiFi and Bluetooth choices per adapter and reapplies them on launch or refresh. It remembers the enabled GPS receiver and resumes reading it on launch. Disable GPS to forget the selection. Select a USB or Cap/Grove port to read it. Marauder listens through gpsd when it already manages that port. Otherwise it checks serial data for checksum-valid NMEA. Disable GPS or exit to release the reader, restore serial settings, and return connector power to its initial state.
 
 **Device → Accounts and uploads** stores a WiGLE API name and token and a WDGWars API key in separate owner-only files under the app configuration directory. Type a replacement and press Enter to save, or Esc to cancel. Del followed by Enter removes a saved field.
 
@@ -96,7 +96,7 @@ cmake --build --preset linux-x86-64-dbg
 cmake --workflow --preset cp0-cross-package
 ```
 
-The expected artifact is `dist/Marauder_0.6.12_rev1_arm64.deb`. Packaging and deployment remain separate actions.
+The expected artifact is `dist/Marauder_0.6.13_rev1_arm64.deb`. Packaging and deployment remain separate actions.
 
 ## Safety and scope
 

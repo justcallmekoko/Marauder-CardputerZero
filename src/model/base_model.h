@@ -20,6 +20,9 @@ enum class AppPage {
     RadioSetup,
 };
 
+std::string saved_gps_id();
+bool save_gps_id(const std::string& id);
+
 enum class Credential { WigleName, WigleToken, WdgKey };
 bool credential_saved(Credential field);
 bool store_credential(Credential field, const std::string& value);
