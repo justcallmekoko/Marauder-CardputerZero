@@ -12,8 +12,7 @@
       "System Tools"
     ],
     "screenshots": [
-      "screenshot/marauder-dashboard.png",
-      "screenshot/marauder-wifi-scan.png"
+      "screenshot/marauder-dashboard.png"
     ],
     "icon": "assets/images/jcmk-marauder-icon-v2.png",
     "license": "AGPL-3.0-only",
