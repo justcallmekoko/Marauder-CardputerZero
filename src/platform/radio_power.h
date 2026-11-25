@@ -5,7 +5,7 @@
 
 namespace platform {
 struct RadioDevice {
-    std::string id, kind, name, location, product, driver, detail, state;
+    std::string id, kind, name, location, product, driver, detail, state, bands;
 };
 struct RadioInventory {
     std::string message;

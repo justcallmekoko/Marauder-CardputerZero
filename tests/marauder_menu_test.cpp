@@ -21,7 +21,7 @@ bool select_index(MarauderMenuModel& menu, std::size_t index) {
 
 int main() {
     MarauderMenuModel menu;
-    if (menu.item_count() != 6 || menu.selected_index() != 0 || menu.depth() != 1) return 1;
+    if (menu.item_count() != 5 || menu.selected_index() != 0 || menu.depth() != 1) return 1;
     if (std::string(menu.title()) != "MARAUDER") return 21;
     const MarauderMenuColor root_colors[] = {
         MarauderMenuColor::Green,
@@ -29,7 +29,6 @@ int main() {
         MarauderMenuColor::Red,
         MarauderMenuColor::Blue,
         MarauderMenuColor::LightGrey,
-        MarauderMenuColor::Purple,
     };
     for (std::size_t index = 0; index < menu.item_count(); ++index) {
         if (menu.item(index).color != root_colors[index]) return 22;
@@ -43,7 +42,7 @@ int main() {
     menu.move(0, -1);
     if (menu.selected_index() != 0) return 32;
     menu.previous();
-    if (menu.selected_index() != 5 || menu.activate() != MarauderMenuAction::OpenRadioSetup) return 2;
+    if (menu.selected_index() != 4) return 2;
     menu.next();
     if (menu.selected_index() != 0) return 3;
 
@@ -73,7 +72,8 @@ int main() {
     // Device and Settings expose the currently implemented actions.
     select_index(menu, 3);
     menu.activate();
-    if (menu.item_count() != 2) return 16;
+    if (menu.item_count() != 3 || menu.activate() != MarauderMenuAction::OpenRadioSetup) return 16;
+    menu.next();
     if (menu.activate() != MarauderMenuAction::OpenDiagnostics) return 17;
     menu.back();
 
@@ -81,8 +81,7 @@ int main() {
     menu.activate();
     if (menu.activate() != MarauderMenuAction::CycleBatteryDisplay) return 18;
     menu.next();
-    if (menu.item_count() != 4 || menu.activate() != MarauderMenuAction::OpenRadioSetup) return 19;
-    menu.next();
+    if (menu.item_count() != 3) return 19;
     menu.activate();
     if (menu.activate() != MarauderMenuAction::CycleStorage) return 36;
     menu.next();

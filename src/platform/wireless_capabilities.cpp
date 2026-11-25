@@ -8,6 +8,7 @@
 #include <array>
 #include <cctype>
 #include <cstdio>
+#include <sstream>
 #include <filesystem>
 #include <sys/wait.h>
 
@@ -19,6 +20,29 @@ std::string trim(std::string value) {
     value.erase(value.begin(), std::find_if(value.begin(), value.end(), not_space));
     value.erase(std::find_if(value.rbegin(), value.rend(), not_space).base(), value.end());
     return value;
+}
+
+std::string frequency_bands(const std::string& info) {
+    struct Band { int low, high; const char* name; bool seen; };
+    Band bands[] = {{750, 999, "Sub-1", false}, {2400, 2500, "2.4", false},
+                    {4900, 5924, "5", false}, {5925, 7125, "6", false},
+                    {57000, 71000, "60", false}};
+    std::istringstream lines(info);
+    for (std::string line; std::getline(lines, line);) {
+        std::istringstream fields(line);
+        std::string star, unit;
+        int frequency;
+        if (!(fields >> star >> frequency >> unit) || star != "*" || unit != "MHz") continue;
+        for (auto& band : bands)
+            if (frequency >= band.low && frequency <= band.high) band.seen = true;
+    }
+    std::string result;
+    for (const auto& band : bands) {
+        if (!band.seen) continue;
+        if (!result.empty()) result += " / ";
+        result += band.name;
+    }
+    return result.empty() ? result : result + " GHz";
 }
 
 bool safe_phy_name(const std::string& value) {
@@ -84,12 +108,12 @@ MonitorModeProbe probe_monitor_mode(const std::string& phy_name) {
 
     const auto state = monitor_mode_from_iw_phy_info(output);
     if (state == CapabilityState::Supported) {
-        return {state, "Kernel advertises monitor mode"};
+        return {state, "Kernel advertises monitor mode", frequency_bands(output)};
     }
     if (state == CapabilityState::Unsupported) {
-        return {state, "Kernel lacks monitor mode"};
+        return {state, "Kernel lacks monitor mode", frequency_bands(output)};
     }
-    return {state, "PHY modes unknown; radio unchanged"};
+    return {state, "PHY modes unknown; radio unchanged", frequency_bands(output)};
 }
 
 } // namespace platform::wireless

@@ -69,6 +69,12 @@ std::string stable_identity(const AdapterInfo& adapter) {
 
 } // namespace
 
+std::string AdapterInfo::display_name() const {
+    if (manufacturer.empty()) return product_name.empty() ? interface_name : product_name;
+    if (product_name.empty() || product_name == manufacturer) return manufacturer;
+    return manufacturer + " " + product_name;
+}
+
 Catalog enumerate() {
     Catalog catalog;
     const fs::path root("/sys/class/net");
@@ -110,6 +116,7 @@ Catalog enumerate() {
 
         adapter.stable_id = stable_identity(adapter);
         const auto monitor_probe = probe_monitor_mode(adapter.phy_name);
+        adapter.bands = monitor_probe.bands;
         adapter.monitor_mode = monitor_probe.state;
         adapter.injection = CapabilityState::Unverified;
         adapter.capability_note = monitor_probe.note;

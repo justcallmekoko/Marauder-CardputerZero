@@ -16,6 +16,7 @@ public:
 
 private:
     lv_obj_t* heading_{};
+    lv_obj_t* bands_{};
     lv_obj_t* info_{};
     lv_obj_t* expanded_{};
     std::array<lv_obj_t*, 3> rows_{};

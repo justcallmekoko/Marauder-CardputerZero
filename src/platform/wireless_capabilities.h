@@ -19,6 +19,7 @@ enum class CapabilityState {
 struct MonitorModeProbe {
     CapabilityState state{CapabilityState::Unknown};
     std::string note;
+    std::string bands;
 };
 
 CapabilityState monitor_mode_from_iw_phy_info(std::string_view output);

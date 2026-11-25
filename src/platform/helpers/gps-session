@@ -33,7 +33,33 @@ def report(value):
         print(value, flush=True)
         last_status = value
 
-def fix(sentence):
+class FixStatus:
+    def __init__(self):
+        self.fixed = False
+        self.count = None
+        self.count_time = 0
+        self.groups = {}
+
+    def update(self, fixed=None, count=None):
+        if fixed is not None:
+            self.fixed = fixed
+        if fixed is False:
+            self.count = None
+            self.groups.clear()
+        elif isinstance(count, int) and 0 <= count <= 255:
+            self.count = count
+            self.count_time = time.monotonic()
+        if not self.fixed:
+            return "No fix"
+        if self.count is not None and time.monotonic() - self.count_time < 10:
+            return f"{self.count} sat"
+        now = time.monotonic()
+        active = [ids for ids, stamp in self.groups.values() if now - stamp < 2.5]
+        if active:
+            return f"{sum(map(len, active))} sat"
+        return "Fix"
+
+def fix(sentence, status):
     match = re.fullmatch(rb"\$([A-Z]{2}(GGA|RMC|GSA),[^*]*)\*([\da-fA-F]{2})", sentence.strip())
     if not match:
         return None
@@ -44,11 +70,19 @@ def fix(sentence):
         return None
     fields = match[1].split(b",")
     if match[2] == b"GSA" and len(fields) >= 3:
-        return {b"1": "No fix", b"2": "2D", b"3": "3D"}.get(fields[2])
+        if fields[2] in (b"1", b"2", b"3"):
+            if fields[2] != b"1" and len(fields) >= 15:
+                group = fields[18] if len(fields) > 18 and fields[18] else fields[0][:2]
+                ids = {sv for sv in fields[3:15] if sv.isdigit() and int(sv)}
+                if ids:
+                    status.groups[group] = (ids, time.monotonic())
+            return status.update(fields[2] != b"1")
     if match[2] == b"RMC" and len(fields) >= 3:
-        return {b"A": "Fix", b"V": "No fix"}.get(fields[2])
+        if fields[2] in (b"A", b"V"):
+            return status.update(fields[2] == b"A")
     if match[2] == b"GGA" and len(fields) >= 7 and fields[6].isdigit():
-        return "Fix" if int(fields[6]) else "No fix"
+        count = int(fields[7]) if len(fields) > 7 and fields[7].isdigit() else None
+        return status.update(bool(int(fields[6])), count)
 
 @contextlib.contextmanager
 def supply(uart):
@@ -83,7 +117,7 @@ def serial_status(port, uart):
                     termios.tcsetattr(fd, termios.TCSANOW, settings)
                     deadline = time.monotonic() + 3
                     buf = b""
-                    dimension = None
+                    status = FixStatus()
                     while time.monotonic() < deadline:
                         if not ready(fd, .3):
                             continue
@@ -93,11 +127,9 @@ def serial_status(port, uart):
                         buf += data
                         while b"\n" in buf:
                             line, buf = buf.split(b"\n", 1)
-                            value = fix(line)
+                            value = fix(line, status)
                             if value:
-                                if value in ("2D", "3D", "No fix"):
-                                    dimension = value
-                                report(dimension if value == "Fix" and dimension in ("2D", "3D") else value)
+                                report(value)
                                 deadline = time.monotonic() + 5
                         buf = buf[-512:]
                     report("No data")
@@ -111,6 +143,7 @@ def shared_status(port, path):
     with socket.create_connection(("127.0.0.1", 2947), timeout=1) as sock:
         watch = {"enable": True, "json": True, "device": path}
         sock.sendall(("?WATCH=" + json.dumps(watch, separators=(",", ":")) + ";\n").encode())
+        status = FixStatus()
         buf = b""
         deadline = time.monotonic() + 5
         while time.monotonic() < deadline:
@@ -123,10 +156,20 @@ def shared_status(port, path):
             while b"\n" in buf:
                 line, buf = buf.split(b"\n", 1)
                 msg = json.loads(line)
-                if msg.get("class") == "TPV" and Path(msg.get("device", "")).resolve() == port:
+                if Path(msg.get("device", "")).resolve() != port:
+                    continue
+                if msg.get("class") == "SKY":
+                    count = msg.get("uSat")
+                    if count is None and isinstance(msg.get("satellites"), list):
+                        count = len({(s.get("gnssid"), s.get("svid", s.get("PRN"))) for s in msg["satellites"]
+                                     if s.get("used") and ("svid" in s or "PRN" in s)})
+                    value = status.update(count=count)
+                    if status.fixed:
+                        report(value)
+                if msg.get("class") == "TPV":
                     mode = msg.get("mode")
                     if mode in (1, 2, 3):
-                        report(("Wait", "No fix", "2D", "3D")[mode])
+                        report(status.update(mode >= 2))
                         deadline = time.monotonic() + 5
             if len(buf) > 65536:
                 break

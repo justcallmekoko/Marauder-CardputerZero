@@ -132,7 +132,7 @@ void TitleBar::build() {
         const std::string state = lv_subject_get_string(subject);
         const auto colors = view::palette(true);
         auto ink = colors.text_disabled;
-        if (state == "Fix" || state == "2D" || state == "3D") ink = colors.success;
+        if (state == "Fix" || state.find(" sat") != std::string::npos) ink = colors.success;
         else if (state == "Wait" || state == "No fix" || state == "No data" || state == "Busy") ink = colors.warning;
         lv_label_set_text_fmt(label, "GPS %s", state.c_str());
         lv_obj_set_style_text_color(label, ink, 0);

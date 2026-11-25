@@ -25,6 +25,8 @@ struct AdapterInfo {
     std::string product_id;
     std::string manufacturer;
     std::string product_name;
+    std::string bands;
+    std::string display_name() const;
     std::string serial;
     std::string stable_id;
     CapabilityState monitor_mode{CapabilityState::Unknown};

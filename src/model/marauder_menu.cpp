@@ -21,7 +21,6 @@ const std::vector<Item>& items_for(Id menu) {
         {"GPS", Color::Red, Action::None, Id::Gps, true, true},
         {"Device", Color::Blue, Action::None, Id::Device, true, true},
         {"Settings", Color::LightGrey, Action::None, Id::Settings, true, true},
-        {"Radios", Color::Purple, Action::OpenRadioSetup, Id::Main, false, true},
     };
     static const std::vector<Item> wifi = {
         {"Scanners", Color::Orange, Action::None, Id::WifiScanners, true, true},
@@ -60,12 +59,12 @@ const std::vector<Item>& items_for(Id menu) {
         {"Track", Color::Orange, Action::None, Id::Main, false, false},
     };
     static const std::vector<Item> device = {
+        {"Radio setup", Color::Cyan, Action::OpenRadioSetup, Id::Main, false, true},
         {"System Info", Color::Cyan, Action::OpenDiagnostics, Id::Main, false, true},
         {"Storage", Color::LightGrey, Action::None, Id::Main, false, false},
     };
     static const std::vector<Item> settings = {
         {"Battery", Color::Green, Action::CycleBatteryDisplay, Id::Main, false, true},
-        {"Radio setup", Color::Cyan, Action::OpenRadioSetup, Id::Main, false, true},
         {"Files and RAM", Color::Blue, Action::None, Id::FilesAndMemory, true, true},
         {"Adapter Setup", Color::Green, Action::OpenAdapters, Id::Main, false, true},
     };

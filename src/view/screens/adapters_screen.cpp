@@ -43,6 +43,10 @@ void AdaptersScreen::build_content(lv_obj_t* content) {
     lv_label_set_long_mode(info_, LV_LABEL_LONG_DOT);
     lv_obj_set_style_text_font(info_, small ? small : &lv_font_montserrat_10, 0);
     lv_obj_set_style_text_line_space(info_, 2, 0);
+    bands_ = lv_label_create(content);
+    lv_obj_set_pos(bands_, 130, 103);
+    lv_obj_set_style_pad_hor(bands_, 4, 0);
+    lv_obj_set_style_text_font(bands_, small ? small : &lv_font_montserrat_10, 0);
     expanded_ = lv_label_create(content);
     lv_obj_set_pos(expanded_, 7, 2);
     lv_obj_set_width(expanded_, 306);
@@ -73,6 +77,7 @@ void AdaptersScreen::render() {
     visible(expanded_, !summary);
     visible(heading_, summary);
     visible(info_, summary);
+    visible(bands_, summary);
     lv_obj_set_style_text_color(expanded_, colors.text, 0);
     for (std::size_t i = 0; i < rows_.size(); ++i) {
         const auto index = first + i;
@@ -95,9 +100,13 @@ void AdaptersScreen::render() {
     lv_obj_set_style_text_color(heading_, colors.text_disabled, 0);
     const bool active = radio.stable_id == vm.selected_radio_id();
     const std::string description = std::string(active ? "SELECTED" : "AVAILABLE") + "\n" +
-        (radio.product_name.empty() ? radio.interface_name : radio.product_name) + "\n" +
+        radio.display_name() + "\n" +
         radio.bus_type + "  " + radio.operstate + "\n" + radio.driver + "  " + radio.phy_name +
         "\n" + radio.mac_address;
+    lv_label_set_text(bands_, radio.bands.empty() ? "Bands unknown" : radio.bands.c_str());
+    lv_obj_set_style_bg_color(bands_, colors.success, 0);
+    lv_obj_set_style_bg_opa(bands_, LV_OPA_20, 0);
+    lv_obj_set_style_text_color(bands_, colors.success, 0);
     lv_label_set_text(info_, description.c_str());
     lv_obj_set_style_text_color(info_, colors.text, 0);
 }

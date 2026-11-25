@@ -90,12 +90,16 @@ void RadioSetupScreen::render() {
     }
     const auto& d = devices[cursor];
     const bool gps = d.kind == "GPS";
-    put(type_, gps && d.state == "On" ? "GPS / Selected" : d.kind, accent(d.kind));
+    const auto band_label = d.bands.empty() ? "Bands unknown" : d.bands;
+    put(type_, d.kind == "WiFi" ? band_label : gps && d.state == "On" ? "GPS / Selected" : d.kind, accent(d.kind));
+    lv_obj_set_style_bg_color(type_, accent(d.kind), 0);
+    lv_obj_set_style_bg_opa(type_, d.kind == "WiFi" ? LV_OPA_20 : LV_OPA_TRANSP, 0);
+    lv_obj_set_style_pad_left(type_, d.kind == "WiFi" ? 4 : 0, 0);
     put(product_, d.product, colors.text);
     put(location_, d.location, colors.text);
     const std::string receiver_state = lv_subject_get_string(vm.gps_status_subject());
     const bool verified = gps && d.state == "On" && (receiver_state == "No fix" ||
-        receiver_state == "Fix" || receiver_state == "2D" || receiver_state == "3D");
+        receiver_state == "Fix" || receiver_state.find(" sat") != std::string::npos);
     put(driver_, verified ? "GPS receiver" : d.driver, colors.text_disabled);
     put(detail_, d.detail, colors.text_disabled);
     const char* action = d.state == "On" ? "Disable" :

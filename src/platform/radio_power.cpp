@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "radio_power.h"
+#include "wireless_adapters.h"
 #include <cstdio>
 #include <sstream>
 
@@ -98,6 +99,17 @@ RadioInventory read_radios(std::string id, bool enable) {
                                       fields[5], fields[6], fields[7], fields[8]});
     }
     if (pclose(pipe) != 0) return {"Inventory unavailable", {}};
+    const auto catalog = wireless::enumerate();
+    for (auto& device : result.devices) {
+        if (device.kind != "WiFi") continue;
+        for (const auto& adapter : catalog.adapters) {
+            if (adapter.interface_name != device.name) continue;
+            if (!adapter.manufacturer.empty() || !adapter.product_name.empty())
+                device.product = adapter.display_name();
+            device.bands = adapter.bands;
+            break;
+        }
+    }
     return result;
 #endif
 }
