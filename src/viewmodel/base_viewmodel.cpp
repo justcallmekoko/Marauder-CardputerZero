@@ -642,6 +642,13 @@ void BaseViewModel::toggle_wifi_scan_details() {
         if (wifi_operation_index_ == 0) { wifi_view_ = 1; wifi_info_tab_ = 0; }
         else if (wifi_operation_index_ == 1) { wifi_view_ = 2; wifi_client_index_ = 0; }
         else {
+            const auto mhz = wifi_networks_[wifi_scan_detail_index_].frequency_mhz;
+            if (!mhz || std::find(wifi_frequencies_.begin(), wifi_frequencies_.end(), static_cast<unsigned>(mhz)) == wifi_frequencies_.end()) {
+                wifi_scan_error_ = "AP channel not available";
+                publish_wifi_scan();
+                return;
+            }
+            wifi_scan_error_.clear();
             wifi_feed_target_ = wifi_networks_[wifi_scan_detail_index_].bssid;
             wifi_feed_station_ = false; wifi_feed_frames_.clear(); wifi_feed_count_ = 0; wifi_feed_offset_ = 0;
             wifi_view_ = 6;
@@ -651,6 +658,13 @@ void BaseViewModel::toggle_wifi_scan_details() {
     } else if (wifi_view_ == 5) {
         if (wifi_operation_index_ == 0) wifi_view_ = 3;
         else {
+            const auto mhz = wifi_networks_[wifi_scan_detail_index_].frequency_mhz;
+            if (!mhz || std::find(wifi_frequencies_.begin(), wifi_frequencies_.end(), static_cast<unsigned>(mhz)) == wifi_frequencies_.end()) {
+                wifi_scan_error_ = "AP channel not available";
+                publish_wifi_scan();
+                return;
+            }
+            wifi_scan_error_.clear();
             wifi_feed_target_ = wifi_networks_[wifi_scan_detail_index_].clients[wifi_client_index_].mac;
             wifi_feed_station_ = true; wifi_feed_frames_.clear(); wifi_feed_count_ = 0; wifi_feed_offset_ = 0;
             wifi_view_ = 6;

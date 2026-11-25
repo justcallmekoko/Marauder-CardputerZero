@@ -70,7 +70,7 @@ void WifiScanScreen::render() {
                       "Access points");
     lv_obj_set_style_text_color(title_, colors.text, 0);
     const auto count = feed ? std::to_string(vm.wifi_feed_count()) + " frames" :
-        !vm.wifi_error().empty() ? "Capture failed" :
+        !vm.wifi_error().empty() ? "Needs attention" :
         (mode == 0 && items.empty()) ? "Listening" : total == 0 ? "0 seen" :
         std::to_string(selected + 1) + " / " + std::to_string(total);
     lv_label_set_text(count_, count.c_str());
@@ -138,7 +138,7 @@ void WifiScanScreen::render() {
         if (!vm.wifi_error().empty()) message = vm.wifi_error();
         if (frames.empty() && vm.wifi_error().empty()) message = "CH " + std::to_string(channel) + "   Waiting for frames";
     } else if (operations && cursor < items.size()) {
-        message = mode == 4 ? items[cursor].ssid + "   CH " + std::to_string(items[cursor].channel) :
+        message = !vm.wifi_error().empty() ? vm.wifi_error() : mode == 4 ? items[cursor].ssid + "   CH " + std::to_string(items[cursor].channel) :
             clients && vm.wifi_client_cursor() < clients->size() ? (*clients)[vm.wifi_client_cursor()].mac : "";
     } else if (mode == 3 && clients && vm.wifi_client_cursor() < clients->size()) {
         const auto& client = (*clients)[vm.wifi_client_cursor()];
