@@ -6,7 +6,7 @@
 
 cmake_minimum_required(VERSION 3.31)
 
-project(marauder_cardputerzero VERSION 0.6.27 LANGUAGES C CXX)
+project(marauder_cardputerzero VERSION 0.6.28 LANGUAGES C CXX)
 
 include(CTest)
 find_package(Threads REQUIRED)
@@ -624,6 +624,10 @@ target_link_libraries(${PROJECT_NAME}
 )
 
 if(BUILD_TESTING AND USE_DESKTOP)
+    add_executable(pcap_capture_test tests/pcap_capture_test.cpp src/platform/pcap_capture.cpp)
+    target_include_directories(pcap_capture_test PRIVATE src/platform)
+    target_compile_definitions(pcap_capture_test PRIVATE USE_DESKTOP=1)
+    add_test(NAME pcap_capture_test COMMAND pcap_capture_test)
     add_executable(raw_wifi_test tests/raw_wifi_test.cpp src/platform/raw_wifi.cpp src/platform/wifi_security.cpp)
     target_include_directories(raw_wifi_test PRIVATE src/platform)
     add_test(NAME raw_wifi_test COMMAND raw_wifi_test)

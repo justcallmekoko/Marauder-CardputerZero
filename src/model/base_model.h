@@ -19,6 +19,7 @@ enum class AppPage {
     Diagnostics = 3,
     RadioSetup,
     Traffic,
+    PcapFiles,
 };
 
 std::string saved_gps_id();

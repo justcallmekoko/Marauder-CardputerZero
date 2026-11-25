@@ -108,7 +108,7 @@ void TitleBar::build() {
 
     auto* status = lv_obj_create(core_obj_);
     lv_obj_remove_style_all(status);
-    lv_obj_set_size(status, 230, LV_PCT(100));
+    lv_obj_set_size(status, 245, LV_PCT(100));
     lv_obj_align(status, LV_ALIGN_RIGHT_MID, -5, 0);
     lv_obj_set_flex_flow(status, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(status, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
@@ -126,7 +126,7 @@ void TitleBar::build() {
     }
     auto* gps = lv_label_create(status);
     const auto* small = assets_.load_standard_font(10);
-    configure_label(gps, view_model_.dark_mode_subject(), small ? small : &lv_font_montserrat_10, 79);
+    configure_label(gps, view_model_.dark_mode_subject(), small ? small : &lv_font_montserrat_10, 68);
     reactive::observe_obj(gps, view_model_.gps_status_subject(), [](lv_observer_t* observer, lv_subject_t* subject) {
         auto* label = static_cast<lv_obj_t*>(lv_observer_get_target(observer));
         const std::string state = lv_subject_get_string(subject);
@@ -136,6 +136,21 @@ void TitleBar::build() {
         else if (state == "Wait" || state == "No fix" || state == "No data" || state == "Busy") ink = colors.warning;
         lv_label_set_text_fmt(label, "GPS %s", state.c_str());
         lv_obj_set_style_text_color(label, ink, 0);
+    }, nullptr);
+    pcap_label_ = lv_label_create(status);
+    configure_label(pcap_label_, view_model_.dark_mode_subject(), small ? small : &lv_font_montserrat_10, 35);
+    lv_obj_set_style_bg_opa(pcap_label_, LV_OPA_20, 0);
+    lv_obj_set_style_radius(pcap_label_, 3, 0);
+    reactive::observe_obj(pcap_label_, view_model_.pcap_status_subject(), [](lv_observer_t* observer, lv_subject_t* subject) {
+        auto* label = static_cast<lv_obj_t*>(lv_observer_get_target(observer));
+        const char* state = lv_subject_get_string(subject);
+        const auto colors = view::palette(true);
+        const auto ink = state[0] == 'R' ? colors.error : state[1] == '\0' ? colors.text_disabled : colors.warning;
+        lv_label_set_text(label, state);
+        lv_obj_set_style_text_color(label, ink, 0);
+        lv_obj_set_style_bg_color(label, ink, 0);
+        lv_obj_set_style_bg_opa(label, state[1] == '\0' ? LV_OPA_TRANSP : LV_OPA_20, 0);
+        set_visible(label, state[0] != '\0');
     }, nullptr);
     wifi_label_ = lv_label_create(status);
     configure_label(wifi_label_, view_model_.dark_mode_subject(), icon_font, 18);

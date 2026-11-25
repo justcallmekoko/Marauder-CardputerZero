@@ -2,6 +2,7 @@
 #pragma once
 #include <string>
 #include <vector>
+#include <mutex>
 
 namespace platform {
 struct RadioDevice {
@@ -23,6 +24,7 @@ public:
     int capture_socket();
 private:
     int channel_{-1}, child_{-1};
+    std::mutex mutex_;
 };
 
 class GpsSession {

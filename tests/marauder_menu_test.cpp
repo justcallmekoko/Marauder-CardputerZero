@@ -72,7 +72,7 @@ int main() {
     const std::vector<std::vector<MarauderMenuAction>> groups = {
         {MarauderMenuAction::OpenRadioSetup, MarauderMenuAction::OpenAdapters, MarauderMenuAction::CycleTrafficSource},
         {MarauderMenuAction::Brightness, MarauderMenuAction::DimDelay, MarauderMenuAction::CycleBatteryDisplay},
-        {MarauderMenuAction::CycleStorage, MarauderMenuAction::Reserve, MarauderMenuAction::CycleCache},
+        {MarauderMenuAction::CycleStorage, MarauderMenuAction::OpenPcapFiles, MarauderMenuAction::Reserve, MarauderMenuAction::CycleCache},
         {MarauderMenuAction::UploadPolicy, MarauderMenuAction::WigleName, MarauderMenuAction::WigleToken, MarauderMenuAction::WdgKey}
     };
     for (const auto& group : groups) {

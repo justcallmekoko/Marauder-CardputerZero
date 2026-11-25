@@ -89,6 +89,7 @@ BaseViewModel::BaseViewModel()
 }
 
 BaseViewModel::~BaseViewModel() {
+    pcap_capture_.stop();
     if (changed_light_) set_light(original_light_);
     if (wifi_scan_timer_) {
         lv_timer_delete(wifi_scan_timer_);
@@ -130,6 +131,53 @@ void BaseViewModel::show_wifi_scan_page() {
     model_.set_current_page(model::AppPage::WifiScan);
     publish_navigation();
     if (!wifi_scan_running_) start_wifi_scan();
+}
+void BaseViewModel::show_pcap_files_page() {
+    stop_wifi_capture();
+    refresh_pcap_files();
+    pcap_details_ = false;
+    model_.set_current_page(model::AppPage::PcapFiles);
+    publish_navigation();
+}
+
+void BaseViewModel::refresh_pcap_files() {
+    pcap_files_ = platform::pcap::list_files();
+    if (pcap_cursor_ >= pcap_files_.size()) pcap_cursor_ = pcap_files_.empty() ? 0 : pcap_files_.size() - 1;
+    pcap_files_generation_.set(pcap_files_generation_.value() + 1);
+}
+
+void BaseViewModel::move_pcap_file(int direction) {
+    if (pcap_files_.empty() || pcap_details_) return;
+    if (direction < 0 && pcap_cursor_) --pcap_cursor_;
+    if (direction > 0 && pcap_cursor_ + 1 < pcap_files_.size()) ++pcap_cursor_;
+    pcap_files_generation_.set(pcap_files_generation_.value() + 1);
+}
+
+void BaseViewModel::toggle_pcap_details() {
+    if (pcap_files_.empty()) return;
+    pcap_details_ = !pcap_details_;
+    pcap_files_generation_.set(pcap_files_generation_.value() + 1);
+}
+
+std::string BaseViewModel::toggle_pcap_capture() {
+    if (pcap_capture_.active()) {
+        const auto path = pcap_capture_.stop();
+        pcap_status_.set("P");
+        pcap_message_ = "Saved " + std::to_string(pcap_capture_.frames()) + " frames";
+        refresh_pcap_files();
+        return pcap_message_ + " to " + path;
+    }
+    const auto warning = collection_warning(model::RadioRequirement::Monitor);
+    if (!warning.empty()) return warning;
+    if (monitor_job_.valid()) return "Radio mode is changing";
+    const int socket = monitor_session_.capture_socket();
+    if (socket < 0) return "Monitor capture unavailable";
+    const auto error = pcap_capture_.start(socket, model_.reserve_mib());
+    if (!error.empty()) return error;
+    pcap_status_.set("REC");
+    pcap_message_ = "Recording to " + pcap_capture_.path();
+    refresh_pcap_files();
+    return pcap_message_;
 }
 void BaseViewModel::toggle_page() { stop_wifi_capture(); model_.toggle_page(); publish_navigation(); }
 const char* BaseViewModel::marauder_menu_title() const { return marauder_menu_.title(); }
@@ -252,6 +300,9 @@ void BaseViewModel::marauder_menu_activate() {
         case Action::OpenTraffic:
             model_.set_current_page(model::AppPage::Traffic);
             publish_navigation();
+            break;
+        case Action::OpenPcapFiles:
+            show_pcap_files_page();
             break;
         case Action::OpenRadioSetup:
             model_.set_current_page(model::AppPage::RadioSetup);
@@ -414,6 +465,7 @@ void BaseViewModel::toggle_monitor() {
     const auto& adapter = adapters_[highlighted_adapter_];
     if (adapter.stable_id != model_.selected_adapter_id()) adapter_error_ = "Select adapter first";
     else if (wifi_scan_running_) adapter_error_ = "Leave Access Points first";
+    else if (pcap_capture_.active() && !monitor_owner_.empty()) adapter_error_ = "Stop PCAP capture first";
     else if (monitor_owner_.empty() && adapter.monitor_mode != platform::wireless::CapabilityState::Supported)
         adapter_error_ = "Monitor support unavailable";
     else {
@@ -751,6 +803,12 @@ void BaseViewModel::wifi_scan_timer_cb(lv_timer_t* timer) {
             self->publish_adapter_detail();
         }
         self->finish_wifi_scan_if_ready();
+        const auto pcap_error = self->pcap_capture_.take_error();
+        if (!pcap_error.empty()) {
+            self->pcap_status_.set("PCAP!");
+            self->pcap_message_ = pcap_error;
+            self->refresh_pcap_files();
+        }
         if (self->wifi_capture_failed_.exchange(false)) {
             self->stop_wifi_capture();
             self->wifi_scan_error_ = "Monitor capture stopped";

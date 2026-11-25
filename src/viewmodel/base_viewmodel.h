@@ -17,6 +17,7 @@
 #include "wireless_scan.h"
 #include "radio_power.h"
 #include "raw_wifi.h"
+#include "pcap_capture.h"
 
 #include <atomic>
 #include <cstddef>
@@ -47,6 +48,18 @@ public:
     lv_subject_t* adapter_detail_subject();
     lv_subject_t* wifi_scan_subject();
     lv_subject_t* quit_requested_subject();
+    lv_subject_t* pcap_status_subject() { return pcap_status_.native(); }
+    bool pcap_active() const { return pcap_capture_.active(); }
+    std::string toggle_pcap_capture();
+    void show_pcap_files_page();
+    void refresh_pcap_files();
+    void move_pcap_file(int direction);
+    void toggle_pcap_details();
+    const auto& pcap_files() const { return pcap_files_; }
+    std::size_t pcap_cursor() const { return pcap_cursor_; }
+    bool pcap_details() const { return pcap_details_; }
+    const auto& pcap_message() const { return pcap_message_; }
+    lv_subject_t* pcap_files_subject() { return pcap_files_generation_.native(); }
 
     bool is_dark_mode() const;
     model::AppPage current_page() const;
@@ -184,6 +197,13 @@ private:
     reactive::StringSubject<2048> adapter_detail_subject_;
     reactive::StringSubject<2048> wifi_scan_subject_;
     reactive::BoolSubject quit_requested_subject_;
+    reactive::StringSubject<12> pcap_status_{"P"};
+    reactive::IntSubject pcap_files_generation_{0};
+    platform::pcap::Capture pcap_capture_;
+    std::vector<platform::pcap::FileInfo> pcap_files_;
+    std::size_t pcap_cursor_{};
+    bool pcap_details_{};
+    std::string pcap_message_;
     model::SystemInfoModel system_info_;
     platform::diagnostics::Snapshot diagnostics_snapshot_;
     std::vector<platform::wireless::AdapterInfo> adapters_;

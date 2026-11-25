@@ -19,6 +19,7 @@ namespace platform {
 MonitorSession::~MonitorSession() { stop(); }
 
 std::string MonitorSession::start(const std::string& name) {
+    std::lock_guard<std::mutex> lock(mutex_);
 #if defined(__linux__) && !USE_DESKTOP
     int ends[2];
     if (channel_ >= 0 || socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, ends) != 0)
@@ -44,7 +45,13 @@ std::string MonitorSession::start(const std::string& name) {
         if (n != 1 || c == '\n') break;
         line += c;
     }
-    if (line != "Monitor on") stop();
+    if (line != "Monitor on") {
+        shutdown(channel_, SHUT_WR);
+        int status{};
+        waitpid(child_, &status, 0);
+        close(channel_);
+        channel_ = child_ = -1;
+    }
     return line.empty() ? "Monitor permission unavailable" : line;
 #else
     return "Device control unavailable";
@@ -52,6 +59,7 @@ std::string MonitorSession::start(const std::string& name) {
 }
 
 std::string MonitorSession::tune(unsigned mhz) {
+    std::lock_guard<std::mutex> lock(mutex_);
 #if defined(__linux__) && !USE_DESKTOP
     const auto command = std::to_string(mhz) + "\n";
     if (channel_ < 0 || send(channel_, command.data(), command.size(), MSG_NOSIGNAL) != static_cast<ssize_t>(command.size()))
@@ -70,6 +78,7 @@ std::string MonitorSession::tune(unsigned mhz) {
 }
 
 int MonitorSession::capture_socket() {
+    std::lock_guard<std::mutex> lock(mutex_);
 #if defined(__linux__) && !USE_DESKTOP
     constexpr char command[] = "CAPTURE\n";
     if (channel_ < 0 || send(channel_, command, sizeof(command) - 1, MSG_NOSIGNAL) != static_cast<ssize_t>(sizeof(command) - 1))
@@ -97,6 +106,7 @@ int MonitorSession::capture_socket() {
 }
 
 std::string MonitorSession::stop() {
+    std::lock_guard<std::mutex> lock(mutex_);
 #if defined(__linux__) && !USE_DESKTOP
     if (channel_ >= 0) {
         shutdown(channel_, SHUT_WR);

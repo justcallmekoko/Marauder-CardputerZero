@@ -148,6 +148,23 @@ private:
             if (!long_pressed) view_model_.credential_key(key);
             return true;
         }
+        if (key == 'p' || key == 'P') {
+            if (!long_pressed) {
+                const bool was_recording = view_model_.pcap_active();
+                if (!was_recording) {
+                    const auto warning = view_model_.collection_warning(model::RadioRequirement::Monitor);
+                    if (!warning.empty()) {
+                        show_confirmation(warning, "Enter Adapters", DialogAction::OpenAdapters);
+                        return true;
+                    }
+                }
+                const auto result = view_model_.toggle_pcap_capture();
+                if (was_recording) toast_->show(view_model_.pcap_message(), view::widgets::ToastTone::Success, 3200);
+                else if (view_model_.pcap_active()) toast_->show("PCAP recording started", view::widgets::ToastTone::Success, 3200);
+                else toast_->show(result, view::widgets::ToastTone::Error, 3200);
+            }
+            return true;
+        }
         if (key == platform::kKeyPrintScreen) {
             if (!long_pressed) {
                 const auto result = platform::screenshot::capture_active_screen(view_model_.screenshots_in_documents(), view_model_.reserve_mib());
@@ -191,6 +208,10 @@ private:
         }
 
         if (key == LV_KEY_ESC && !long_pressed) {
+            if (view_model_.current_page() == model::AppPage::PcapFiles && view_model_.pcap_details()) {
+                view_model_.toggle_pcap_details();
+                return true;
+            }
             if (view_model_.current_page() == model::AppPage::WifiScan && view_model_.wifi_details_open()) {
                 view_model_.wifi_back();
                 return true;
@@ -239,6 +260,13 @@ private:
             if (action == NavigationAction::Next) { view_model_.next_system_info_page(); return true; }
             if (action == NavigationAction::Primary) { view_model_.refresh_diagnostics(); return true; }
             if (action == NavigationAction::Details) { view_model_.toggle_system_info_details(); return true; }
+        }
+
+        if (view_model_.current_page() == model::AppPage::PcapFiles) {
+            if (action == NavigationAction::Previous) { view_model_.move_pcap_file(-1); return true; }
+            if (action == NavigationAction::Next) { view_model_.move_pcap_file(1); return true; }
+            if (key == LV_KEY_ENTER) { view_model_.toggle_pcap_details(); return true; }
+            if (action == NavigationAction::Details) { view_model_.refresh_pcap_files(); return true; }
         }
 
         if (view_model_.current_page() == model::AppPage::RadioSetup) {
