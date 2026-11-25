@@ -63,6 +63,15 @@ void DashboardScreen::build_content(lv_obj_t* content) {
         lv_obj_set_style_text_font(row_labels_[i], title ? title : &lv_font_montserrat_14, 0);
         lv_obj_align(row_labels_[i], LV_ALIGN_BOTTOM_LEFT, 6, -3);
     }
+    edit_title_ = lv_label_create(content);
+    edit_mask_ = lv_label_create(content);
+    edit_hint_ = lv_label_create(content);
+    lv_obj_set_pos(edit_title_, 10, 24);
+    lv_obj_set_pos(edit_mask_, 10, 49);
+    lv_obj_set_pos(edit_hint_, 10, 88);
+    lv_obj_set_style_text_font(edit_title_, title ? title : &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_font(edit_mask_, title ? title : &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_font(edit_hint_, small ? small : &lv_font_montserrat_10, 0);
     menu_observer_ = reactive::observe_obj(content, view_model().marauder_menu_generation_subject(), menu_changed_cb, this);
     reactive::observe_obj(content, view_model().dark_mode_subject(), menu_changed_cb, this);
 }
@@ -81,9 +90,33 @@ void DashboardScreen::render_menu() {
                          "F/X Up/Down  Z/C Left/Right  Enter Open  Esc Back");
     lv_obj_set_style_text_color(menu_title_, colors.text, 0);
     lv_obj_set_style_text_color(footer_, colors.text_disabled, 0);
-    for (std::size_t i = 0; i < rows_.size(); ++i) {
-        auto* tile = rows_[i];
-        if (i >= view_model().marauder_menu_item_count()) {
+    const bool list = columns == 1;
+    const bool edit = view_model().editing_credential();
+    const auto cursor = view_model().marauder_menu_selected_index();
+    for (auto* part : {edit_title_, edit_mask_, edit_hint_}) {
+        if (edit) lv_obj_remove_flag(part, LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_add_flag(part, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (edit) {
+        for (auto* row : rows_) lv_obj_add_flag(row, LV_OBJ_FLAG_HIDDEN);
+        lv_label_set_text(footer_, "");
+        lv_label_set_text(edit_title_, view_model().marauder_menu_item(cursor).label);
+        const auto length = view_model().credential_length();
+        const auto mask = std::string(std::min<std::size_t>(length, 12), '*') + "   " + std::to_string(length) + " chars";
+        lv_label_set_text(edit_mask_, mask.c_str());
+        lv_label_set_text(edit_hint_, view_model().credential_prompt().c_str());
+        lv_obj_set_style_text_color(edit_title_, colors.text, 0);
+        lv_obj_set_style_text_color(edit_mask_, accent(model::MarauderMenuColor::Magenta), 0);
+        lv_obj_set_style_text_color(edit_hint_, colors.text_disabled, 0);
+        set_key_guide("Type   Backspace Erase   Enter Save   Esc Cancel");
+        return;
+    }
+    if (list) set_key_guide("F/X Browse    Enter Select    Esc Back");
+    const auto first = list && cursor >= 4 ? cursor - 3 : 0;
+    for (std::size_t slot = 0; slot < rows_.size(); ++slot) {
+        const auto i = first + slot;
+        auto* tile = rows_[slot];
+        if ((list && slot >= 4) || i >= view_model().marauder_menu_item_count()) {
             lv_obj_add_flag(tile, LV_OBJ_FLAG_HIDDEN);
             continue;
         }
@@ -92,28 +125,32 @@ void DashboardScreen::render_menu() {
         const bool focused = i == view_model().marauder_menu_selected_index();
         auto ink = accent(item.color);
         if (!view_model().is_dark_mode()) ink = lv_color_mix(colors.text, ink, 128);
-        lv_obj_set_pos(tile, 6 + (i % columns) * (width + 4), 20 + (i / columns) * 51);
-        lv_obj_set_size(tile, width, 47);
+        if (list) lv_obj_set_pos(tile, 6, 20 + slot * 25);
+        else lv_obj_set_pos(tile, 6 + (i % columns) * (width + 4), 20 + (i / columns) * 51);
+        lv_obj_set_size(tile, width, list ? 24 : 47);
+        lv_obj_set_style_radius(tile, list ? 3 : 5, 0);
         lv_obj_set_style_bg_color(tile, focused ? lv_color_mix(ink, colors.button, 32) : colors.button, 0);
         lv_obj_set_style_border_width(tile, focused ? 2 : 1, 0);
         lv_obj_set_style_border_color(tile, focused ? ink : colors.border, 0);
-        lv_label_set_text(marks_[i], root ? root_marks[i] :
+        lv_label_set_text(marks_[slot], root ? root_marks[i] :
                           !item.available ? LV_SYMBOL_MINUS : item.opens_submenu ? LV_SYMBOL_DIRECTORY : LV_SYMBOL_RIGHT);
-        lv_obj_set_style_text_color(marks_[i], item.available ? ink : colors.text_disabled, 0);
+        lv_obj_set_style_text_color(marks_[slot], item.available ? ink : colors.text_disabled, 0);
         std::string label(item.label);
-        if (item.action == model::MarauderMenuAction::CycleBatteryDisplay)
+        if (!list && item.action == model::MarauderMenuAction::CycleBatteryDisplay)
             label += std::string(": ") + model::battery_display_name(view_model().battery_display());
         const auto value = view_model().setting_value(item.action);
         if (!value.empty()) {
-            lv_label_set_text(marks_[i], value.c_str());
-            lv_obj_set_style_text_font(marks_[i], &lv_font_montserrat_10, 0);
+            lv_label_set_text(marks_[slot], value.c_str());
+            lv_obj_set_style_text_font(marks_[slot], &lv_font_montserrat_10, 0);
         } else {
-            lv_obj_set_style_text_font(marks_[i], &lv_font_montserrat_14, 0);
+            lv_obj_set_style_text_font(marks_[slot], &lv_font_montserrat_14, 0);
         }
         if (!item.available) label += "  (soon)";
-        lv_label_set_text(row_labels_[i], label.c_str());
-        lv_obj_set_width(row_labels_[i], width - 16);
-        lv_obj_set_style_text_color(row_labels_[i], item.available ? colors.text : colors.text_disabled, 0);
+        lv_label_set_text(row_labels_[slot], label.c_str());
+        lv_obj_set_width(row_labels_[slot], list ? 180 : width - 16);
+        lv_obj_align(row_labels_[slot], list ? LV_ALIGN_LEFT_MID : LV_ALIGN_BOTTOM_LEFT, list ? 11 : 6, list ? 0 : -3);
+        lv_obj_align(marks_[slot], list ? LV_ALIGN_RIGHT_MID : LV_ALIGN_TOP_LEFT, list ? -9 : 6, list ? 0 : 3);
+        lv_obj_set_style_text_color(row_labels_[slot], item.available ? colors.text : colors.text_disabled, 0);
     }
 }
 

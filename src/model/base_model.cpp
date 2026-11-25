@@ -8,6 +8,9 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <cstdio>
 
 namespace model {
 namespace {
@@ -38,6 +41,38 @@ bool save_value(const char* key, const std::string& value) {
     file.close();
     return !file.fail();
 }
+}
+
+static std::filesystem::path credential_path(Credential field) {
+    switch (field) {
+        case Credential::WigleName: return preference_path("wigle-api-name");
+        case Credential::WigleToken: return preference_path("wigle-api-token");
+        case Credential::WdgKey: return preference_path("wdgwars-api-key");
+    }
+    return {};
+}
+
+bool credential_saved(Credential field) {
+    struct stat info{};
+    const auto path = credential_path(field);
+    return lstat(path.c_str(), &info) == 0 && S_ISREG(info.st_mode) && info.st_size > 0;
+}
+
+bool store_credential(Credential field, const std::string& value) {
+    const auto path = credential_path(field);
+    if (path.empty()) return false;
+    if (value.empty()) return unlink(path.c_str()) == 0 || errno == ENOENT;
+    std::error_code error;
+    std::filesystem::create_directories(path.parent_path(), error);
+    if (error) return false;
+    auto temp = path.string() + ".XXXXXX";
+    const int fd = mkstemp(temp.data());
+    if (fd < 0) return false;
+    const bool written = write(fd, value.data(), value.size()) == static_cast<ssize_t>(value.size()) && fsync(fd) == 0;
+    const bool closed = close(fd) == 0;
+    if (written && closed && rename(temp.c_str(), path.c_str()) == 0) return true;
+    unlink(temp.c_str());
+    return false;
 }
 
 const char* battery_display_name(BatteryDisplay mode) {

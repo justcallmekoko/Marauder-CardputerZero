@@ -20,7 +20,6 @@ const std::vector<Item>& items_for(Id menu) {
         {"Bluetooth", Color::Cyan, Action::None, Id::Bluetooth, true, true},
         {"GPS", Color::Red, Action::None, Id::Gps, true, true},
         {"Device", Color::Blue, Action::None, Id::Device, true, true},
-        {"Settings", Color::LightGrey, Action::None, Id::Settings, true, true},
     };
     static const std::vector<Item> wifi = {
         {"Scanners", Color::Orange, Action::None, Id::WifiScanners, true, true},
@@ -60,13 +59,16 @@ const std::vector<Item>& items_for(Id menu) {
     };
     static const std::vector<Item> device = {
         {"Radio setup", Color::Cyan, Action::OpenRadioSetup, Id::Main, false, true},
-        {"System Info", Color::Cyan, Action::OpenDiagnostics, Id::Main, false, true},
-        {"Storage", Color::LightGrey, Action::None, Id::Main, false, false},
-    };
-    static const std::vector<Item> settings = {
-        {"Battery", Color::Green, Action::CycleBatteryDisplay, Id::Main, false, true},
+        {"WiFi adapter", Color::Green, Action::OpenAdapters, Id::Main, false, true},
+        {"Battery display", Color::Green, Action::CycleBatteryDisplay, Id::Main, false, true},
         {"Files and RAM", Color::Blue, Action::None, Id::FilesAndMemory, true, true},
-        {"Adapter Setup", Color::Green, Action::OpenAdapters, Id::Main, false, true},
+        {"API credentials", Color::Magenta, Action::None, Id::Accounts, true, true},
+        {"System Info", Color::Purple, Action::OpenDiagnostics, Id::Main, false, true},
+    };
+    static const std::vector<Item> accounts = {
+        {"WiGLE API name", Color::Cyan, Action::WigleName, Id::Main, false, true},
+        {"WiGLE API token", Color::Cyan, Action::WigleToken, Id::Main, false, true},
+        {"WDGWars API key", Color::Magenta, Action::WdgKey, Id::Main, false, true},
     };
 
     static const std::vector<Item> files_memory = {
@@ -84,7 +86,7 @@ const std::vector<Item>& items_for(Id menu) {
         case Id::Bluetooth: return bluetooth;
         case Id::Gps: return gps;
         case Id::Device: return device;
-        case Id::Settings: return settings;
+        case Id::Accounts: return accounts;
     }
     return main;
 }
@@ -100,7 +102,7 @@ const char* title_for(Id menu) {
         case Id::Bluetooth: return "Bluetooth";
         case Id::Gps: return "GPS";
         case Id::Device: return "Device";
-        case Id::Settings: return "Settings";
+        case Id::Accounts: return "API credentials";
         case Id::FilesAndMemory: return "Files and RAM";
     }
     return "MARAUDER";
@@ -121,7 +123,12 @@ const MarauderMenuItem& MarauderMenuModel::item(std::size_t index) const {
     return items[index];
 }
 std::size_t MarauderMenuModel::columns() const {
-    return current_menu() == MarauderMenuId::Main ? 3 : 2;
+    switch (current_menu()) {
+        case MarauderMenuId::Device:
+        case MarauderMenuId::FilesAndMemory:
+        case MarauderMenuId::Accounts: return 1;
+        default: return 2;
+    }
 }
 
 void MarauderMenuModel::move(int dx, int dy) {

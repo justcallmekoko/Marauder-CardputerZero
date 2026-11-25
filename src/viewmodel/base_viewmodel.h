@@ -63,6 +63,10 @@ public:
     std::size_t menu_columns() const { return marauder_menu_.columns(); }
     model::BatteryDisplay battery_display() const { return model_.battery_display(); }
     lv_subject_t* battery_display_subject() { return battery_display_subject_.native(); }
+    bool editing_credential() const { return credential_open_; }
+    const auto& credential_prompt() const { return credential_prompt_; }
+    std::size_t credential_length() const { return credential_input_.size(); }
+    void credential_key(uint32_t key);
     void marauder_menu_activate();
     bool marauder_menu_back();
     void refresh_diagnostics();
@@ -98,6 +102,10 @@ public:
     void request_quit();
 
 private:
+    bool credential_open_{false};
+    bool clear_credential_{false};
+    model::Credential credential_field_{};
+    std::string credential_input_, credential_prompt_;
     void publish_navigation();
     void publish_adapter_detail();
     void publish_diagnostics();

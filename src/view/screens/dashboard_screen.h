@@ -25,6 +25,7 @@ private:
     std::array<lv_obj_t*, 6> rows_{};
     std::array<lv_obj_t*, 6> row_labels_{};
     std::array<lv_obj_t*, 6> marks_{};
+    lv_obj_t *edit_title_{}, *edit_mask_{}, *edit_hint_{};
     lv_obj_t* footer_{nullptr};
     lv_observer_t* menu_observer_{nullptr};
 };

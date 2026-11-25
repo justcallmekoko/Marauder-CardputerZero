@@ -21,14 +21,13 @@ bool select_index(MarauderMenuModel& menu, std::size_t index) {
 
 int main() {
     MarauderMenuModel menu;
-    if (menu.item_count() != 5 || menu.selected_index() != 0 || menu.depth() != 1) return 1;
+    if (menu.item_count() != 4 || menu.selected_index() != 0 || menu.depth() != 1) return 1;
     if (std::string(menu.title()) != "MARAUDER") return 21;
     const MarauderMenuColor root_colors[] = {
         MarauderMenuColor::Green,
         MarauderMenuColor::Cyan,
         MarauderMenuColor::Red,
         MarauderMenuColor::Blue,
-        MarauderMenuColor::LightGrey,
     };
     for (std::size_t index = 0; index < menu.item_count(); ++index) {
         if (menu.item(index).color != root_colors[index]) return 22;
@@ -37,12 +36,12 @@ int main() {
     if (menu.selected_index() != 0) return 30;
     menu.move(1, 0);
     menu.move(0, 1);
-    if (menu.selected_index() != 4 || menu.depth() != 1) return 31;
+    if (menu.selected_index() != 3 || menu.depth() != 1) return 31;
     menu.move(-1, 0);
     menu.move(0, -1);
     if (menu.selected_index() != 0) return 32;
     menu.previous();
-    if (menu.selected_index() != 4) return 2;
+    if (menu.selected_index() != 3) return 2;
     menu.next();
     if (menu.selected_index() != 0) return 3;
 
@@ -62,7 +61,7 @@ int main() {
     if (menu.back()) return 11;
 
     // Every root category opens a non-empty submenu and returns to its root selection.
-    for (std::size_t root_index = 0; root_index < 5; ++root_index) {
+    for (std::size_t root_index = 0; root_index < 4; ++root_index) {
         if (!select_index(menu, root_index)) return 12;
         if (!menu.item(root_index).opens_submenu || !menu.item(root_index).available) return 13;
         if (menu.activate() != MarauderMenuAction::None || menu.depth() != 2 || menu.item_count() == 0) return 14;
@@ -72,20 +71,26 @@ int main() {
     // Device and Settings expose the currently implemented actions.
     select_index(menu, 3);
     menu.activate();
-    if (menu.item_count() != 3 || menu.activate() != MarauderMenuAction::OpenRadioSetup) return 16;
+    if (menu.columns() != 1 || menu.item_count() != 6 || menu.activate() != MarauderMenuAction::OpenRadioSetup) return 16;
+    menu.move(0, 1);
+    if (menu.activate() != MarauderMenuAction::OpenAdapters) return 17;
     menu.next();
-    if (menu.activate() != MarauderMenuAction::OpenDiagnostics) return 17;
-    menu.back();
-
-    select_index(menu, 4);
-    menu.activate();
     if (menu.activate() != MarauderMenuAction::CycleBatteryDisplay) return 18;
     menu.next();
-    if (menu.item_count() != 3) return 19;
     menu.activate();
     if (menu.activate() != MarauderMenuAction::CycleStorage) return 36;
     menu.next();
     if (menu.activate() != MarauderMenuAction::CycleCache) return 37;
-
+    menu.back();
+    menu.next();
+    menu.activate();
+    if (menu.activate() != MarauderMenuAction::WigleName) return 38;
+    menu.next();
+    if (menu.activate() != MarauderMenuAction::WigleToken) return 39;
+    menu.next();
+    if (menu.activate() != MarauderMenuAction::WdgKey) return 40;
+    menu.back();
+    menu.next();
+    if (menu.activate() != MarauderMenuAction::OpenDiagnostics) return 41;
     return 0;
 }

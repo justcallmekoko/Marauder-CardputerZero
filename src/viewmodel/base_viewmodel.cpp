@@ -87,9 +87,51 @@ void BaseViewModel::move_menu_focus(int dx, int dy) {
     if (previous != marauder_menu_.selected_index())
         marauder_menu_generation_subject_.set(marauder_menu_generation_subject_.value() + 1);
 }
+namespace {
+bool credential_action(model::MarauderMenuAction action, model::Credential& field) {
+    using A = model::MarauderMenuAction;
+    switch (action) {
+        case A::WigleName: field = model::Credential::WigleName; return true;
+        case A::WigleToken: field = model::Credential::WigleToken; return true;
+        case A::WdgKey: field = model::Credential::WdgKey; return true;
+        default: return false;
+    }
+}
+}
+
+void BaseViewModel::credential_key(uint32_t key) {
+    if (!credential_open_) return;
+    if (key == LV_KEY_ESC) credential_open_ = false;
+    else if (key == LV_KEY_ENTER) {
+        if (credential_input_.empty() && !clear_credential_) return;
+        if (model::store_credential(credential_field_, credential_input_)) credential_open_ = false;
+        else credential_prompt_ = "Save failed. Enter to retry.";
+    } else if (key == LV_KEY_DEL && credential_input_.empty()) {
+        clear_credential_ = true;
+        credential_prompt_ = "Enter to remove saved value";
+    } else if (key == LV_KEY_BACKSPACE) {
+        if (!credential_input_.empty()) credential_input_.pop_back();
+    } else if (key >= 33 && key <= 126 && credential_input_.size() < 512) {
+        credential_input_.push_back(static_cast<char>(key));
+        clear_credential_ = false;
+        credential_prompt_ = "Enter to save";
+    } else return;
+    if (!credential_open_) {
+        std::fill(credential_input_.begin(), credential_input_.end(), '\0');
+        credential_input_.clear();
+    }
+    marauder_menu_generation_subject_.set(marauder_menu_generation_subject_.value() + 1);
+}
+
 void BaseViewModel::marauder_menu_activate() {
     using Action = model::MarauderMenuAction;
     const auto action = marauder_menu_.activate();
+    if (credential_action(action, credential_field_)) {
+        credential_open_ = true;
+        clear_credential_ = false;
+        credential_prompt_ = model::credential_saved(credential_field_) ?
+            "Type replacement or Del to remove" : "Type a new value";
+    }
     if (action == Action::CycleStorage || action == Action::CycleCache) {
         const bool storage = action == Action::CycleStorage;
         const bool saved = storage ? model_.cycle_storage() : model_.cycle_cache();
@@ -117,6 +159,9 @@ void BaseViewModel::marauder_menu_activate() {
             publish_navigation();
             refresh_radios();
             break;
+        case Action::WigleName:
+        case Action::WigleToken:
+        case Action::WdgKey:
         case Action::CycleStorage:
         case Action::CycleCache:
         case model::MarauderMenuAction::CycleBatteryDisplay:
@@ -130,6 +175,9 @@ const char* BaseViewModel::settings_message() const {
 }
 
 std::string BaseViewModel::setting_value(model::MarauderMenuAction action) const {
+    model::Credential field;
+    if (credential_action(action, field)) return model::credential_saved(field) ? "Saved" : "Not set";
+    if (action == model::MarauderMenuAction::CycleBatteryDisplay) return model::battery_display_name(model_.battery_display());
     if (action == model::MarauderMenuAction::CycleStorage)
         return model_.screenshots_in_documents() ? "Documents" : "Pictures";
     if (action == model::MarauderMenuAction::CycleCache)

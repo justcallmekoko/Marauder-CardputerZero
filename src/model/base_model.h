@@ -20,6 +20,10 @@ enum class AppPage {
     RadioSetup,
 };
 
+enum class Credential { WigleName, WigleToken, WdgKey };
+bool credential_saved(Credential field);
+bool store_credential(Credential field, const std::string& value);
+
 class BaseModel {
 public:
     BaseModel();

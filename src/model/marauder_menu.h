@@ -19,7 +19,7 @@ enum class MarauderMenuId {
     Bluetooth,
     Gps,
     Device,
-    Settings,
+    Accounts,
     FilesAndMemory,
 };
 
@@ -32,6 +32,9 @@ enum class MarauderMenuAction {
     OpenRadioSetup,
     CycleStorage,
     CycleCache,
+    WigleName,
+    WigleToken,
+    WdgKey,
 };
 
 enum class MarauderMenuColor {
