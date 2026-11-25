@@ -54,10 +54,8 @@ BaseModel::BaseModel() {
     if (cache == "256") cache_kib_ = 256;
     if (cache == "1024") cache_kib_ = 1024;
     const auto value = read_value("battery-display");
-    {
-        if (value == "Icon") battery_display_ = BatteryDisplay::Icon;
-        else if (value == "Percentage") battery_display_ = BatteryDisplay::Percent;
-    }
+    if (value == "Icon") battery_display_ = BatteryDisplay::Icon;
+    else if (value == "Percentage") battery_display_ = BatteryDisplay::Percent;
 }
 
 void BaseModel::cycle_battery_display() {

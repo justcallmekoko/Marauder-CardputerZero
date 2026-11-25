@@ -42,6 +42,10 @@ The launcher has six tiles. Use `F/X` for up/down and `Z/C` for left/right. `Ent
 
 The menu text uses the classic 5×7 glyphs from the Cardputer firmware. Under **Settings → Battery**, press `Enter` to cycle through icon, percentage, and both. The choice is saved per user. Battery indicators are red at 20% or below, amber through 50%, and green above 50%.
 
+**Settings → Radio setup** enables NetworkManager WiFi, powers on the default BlueZ controller, or starts the gpsd socket. The result appears above the tiles. GPS socket readiness describes the service. **WiFi adapters** opens the interface picker.
+
+**Settings → Files and RAM** selects the destination for future screenshots (`~/Pictures/Screenshots` or `~/Documents/Marauder`) and the decoded-image cache budget (off, 256 KiB, or 1024 KiB). Both choices persist per user and apply immediately.
+
 Open **Radios** to browse detected interfaces. The border follows keyboard focus, and an asterisk marks the interface selected for use. Press `Enter` to select the highlighted adapter or `D` to inspect its details.
 
 The bottom strip shows the current screen’s shortcuts. System Info is canonically located at **Device > System Info** and exposes Summary, System, Interfaces, USB/Peripherals, and Tools pages. On Adapters, Wi-Fi results, and System Info, `D` toggles details/summary. On System Info, `F`/`X` changes page, `C`/`Enter` refreshes, and `Z`/`Esc` returns to Device with its selection retained.
