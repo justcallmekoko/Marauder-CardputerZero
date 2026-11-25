@@ -62,6 +62,8 @@ The bottom strip shows the current screen’s shortcuts. System Info is canonica
 
 Open **WiFi → Networks → Access Points** after selecting an adapter and enabling monitor mode. The app tunes through the adapter's supported channels and adds APs as beacon, response, or data frames arrive. Enter opens AP information, then the observed-client list, then client information. The app pins the AP's channel while its information or clients are open. Client RSSI is shown only when a frame transmitted by that client was observed. Frame counts include observed retransmissions and are not an association guarantee. Leaving the screen closes capture; exiting also restores the adapter through the monitor session.
 
+On AP information, press **D** to cycle through overview, authentication, and encryption pages. The security interpreter reads the AP's beacon or probe-response advertisements. It identifies legacy WPA, RSN AKM selectors, pairwise/group/management ciphers, PMF capable/required bits, SAE H2E and SAE-PK flags, WPS IE presence, and malformed or unknown selectors. Common summaries include WPA2 Personal/Enterprise, WPA3 Personal SAE, WPA2/WPA3 Personal transition, OWE, DPP, and WPA3 Enterprise 192 when its advertised cipher and PMF profile matches. A privacy bit without a valid WPA/RSN element is reported as uncertain legacy privacy, not proven WEP. These labels describe advertised capabilities, not a client's negotiated security, Wi-Fi Alliance certification, or resistance to a particular attack. Selector mappings follow [hostap's WPA definitions](https://github.com/zephyrproject-rtos/hostap/blob/main/src/common/wpa_common.h); OWE discovery follows [RFC 8110](https://datatracker.ietf.org/doc/rfc8110/).
+
 ## Architecture
 
 The project follows the official Cardputer Zero template:
@@ -100,7 +102,7 @@ cmake --build --preset linux-x86-64-dbg
 cmake --workflow --preset cp0-cross-package
 ```
 
-The expected artifact is `dist/Marauder_0.6.23_rev1_arm64.deb`. Packaging and deployment remain separate actions.
+The expected artifact is `dist/Marauder_0.6.24_rev1_arm64.deb`. Packaging and deployment remain separate actions.
 
 ## Safety and scope
 

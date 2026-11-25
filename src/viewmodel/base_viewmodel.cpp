@@ -482,6 +482,7 @@ void BaseViewModel::select_highlighted_adapter() {
         wifi_scan_detail_index_ = 0;
         wifi_scan_details_expanded_ = false;
         wifi_view_ = 0;
+        wifi_info_tab_ = 0;
     }
     publish_adapter_detail();
     publish_wifi_scan();
@@ -520,6 +521,7 @@ void BaseViewModel::start_wifi_scan() {
     wifi_scan_detail_index_ = 0;
     wifi_client_index_ = 0;
     wifi_view_ = 0;
+    wifi_info_tab_ = 0;
     wifi_capture_stop_ = false;
     wifi_capture_failed_ = false;
     wifi_hop_index_ = 0;
@@ -593,7 +595,7 @@ void BaseViewModel::advance_wifi_channel() {
 
 void BaseViewModel::previous_wifi_scan_page() {
     auto& index = wifi_view_ >= 2 ? wifi_client_index_ : wifi_scan_detail_index_;
-    if (index > 0) --index;
+    if (index > 0) { --index; if (wifi_view_ <= 1) wifi_info_tab_ = 0; }
     publish_wifi_scan();
 }
 
@@ -601,13 +603,13 @@ void BaseViewModel::next_wifi_scan_page() {
     auto& index = wifi_view_ >= 2 ? wifi_client_index_ : wifi_scan_detail_index_;
     const auto limit = wifi_view_ >= 2 && wifi_scan_detail_index_ < wifi_networks_.size() ?
         wifi_networks_[wifi_scan_detail_index_].clients.size() : wifi_networks_.size();
-    if (index + 1 < limit) ++index;
+    if (index + 1 < limit) { ++index; if (wifi_view_ <= 1) wifi_info_tab_ = 0; }
     publish_wifi_scan();
 }
 
 void BaseViewModel::toggle_wifi_scan_details() {
     if (wifi_networks_.empty()) return;
-    if (wifi_view_ == 0) wifi_view_ = 1;
+    if (wifi_view_ == 0) { wifi_view_ = 1; wifi_info_tab_ = 0; }
     else if (wifi_view_ == 1) { wifi_view_ = 2; wifi_client_index_ = 0; }
     else if (wifi_view_ == 2 && !wifi_networks_[wifi_scan_detail_index_].clients.empty()) wifi_view_ = 3;
     else if (wifi_view_ == 3) wifi_view_ = 2;
@@ -617,7 +619,14 @@ void BaseViewModel::toggle_wifi_scan_details() {
 
 void BaseViewModel::wifi_back() {
     if (wifi_view_ > 0) --wifi_view_;
+    if (wifi_view_ == 0) wifi_info_tab_ = 0;
     wifi_scan_details_expanded_ = wifi_view_ != 0;
+    publish_wifi_scan();
+}
+
+void BaseViewModel::advance_wifi_info_tab() {
+    if (wifi_view_ != 1) return;
+    wifi_info_tab_ = (wifi_info_tab_ + 1) % 3;
     publish_wifi_scan();
 }
 
@@ -712,6 +721,7 @@ void BaseViewModel::finish_wifi_scan_if_ready() {
         if (frame.beacon) {
             if (!frame.ssid.empty()) ap->ssid = frame.ssid;
             ap->security = frame.security;
+            ap->security_info = frame.security_info;
             if (frame.has_rssi) { ap->rssi = frame.rssi; ap->has_rssi = true; }
         }
         if (frame.frequency_mhz) {

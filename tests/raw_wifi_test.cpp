@@ -15,11 +15,14 @@ int main() {
     const uint8_t ap[6]{0x10, 0x20, 0x30, 0x40, 0x50, 0x60};
     for (int i = 0; i < 6; ++i) beacon[13 + 16 + i] = ap[i];
     beacon[13 + 34] = 0x10;
-    beacon.insert(beacon.end(), {0, 4, 'T', 'e', 's', 't', 48, 2, 1, 0});
+    beacon.insert(beacon.end(), {0, 4, 'T', 'e', 's', 't',
+        48, 20, 1, 0, 0, 15, 172, 4, 1, 0, 0, 15, 172, 4,
+        1, 0, 0, 15, 172, 2, 0, 0});
     FrameObservation observed;
     assert(parse_monitor_frame(beacon.data(), beacon.size(), observed));
     assert(observed.beacon && observed.bssid == "10:20:30:40:50:60");
-    assert(observed.ssid == "Test" && observed.security == "WPA2/3");
+    assert(observed.ssid == "Test" && observed.security == "WPA2 Personal");
+    assert(observed.security_info.akm == "PSK" && observed.security_info.pairwise == "CCMP-128");
     assert(observed.frequency_mhz == 2437 && observed.has_rssi && observed.rssi == -48);
 
     std::vector<uint8_t> uplink{0, 0, 13, 0, 0x28, 0, 0, 0, 0x85, 0x09, 0, 0, 0xc4};

@@ -3,6 +3,7 @@
  */
 
 #pragma once
+#include "wifi_security.h"
 
 #include <functional>
 #include <string>
@@ -28,6 +29,7 @@ struct WifiNetwork {
     int frequency_mhz{0};
     int signal_percent{0};
     std::string security;
+    SecurityInfo security_info;
     std::string vendor{};
     int rssi{0};
     bool has_rssi{};

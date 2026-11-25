@@ -57,7 +57,7 @@ constexpr std::array<HelpRow, 5> kWifiScanRows = {{
     {"Z / ESC", "Back to originating menu"},
     {"F / X", "Previous / next result"},
     {"C / ENTER", "AP info / observed clients"},
-    {"D", "Restart live capture"},
+    {"D", "Restart / AP security pages"},
     {"HELP", "Context help"},
 }};
 

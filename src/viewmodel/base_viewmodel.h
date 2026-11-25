@@ -111,8 +111,10 @@ public:
     void toggle_adapter_details();
     bool wifi_details_open() const { return wifi_scan_details_expanded_; }
     int wifi_view() const { return wifi_view_; }
+    int wifi_info_tab() const { return wifi_info_tab_; }
     size_t wifi_client_cursor() const { return wifi_client_index_; }
     void wifi_back();
+    void advance_wifi_info_tab();
     bool system_details_open() const { return system_info_.details_expanded(); }
     void start_wifi_scan();
     void previous_wifi_scan_page();
@@ -184,6 +186,7 @@ private:
     std::size_t wifi_scan_detail_index_{0};
     bool wifi_scan_details_expanded_{false};
     int wifi_view_{0};
+    int wifi_info_tab_{0};
     std::size_t wifi_client_index_{};
     std::atomic<bool> wifi_capture_stop_{false};
     std::atomic<bool> wifi_capture_failed_{false};

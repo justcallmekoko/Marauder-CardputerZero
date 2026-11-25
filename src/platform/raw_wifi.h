@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include "wifi_security.h"
 
 namespace platform::wireless {
 struct FrameObservation {
@@ -10,6 +11,7 @@ struct FrameObservation {
     std::string client;
     std::string ssid;
     std::string security;
+    SecurityInfo security_info;
     int frequency_mhz{};
     int rssi{};
     bool has_rssi{};

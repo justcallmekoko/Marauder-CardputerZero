@@ -57,7 +57,10 @@ void WifiScanScreen::render() {
     const auto total = (client_list || mode == 3) && clients ? clients->size() : items.size();
     const auto colors = view::palette(vm.is_dark_mode());
     auto accent = colors.success;
-    lv_label_set_text(title_, mode == 3 ? "Client info" : client_list ? "Observed clients" : details ? "Access point info" : "Access points");
+    lv_label_set_text(title_, mode == 3 ? "Client info" : client_list ? "Observed clients" :
+                      details ? vm.wifi_info_tab() == 1 ? "AP authentication" :
+                                vm.wifi_info_tab() == 2 ? "AP encryption" : "Access point info" :
+                      "Access points");
     lv_obj_set_style_text_color(title_, colors.text, 0);
     const auto count = !vm.wifi_error().empty() ? "Capture failed" :
         (mode == 0 && items.empty()) ? "Listening" : total == 0 ? "0 seen" :
@@ -95,13 +98,27 @@ void WifiScanScreen::render() {
             "\nAP  " + items[cursor].ssid;
     } else if (mode == 1 && cursor < items.size()) {
         const auto& item = items[cursor];
-        message = item.ssid + "\n" + item.bssid;
-        message += "\nVendor  " + item.vendor.substr(0, 40);
-        message += "\nCH " + std::to_string(item.channel) + "    " +
-            (item.has_rssi ? std::to_string(item.rssi) + " dBm" : "RSSI unknown");
-        message += "\n" + (item.security.empty() ? "Security unknown" : item.security) +
-            "   " + std::to_string(item.frames) + " frames";
-        message += "\n" + std::to_string(item.clients.size()) + " observed clients";
+        const auto& security = item.security_info;
+        if (vm.wifi_info_tab() == 1) {
+            message = item.ssid + "\n" + (security.summary.empty() ? "Security unknown" : security.summary) +
+                "\nAKM  " + (security.akm.empty() ? "Unknown" : security.akm) +
+                "\nPMF  " + (security.pmf.empty() ? "Unknown" : security.pmf) +
+                "\nRSNXE  " + (security.rsnxe.empty() ? "Unknown" : security.rsnxe);
+            if (!security.note.empty()) message += "\nNote  " + security.note;
+        } else if (vm.wifi_info_tab() == 2) {
+            message = item.ssid + "\nPairwise  " + (security.pairwise.empty() ? "Unknown" : security.pairwise) +
+                "\nGroup  " + (security.group.empty() ? "Unknown" : security.group) +
+                "\nMgmt  " + (security.group_management.empty() ? "Unknown" : security.group_management);
+            if (!security.legacy_wpa.empty()) message += "\nLegacy  " + security.legacy_wpa;
+        } else {
+            message = item.ssid + "\n" + item.bssid;
+            message += "\nVendor  " + item.vendor.substr(0, 40);
+            message += "\nCH " + std::to_string(item.channel) + "    " +
+                (item.has_rssi ? std::to_string(item.rssi) + " dBm" : "RSSI unknown");
+            message += "\n" + (item.security.empty() ? "Security unknown" : item.security) +
+                "   " + std::to_string(item.frames) + " frames";
+            message += "\n" + std::to_string(item.clients.size()) + " observed clients";
+        }
     } else if (client_list && clients->empty()) {
         message = "No client frames observed yet";
     } else if (mode == 0 && items.empty()) {
@@ -109,8 +126,11 @@ void WifiScanScreen::render() {
             "No access points found";
     }
     lv_obj_set_style_text_color(message_, colors.text, 0);
+    auto* message_font = assets().load_standard_font(mode == 1 && vm.wifi_info_tab() ? 10 : 12);
+    lv_obj_set_style_text_font(message_, message_font ? message_font : LV_FONT_DEFAULT, 0);
     lv_label_set_text(message_, message.c_str());
     set_key_guide(mode == 3 ? "Esc Clients" : mode == 2 ? "F/X Browse  Enter Info  Esc AP" :
-                  mode == 1 ? "Enter Clients  Esc List" : "F/X Browse  Enter Info  Esc Back");
+                  mode == 1 ? "D Security  Enter Clients  Esc List" :
+                  "F/X Browse  Enter Info  D Restart  Esc Back");
 }
 }

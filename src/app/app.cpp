@@ -280,9 +280,12 @@ private:
             if (action == NavigationAction::Next) { view_model_.next_wifi_scan_page(); return true; }
             if (action == NavigationAction::Primary) { view_model_.toggle_wifi_scan_details(); return true; }
             if (action == NavigationAction::Details) {
-                const auto warning = view_model_.collection_warning(model::RadioRequirement::Monitor);
-                if (warning.empty()) view_model_.start_wifi_scan();
-                else show_confirmation(warning, "Enter Adapters", DialogAction::OpenAdapters);
+                if (view_model_.wifi_view() == 1) view_model_.advance_wifi_info_tab();
+                else if (view_model_.wifi_view() == 0) {
+                    const auto warning = view_model_.collection_warning(model::RadioRequirement::Monitor);
+                    if (warning.empty()) view_model_.start_wifi_scan();
+                    else show_confirmation(warning, "Enter Adapters", DialogAction::OpenAdapters);
+                }
                 return true;
             }
         }

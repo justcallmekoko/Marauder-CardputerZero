@@ -56,7 +56,9 @@ bool parse_monitor_frame(const uint8_t* bytes, std::size_t size, FrameObservatio
         if (length < 36) return false;
         bssid = frame + 16;
         out.beacon = true;
-        out.security = (le16(frame + 34) & 0x10) ? "Protected" : "Open";
+        out.security_info = interpret_security((le16(frame + 34) & 0x10) != 0,
+                                               frame + 36, length - 36);
+        out.security = out.security_info.summary;
         for (std::size_t pos = 36; pos + 2 <= length;) {
             const unsigned tag = frame[pos], count = frame[pos + 1];
             pos += 2;
@@ -67,7 +69,6 @@ bool parse_monitor_frame(const uint8_t* bytes, std::size_t size, FrameObservatio
                     out.ssid += c >= 32 && c < 127 ? static_cast<char>(c) : '?';
                 }
             }
-            if (tag == 48) out.security = "WPA2/3";
             pos += count;
         }
     } else if (type == 2) {
