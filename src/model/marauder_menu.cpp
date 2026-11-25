@@ -27,16 +27,15 @@ const std::vector<Item>& items_for(Id menu) {
         {"Attacks", Color::Red, Action::None, Id::WifiAttacks, true, true},
         {"General", Color::Purple, Action::None, Id::WifiGeneral, true, true},
     };
-    static const std::vector<Item> wifi_scanners = {
+    static const std::vector<Item> wifi_networks = {
         {"Access Points", Color::Orange, Action::OpenWifiScan, Id::Main, false, true},
         {"Stations", Color::Cyan, Action::None, Id::Main, false, false},
     };
-    static const std::vector<Item> wifi_sniffers = {
+    static const std::vector<Item> wifi_activity = {
         {"Traffic graph", Color::Green, Action::OpenTraffic, Id::Main, false, true},
         {"Beacon frames", Color::Orange, Action::None, Id::Main, false, false},
         {"Probe Requests", Color::Cyan, Action::None, Id::Main, false, false},
         {"Deauth", Color::Red, Action::None, Id::Main, false, false},
-        {"Pwnagotchi", Color::Orange, Action::None, Id::Main, false, false},
     };
     static const std::vector<Item> wifi_attacks = {
         {"Deauth", Color::Red, Action::None, Id::Main, false, false},
@@ -89,8 +88,8 @@ const std::vector<Item>& items_for(Id menu) {
         case Id::FilesAndMemory: return files_memory;
         case Id::Main: return main;
         case Id::Wifi: return wifi;
-        case Id::WifiNetworks: return wifi_scanners;
-        case Id::WifiActivity: return wifi_sniffers;
+        case Id::WifiNetworks: return wifi_networks;
+        case Id::WifiActivity: return wifi_activity;
         case Id::WifiAttacks: return wifi_attacks;
         case Id::WifiGeneral: return wifi_general;
         case Id::Bluetooth: return bluetooth;

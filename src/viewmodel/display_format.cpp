@@ -200,7 +200,7 @@ std::string wifi_scan_page(const std::string& interface_name,
     std::ostringstream out;
     if (interface_name.empty()) {
         out << "WIFI SCAN\n"
-            << bounded_line(error.empty() ? "Select an adapter in Device > Setup" : error);
+            << bounded_line(error.empty() ? "Select a WiFi adapter first" : error);
         return out.str();
     }
     if (details) {

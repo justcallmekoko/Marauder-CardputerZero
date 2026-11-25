@@ -148,6 +148,12 @@ bool wifi_details_are_single_record_and_bounded() {
         if (!expect(text.find("IF wlan0  ready") != std::string::npos,
                     "Wi-Fi detail interface status is missing")) return false;
     }
+    auto second_page = networks;
+    second_page.resize(6, networks.front());
+    second_page.back().ssid = "second-page";
+    const auto focused = viewmodel::format::wifi_scan_page("wlan0", second_page, "", false, false, 5);
+    if (!expect(focused.find("> 91% C1 second-page") != std::string::npos &&
+                focused.find("network-one") == std::string::npos, "Focused AP did not move to the next page")) return false;
     const auto summary = viewmodel::format::wifi_scan_page("wlan0", networks, "", false, false, 0);
     return bounded(summary, 9) && expect(summary.find("NETWORKS  strongest first") != std::string::npos,
                                          "Wi-Fi summary return state is incorrect");
