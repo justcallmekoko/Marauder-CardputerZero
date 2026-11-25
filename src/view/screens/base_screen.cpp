@@ -50,7 +50,8 @@ void BaseScreen::init() {
     lv_obj_align(key_guide_, LV_ALIGN_BOTTOM_MID, 0, 0);
     lv_obj_set_style_text_align(key_guide_, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_style_pad_top(key_guide_, 3, 0);
-    lv_obj_set_style_text_font(key_guide_, &lv_font_montserrat_10, 0);
+    auto* guide_font = assets_.load_standard_font(10);
+    lv_obj_set_style_text_font(key_guide_, guide_font ? guide_font : &lv_font_montserrat_10, 0);
     const auto colors = view::palette(view_model_.is_dark_mode());
     lv_obj_set_style_text_color(key_guide_, colors.text, 0);
     lv_obj_set_style_bg_color(key_guide_, colors.bar, 0);

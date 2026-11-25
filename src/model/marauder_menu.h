@@ -27,6 +27,7 @@ enum class MarauderMenuAction {
     OpenWifiScan,
     OpenAdapters,
     OpenDiagnostics,
+    CycleBatteryDisplay,
 };
 
 enum class MarauderMenuColor {
@@ -62,6 +63,8 @@ public:
     std::size_t selected_index() const;
     std::size_t item_count() const;
     const MarauderMenuItem& item(std::size_t index) const;
+    std::size_t columns() const;
+    void move(int dx, int dy);
     void previous();
     void next();
     MarauderMenuAction activate();

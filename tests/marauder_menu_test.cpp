@@ -34,6 +34,14 @@ int main() {
     for (std::size_t index = 0; index < menu.item_count(); ++index) {
         if (menu.item(index).color != root_colors[index]) return 22;
     }
+    menu.move(-1, 0);
+    if (menu.selected_index() != 0) return 30;
+    menu.move(1, 0);
+    menu.move(0, 1);
+    if (menu.selected_index() != 4 || menu.depth() != 1) return 31;
+    menu.move(-1, 0);
+    menu.move(0, -1);
+    if (menu.selected_index() != 0) return 32;
     menu.previous();
     if (menu.selected_index() != 5 || menu.activate() != MarauderMenuAction::OpenAdapters) return 2;
     menu.next();
@@ -72,9 +80,9 @@ int main() {
 
     select_index(menu, 4);
     menu.activate();
-    if (menu.activate() != MarauderMenuAction::OpenAdapters) return 18;
+    if (menu.activate() != MarauderMenuAction::CycleBatteryDisplay) return 18;
     menu.next();
-    if (menu.selected_index() != 0 || menu.item_count() != 1) return 19;
+    if (menu.selected_index() != 1 || menu.item_count() != 2 || menu.activate() != MarauderMenuAction::OpenAdapters) return 19;
 
     return 0;
 }

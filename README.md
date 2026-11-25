@@ -38,7 +38,9 @@ The adapter layer enumerates Linux wireless interfaces, correlates USB metadata,
 
 ## Keyboard workflow
 
-The launcher has six tiles. Press `F` or `X` to move focus and `C` or `Enter` to open a tile. `Z` and `Esc` return from submenus. At the launcher root, `Esc` exits. Unimplemented functions carry a “soon” label.
+The launcher has six tiles. Use `F/X` for up/down and `Z/C` for left/right. `Enter` opens the focused tile and `Esc` returns from submenus. At the launcher root, `Esc` exits. Unimplemented functions carry a “soon” label.
+
+The menu text uses the classic 5×7 glyphs from the Cardputer firmware. Under **Settings → Battery**, press `Enter` to cycle through icon, percentage, and both. The choice is saved per user. Battery indicators are red at 20% or below, amber through 50%, and green above 50%.
 
 Open **Radios** to browse detected interfaces. The border follows keyboard focus, and an asterisk marks the interface selected for use. Press `Enter` to select the highlighted adapter or `D` to inspect its details.
 
@@ -84,7 +86,7 @@ cmake --build --preset linux-x86-64-dbg
 cmake --workflow --preset cp0-cross-package
 ```
 
-The expected artifact is `dist/Marauder_0.6.4_rev1_arm64.deb`. Packaging and deployment remain separate actions.
+The expected artifact is `dist/Marauder_0.6.5_rev1_arm64.deb`. Packaging and deployment remain separate actions.
 
 ## Safety and scope
 

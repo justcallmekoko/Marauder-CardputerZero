@@ -22,11 +22,11 @@ struct HelpRow {
 };
 
 constexpr std::array<HelpRow, 5> kDashboardRows = {{
-    {"F / X", "Previous / next item"},
-    {"C / ENTER", "Open / run"},
-    {"Z / ESC", "Back one menu"},
+    {"F / X", "Move up / down"},
+    {"Z / C", "Move left / right"},
+    {"ENTER", "Open selected tile"},
     {"HELP", "Context help"},
-    {"ESC", "Exit from main-menu root"},
+    {"ESC", "Back / exit at root"},
 }};
 
 constexpr std::array<HelpRow, 5> kAdapterRows = {{

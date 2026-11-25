@@ -56,8 +56,10 @@ public:
     std::size_t marauder_menu_selected_index() const;
     bool marauder_menu_at_root() const;
     bool marauder_menu_can_go_back() const;
-    void marauder_menu_previous();
-    void marauder_menu_next();
+    void move_menu_focus(int dx, int dy);
+    std::size_t menu_columns() const { return marauder_menu_.columns(); }
+    model::BatteryDisplay battery_display() const { return model_.battery_display(); }
+    lv_subject_t* battery_display_subject() { return battery_display_subject_.native(); }
     void marauder_menu_activate();
     bool marauder_menu_back();
     void refresh_diagnostics();
@@ -94,6 +96,7 @@ private:
     reactive::StringSubject<32> title_subject_;
     reactive::BoolSubject dark_mode_subject_;
     reactive::IntSubject current_page_subject_;
+    reactive::IntSubject battery_display_subject_;
     reactive::IntSubject marauder_menu_generation_subject_;
     reactive::StringSubject<768> dashboard_summary_subject_;
     reactive::StringSubject<6144> diagnostics_detail_subject_;

@@ -136,7 +136,9 @@ void TitleBar::build() {
     configure_label(time_label_, view_model_.dark_mode_subject(), status_font, 42);
 
     refresh_time();
-    refresh_device_status();
+    reactive::observe_obj(core_obj_, view_model_.battery_display_subject(), [](lv_observer_t* observer, lv_subject_t*) {
+        static_cast<TitleBar*>(lv_observer_get_user_data(observer))->refresh_device_status();
+    }, this);
     refresh_timer_ = lv_timer_create(refresh_timer_cb, 1000, this);
 }
 
@@ -164,8 +166,14 @@ void TitleBar::refresh_device_status() {
 
     lv_label_set_text(battery_icon_label_,
                       battery_icon(status.battery_percent, status.battery_charging));
-    set_visible(battery_icon_label_, status.battery_present);
-    set_visible(battery_percent_label_, status.battery_present);
+    const auto mode = view_model_.battery_display();
+    const auto colors = view::palette(view_model_.is_dark_mode());
+    const auto ink = status.battery_percent <= 20 ? colors.error :
+                     status.battery_percent <= 50 ? colors.warning : colors.success;
+    lv_obj_set_style_text_color(battery_icon_label_, ink, 0);
+    lv_obj_set_style_text_color(battery_percent_label_, ink, 0);
+    set_visible(battery_icon_label_, status.battery_present && mode != model::BatteryDisplay::Percent);
+    set_visible(battery_percent_label_, status.battery_present && mode != model::BatteryDisplay::Icon);
     if (status.battery_present) {
         std::array<char, 6> percent{};
         std::snprintf(percent.data(), percent.size(), "%d%%", std::clamp(status.battery_percent, 0, 100));

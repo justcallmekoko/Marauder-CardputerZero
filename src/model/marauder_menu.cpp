@@ -65,6 +65,7 @@ const std::vector<Item>& items_for(Id menu) {
         {"Storage", Color::LightGrey, Action::None, Id::Main, false, false},
     };
     static const std::vector<Item> settings = {
+        {"Battery", Color::Green, Action::CycleBatteryDisplay, Id::Main, false, true},
         {"Adapter Setup", Color::Green, Action::OpenAdapters, Id::Main, false, true},
     };
 
@@ -113,6 +114,22 @@ const MarauderMenuItem& MarauderMenuModel::item(std::size_t index) const {
     if (index >= items.size()) throw std::out_of_range("Marauder menu item");
     return items[index];
 }
+std::size_t MarauderMenuModel::columns() const {
+    return current_menu() == MarauderMenuId::Main ? 3 : 2;
+}
+
+void MarauderMenuModel::move(int dx, int dy) {
+    const int width = static_cast<int>(columns());
+    const int count = static_cast<int>(item_count());
+    const int current = static_cast<int>(selected_index());
+    const int row = current / width + dy;
+    const int col = current % width + dx;
+    if (row < 0 || row * width >= count || col < 0 || col >= width) return;
+    const int next = row * width + col;
+    if (next < count) stack_.back().selected = next;
+    else if (dy != 0) stack_.back().selected = count - 1;
+}
+
 void MarauderMenuModel::previous() {
     auto& frame = stack_.back();
     const auto count = item_count();

@@ -136,13 +136,13 @@ private:
                             (key == LV_KEY_ENTER || key == LV_KEY_RIGHT) ? NavigationAction::Primary :
                             key == LV_KEY_LEFT ? NavigationAction::Back : navigation_action(key);
         if (view_model_.current_page() == model::AppPage::Dashboard) {
-            if (action == NavigationAction::Previous) { view_model_.marauder_menu_previous(); return true; }
-            if (action == NavigationAction::Next) { view_model_.marauder_menu_next(); return true; }
-            if (action == NavigationAction::Primary) { view_model_.marauder_menu_activate(); return true; }
-            if (action == NavigationAction::Back) {
-                if (!view_model_.marauder_menu_at_root()) view_model_.marauder_menu_back();
-                return true;
-            }
+            if (key == LV_KEY_ENTER) view_model_.marauder_menu_activate();
+            else if (action == NavigationAction::Previous) view_model_.move_menu_focus(0, -1);
+            else if (action == NavigationAction::Next) view_model_.move_menu_focus(0, 1);
+            else if (action == NavigationAction::Back) view_model_.move_menu_focus(-1, 0);
+            else if (action == NavigationAction::Primary) view_model_.move_menu_focus(1, 0);
+            else return false;
+            return true;
         }
 
         if (view_model_.current_page() == model::AppPage::Diagnostics) {

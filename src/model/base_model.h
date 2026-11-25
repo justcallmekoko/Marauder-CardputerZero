@@ -9,6 +9,9 @@
 
 namespace model {
 
+enum class BatteryDisplay { Both, Icon, Percent };
+const char* battery_display_name(BatteryDisplay mode);
+
 enum class AppPage {
     Dashboard = 0,
     Adapters = 1,
@@ -18,6 +21,9 @@ enum class AppPage {
 
 class BaseModel {
 public:
+    BaseModel();
+    BatteryDisplay battery_display() const { return battery_display_; }
+    void cycle_battery_display();
     const char* app_title() const;
     bool dark_mode() const;
     AppPage current_page() const;
@@ -27,6 +33,7 @@ public:
     void set_selected_adapter_id(std::string stable_id);
 
 private:
+    BatteryDisplay battery_display_{BatteryDisplay::Both};
     AppPage current_page_{AppPage::Dashboard};
     std::string selected_adapter_id_;
 };

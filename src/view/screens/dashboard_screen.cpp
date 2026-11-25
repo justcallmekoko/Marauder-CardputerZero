@@ -70,14 +70,14 @@ void DashboardScreen::build_content(lv_obj_t* content) {
 void DashboardScreen::render_menu() {
     const auto colors = view::palette(view_model().is_dark_mode());
     const bool root = view_model().marauder_menu_at_root();
-    const int columns = root ? 3 : 2;
+    const int columns = static_cast<int>(view_model().menu_columns());
     const int width = (308 - (columns - 1) * 4) / columns;
     lv_label_set_text(menu_title_, root ? "Launcher" : view_model().marauder_menu_title());
     const auto position = std::to_string(view_model().marauder_menu_selected_index() + 1) + " / " +
                           std::to_string(view_model().marauder_menu_item_count());
     lv_label_set_text(footer_, position.c_str());
-    set_key_guide(root ? "F/X  Move      C/Enter  Open      Esc  Exit" :
-                         "F/X  Move      C/Enter  Open      Z/Esc  Back");
+    set_key_guide(root ? "F/X Up/Down  Z/C Left/Right  Enter Open  Esc Exit" :
+                         "F/X Up/Down  Z/C Left/Right  Enter Open  Esc Back");
     lv_obj_set_style_text_color(menu_title_, colors.text, 0);
     lv_obj_set_style_text_color(footer_, colors.text_disabled, 0);
     for (std::size_t i = 0; i < rows_.size(); ++i) {
@@ -100,6 +100,8 @@ void DashboardScreen::render_menu() {
                           !item.available ? LV_SYMBOL_MINUS : item.opens_submenu ? LV_SYMBOL_DIRECTORY : LV_SYMBOL_RIGHT);
         lv_obj_set_style_text_color(marks_[i], item.available ? ink : colors.text_disabled, 0);
         std::string label(item.label);
+        if (item.action == model::MarauderMenuAction::CycleBatteryDisplay)
+            label += std::string(": ") + model::battery_display_name(view_model().battery_display());
         if (!item.available) label += "  (soon)";
         lv_label_set_text(row_labels_[i], label.c_str());
         lv_obj_set_width(row_labels_[i], width - 16);

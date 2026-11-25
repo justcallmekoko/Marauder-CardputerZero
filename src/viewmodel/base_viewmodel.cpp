@@ -21,6 +21,7 @@ BaseViewModel::BaseViewModel()
     : title_subject_(model_.app_title()),
       dark_mode_subject_(model_.dark_mode()),
       current_page_subject_(page_to_int(model_.current_page())),
+      battery_display_subject_(static_cast<int>(model_.battery_display())),
       marauder_menu_generation_subject_(0),
       dashboard_summary_subject_("Collecting system information..."),
       diagnostics_detail_subject_("Collecting system information..."),
@@ -76,16 +77,18 @@ const model::MarauderMenuItem& BaseViewModel::marauder_menu_item(std::size_t ind
 std::size_t BaseViewModel::marauder_menu_selected_index() const { return marauder_menu_.selected_index(); }
 bool BaseViewModel::marauder_menu_at_root() const { return !marauder_menu_.can_go_back(); }
 bool BaseViewModel::marauder_menu_can_go_back() const { return marauder_menu_.can_go_back(); }
-void BaseViewModel::marauder_menu_previous() {
-    marauder_menu_.previous();
-    marauder_menu_generation_subject_.set(marauder_menu_generation_subject_.value() + 1);
-}
-void BaseViewModel::marauder_menu_next() {
-    marauder_menu_.next();
-    marauder_menu_generation_subject_.set(marauder_menu_generation_subject_.value() + 1);
+void BaseViewModel::move_menu_focus(int dx, int dy) {
+    const auto previous = marauder_menu_.selected_index();
+    marauder_menu_.move(dx, dy);
+    if (previous != marauder_menu_.selected_index())
+        marauder_menu_generation_subject_.set(marauder_menu_generation_subject_.value() + 1);
 }
 void BaseViewModel::marauder_menu_activate() {
     const auto action = marauder_menu_.activate();
+    if (action == model::MarauderMenuAction::CycleBatteryDisplay) {
+        model_.cycle_battery_display();
+        battery_display_subject_.set(static_cast<int>(model_.battery_display()));
+    }
     marauder_menu_generation_subject_.set(marauder_menu_generation_subject_.value() + 1);
     switch (action) {
         case model::MarauderMenuAction::OpenWifiScan:
@@ -97,6 +100,7 @@ void BaseViewModel::marauder_menu_activate() {
         case model::MarauderMenuAction::OpenDiagnostics:
             show_diagnostics_page();
             break;
+        case model::MarauderMenuAction::CycleBatteryDisplay:
         case model::MarauderMenuAction::None:
             break;
     }

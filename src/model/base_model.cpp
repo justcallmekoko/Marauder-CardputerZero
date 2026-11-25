@@ -5,7 +5,54 @@
 
 #include "base_model.h"
 
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
+
 namespace model {
+namespace {
+std::filesystem::path preference_path() {
+    std::filesystem::path root;
+    if (const char* xdg = std::getenv("XDG_CONFIG_HOME"); xdg && *xdg) root = xdg;
+    else if (const char* home = std::getenv("HOME"); home && *home) root = std::filesystem::path(home) / ".config";
+    else if (const char* appdata = std::getenv("APPDATA"); appdata && *appdata) root = appdata;
+    if (root.empty()) return {};
+    return root / "marauder-cardputerzero" / "battery-display";
+}
+}
+
+const char* battery_display_name(BatteryDisplay mode) {
+    switch (mode) {
+        case BatteryDisplay::Icon: return "Icon";
+        case BatteryDisplay::Percent: return "Percentage";
+        default: return "Both";
+    }
+}
+
+BaseModel::BaseModel() {
+    std::ifstream input(preference_path());
+    std::string value;
+    if (input >> value) {
+        if (value == "Icon") battery_display_ = BatteryDisplay::Icon;
+        else if (value == "Percentage") battery_display_ = BatteryDisplay::Percent;
+    }
+}
+
+void BaseModel::cycle_battery_display() {
+    switch (battery_display_) {
+        case BatteryDisplay::Both: battery_display_ = BatteryDisplay::Icon; break;
+        case BatteryDisplay::Icon: battery_display_ = BatteryDisplay::Percent; break;
+        case BatteryDisplay::Percent: battery_display_ = BatteryDisplay::Both; break;
+    }
+    const auto path = preference_path();
+    if (path.empty()) return;
+    std::error_code error;
+    std::filesystem::create_directories(path.parent_path(), error);
+    if (error) return;
+    std::ofstream file(path, std::ios::trunc);
+    file << battery_display_name(battery_display_) << '\n';
+}
+
 
 const char* BaseModel::app_title() const { return "Marauder"; }
 bool BaseModel::dark_mode() const { return true; }
