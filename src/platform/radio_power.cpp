@@ -4,6 +4,19 @@
 #include <sstream>
 
 namespace platform {
+std::string read_gps_status() {
+#if defined(__linux__) && !USE_DESKTOP
+    FILE* pipe = popen("/usr/bin/timeout 5 /usr/lib/marauder/radio-inventory --gps-status", "r");
+    if (pipe) {
+        char buffer[24]{};
+        std::string value = std::fgets(buffer, sizeof(buffer), pipe) ? buffer : "";
+        value.erase(value.find_last_not_of("\r\n") + 1);
+        if (pclose(pipe) == 0 && !value.empty()) return value;
+    }
+#endif
+    return "?";
+}
+
 RadioInventory read_radios(std::string id, bool enable) {
 #if !defined(__linux__) || USE_DESKTOP
     return {"Device radios unavailable", {}};

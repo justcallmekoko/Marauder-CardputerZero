@@ -21,6 +21,7 @@
 #include <cstddef>
 #include <mutex>
 #include <future>
+#include <chrono>
 #include <thread>
 #include <vector>
 
@@ -75,6 +76,7 @@ public:
     bool screenshots_in_documents() const { return model_.screenshots_in_documents(); }
     std::string setting_value(model::MarauderMenuAction action) const;
     const char* settings_message() const;
+    lv_subject_t* gps_status_subject() { return gps_status_.native(); }
     void refresh_radios();
     void move_radio(int direction);
     void toggle_radio();
@@ -103,6 +105,10 @@ private:
     void finish_wifi_scan_if_ready();
     static void wifi_scan_timer_cb(lv_timer_t* timer);
 
+    void update_gps_status();
+    reactive::StringSubject<16> gps_status_{"..."};
+    std::future<std::string> gps_job_;
+    std::chrono::steady_clock::time_point next_gps_read_{};
     void finish_radio_setting();
     void load_radios(std::string key, bool enabled);
     std::future<platform::RadioInventory> radio_job_;

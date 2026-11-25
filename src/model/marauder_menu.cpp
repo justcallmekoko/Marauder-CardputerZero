@@ -60,7 +60,6 @@ const std::vector<Item>& items_for(Id menu) {
         {"Track", Color::Orange, Action::None, Id::Main, false, false},
     };
     static const std::vector<Item> device = {
-        {"Adapter Setup", Color::Blue, Action::OpenAdapters, Id::Main, false, true},
         {"System Info", Color::Cyan, Action::OpenDiagnostics, Id::Main, false, true},
         {"Storage", Color::LightGrey, Action::None, Id::Main, false, false},
     };

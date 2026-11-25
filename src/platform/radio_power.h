@@ -11,5 +11,6 @@ struct RadioInventory {
     std::string message;
     std::vector<RadioDevice> devices;
 };
+std::string read_gps_status();
 RadioInventory read_radios(std::string id, bool enable);
 }

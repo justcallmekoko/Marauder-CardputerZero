@@ -46,7 +46,9 @@ The menu text uses the classic 5×7 glyphs from the Cardputer firmware. Under **
 
 **Settings → Files and RAM** selects the destination for future screenshots (`~/Pictures/Screenshots` or `~/Documents/Marauder`) and the decoded-image cache budget (off, 256 KiB, or 1024 KiB). Both choices persist per user and apply immediately.
 
-Open **Adapter Setup** to choose the WiFi interface used by the app. The border follows keyboard focus, and an asterisk marks the interface selected for use. Press `Enter` to select the highlighted adapter or `D` to inspect its details.
+The GPS badge updates across screens. **GPS Off** means gpsd has no attached port. **GPS Wait** means a port is configured and waiting for a receiver report. **GPS No fix**, **GPS 2D**, and **GPS 3D** show the strongest current receiver report. **GPS ?** means gpsd status is unavailable.
+
+Open **WiFi → General → Adapter Setup** to choose the WiFi interface used by the app. The border follows keyboard focus, and an asterisk marks the interface selected for use. Press `Enter` to select the highlighted adapter or `D` to inspect its details.
 
 The bottom strip shows the current screen’s shortcuts. System Info is canonically located at **Device > System Info** and exposes Summary, System, Interfaces, USB/Peripherals, and Tools pages. On Adapters, Wi-Fi results, and System Info, `D` toggles details/summary. On System Info, `F`/`X` changes page, `C`/`Enter` refreshes, and `Z`/`Esc` returns to Device with its selection retained.
 
@@ -90,7 +92,7 @@ cmake --build --preset linux-x86-64-dbg
 cmake --workflow --preset cp0-cross-package
 ```
 
-The expected artifact is `dist/Marauder_0.6.7_rev1_arm64.deb`. Packaging and deployment remain separate actions.
+The expected artifact is `dist/Marauder_0.6.8_rev1_arm64.deb`. Packaging and deployment remain separate actions.
 
 ## Safety and scope
 

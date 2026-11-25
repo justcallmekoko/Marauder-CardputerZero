@@ -73,8 +73,7 @@ int main() {
     // Device and Settings expose the currently implemented actions.
     select_index(menu, 3);
     menu.activate();
-    if (menu.activate() != MarauderMenuAction::OpenAdapters) return 16;
-    menu.next();
+    if (menu.item_count() != 2) return 16;
     if (menu.activate() != MarauderMenuAction::OpenDiagnostics) return 17;
     menu.back();
 

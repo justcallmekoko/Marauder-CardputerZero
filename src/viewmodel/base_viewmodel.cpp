@@ -161,6 +161,19 @@ void BaseViewModel::toggle_radio() {
     if (radio.state == "On" || radio.state == "Off") load_radios(radio.id, radio.state == "Off");
 }
 
+void BaseViewModel::update_gps_status() {
+    const auto now = std::chrono::steady_clock::now();
+    try {
+        if (gps_job_.valid()) {
+            if (gps_job_.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
+                gps_status_.set(gps_job_.get().c_str());
+        } else if (now >= next_gps_read_) {
+            next_gps_read_ = now + std::chrono::seconds(5);
+            gps_job_ = std::async(std::launch::async, platform::read_gps_status);
+        }
+    } catch (const std::exception&) { gps_status_.set("?"); }
+}
+
 void BaseViewModel::finish_radio_setting() {
     if (!radio_busy() || radio_job_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return;
     const auto selected = radios().empty() ? std::string{} : radios()[radio_cursor_].id;
@@ -326,6 +339,7 @@ void BaseViewModel::wifi_scan_timer_cb(lv_timer_t* timer) {
     if (self) {
         self->finish_wifi_scan_if_ready();
         self->finish_radio_setting();
+        self->update_gps_status();
     }
 }
 

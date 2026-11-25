@@ -100,7 +100,7 @@ void TitleBar::build() {
     auto* title = lv_label_create(core_obj_);
     lv_label_bind_text(title, view_model_.title_subject(), nullptr);
     lv_label_set_long_mode(title, LV_LABEL_LONG_DOT);
-    lv_obj_set_width(title, 142);
+    lv_obj_set_width(title, 73);
     const lv_font_t* title_font = assets_.load_standard_font(14);
     lv_obj_set_style_text_font(title, title_font ? title_font : &lv_font_montserrat_14, 0);
     lv_obj_align(title, LV_ALIGN_LEFT_MID, 8, 0);
@@ -108,7 +108,7 @@ void TitleBar::build() {
 
     auto* status = lv_obj_create(core_obj_);
     lv_obj_remove_style_all(status);
-    lv_obj_set_size(status, 160, LV_PCT(100));
+    lv_obj_set_size(status, 230, LV_PCT(100));
     lv_obj_align(status, LV_ALIGN_RIGHT_MID, -5, 0);
     lv_obj_set_flex_flow(status, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(status, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
@@ -124,6 +124,19 @@ void TitleBar::build() {
     if (!status_font) {
         status_font = &lv_font_montserrat_14;
     }
+    auto* gps = lv_label_create(status);
+    const auto* small = assets_.load_standard_font(10);
+    configure_label(gps, view_model_.dark_mode_subject(), small ? small : &lv_font_montserrat_10, 68);
+    reactive::observe_obj(gps, view_model_.gps_status_subject(), [](lv_observer_t* observer, lv_subject_t* subject) {
+        auto* label = static_cast<lv_obj_t*>(lv_observer_get_target(observer));
+        const std::string state = lv_subject_get_string(subject);
+        const auto colors = view::palette(true);
+        auto ink = colors.text_disabled;
+        if (state == "2D" || state == "3D") ink = colors.success;
+        else if (state == "Wait" || state == "No fix") ink = colors.warning;
+        lv_label_set_text_fmt(label, "GPS %s", state.c_str());
+        lv_obj_set_style_text_color(label, ink, 0);
+    }, nullptr);
     wifi_label_ = lv_label_create(status);
     configure_label(wifi_label_, view_model_.dark_mode_subject(), icon_font, 18);
     ethernet_label_ = lv_label_create(status);
