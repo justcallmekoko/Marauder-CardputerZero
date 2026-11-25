@@ -234,6 +234,11 @@ private:
             if (action == NavigationAction::Details) { view_model_.toggle_adapter_details(); return true; }
         }
 
+        if (view_model_.current_page() == model::AppPage::Traffic &&
+            (action == NavigationAction::Back || action == NavigationAction::Primary) && key != LV_KEY_ENTER) {
+            view_model_.step_traffic_channel(action == NavigationAction::Back ? -1 : 1);
+            return true;
+        }
         if (view_model_.current_page() == model::AppPage::WifiScan) {
             if (action == NavigationAction::Previous) { view_model_.previous_wifi_scan_page(); return true; }
             if (action == NavigationAction::Next) { view_model_.next_wifi_scan_page(); return true; }

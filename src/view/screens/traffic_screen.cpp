@@ -21,7 +21,8 @@ void TrafficScreen::build_content(lv_obj_t* content) {
     for (const auto& adapter : view_model().adapters()) {
         if (adapter.stable_id == view_model().selected_radio_id()) interface_ = adapter.interface_name;
     }
-    auto* title = lv_label_create(content);
+    auto* title = title_ = lv_label_create(content);
+    view_model().take_traffic_step();
     lv_label_set_text_fmt(title, "Adapter traffic   %s", interface_.c_str());
     lv_obj_set_pos(title, 10, 4);
     auto* font = assets().load_standard_font(14);
@@ -51,7 +52,55 @@ void TrafficScreen::build_content(lv_obj_t* content) {
     }, 1000, this);
 }
 
+void TrafficScreen::draw(double value, double scale) {
+    std::rotate(history_.begin(), history_.begin() + 1, history_.end());
+    history_.back() = value;
+    if (scale <= 0) scale = std::max(1.0, *std::max_element(history_.begin(), history_.end()));
+    for (size_t i = 0; i < bars_.size(); ++i) {
+        const int height = std::max(1, static_cast<int>(58 * std::min(history_[i] / scale, 1.0)));
+        lv_obj_set_height(bars_[i], height);
+        lv_obj_set_y(bars_[i], 84 - height);
+    }
+}
+
 void TrafficScreen::sample() {
+    bool fresh = false;
+    if (survey_.valid() && survey_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+        channels_ = survey_.get();
+        fresh = true;
+    }
+    if (!survey_.valid()) {
+        survey_ = std::async(std::launch::async, platform::wireless::channel_survey, interface_);
+    }
+    const auto found = std::find_if(channels_.begin(), channels_.end(),
+        [&](const auto& item) { return item.mhz == frequency_; });
+    const int current = found == channels_.end() ? 0 : 1 + int(found - channels_.begin());
+    const int choices = int(channels_.size()) + 1;
+    const int index = (current + view_model().take_traffic_step() + choices) % choices;
+    const unsigned frequency = index ? channels_[index - 1].mhz : 0;
+    if (frequency != frequency_) {
+        frequency_ = frequency;
+        history_.fill(0);
+        draw(0, 100);
+        previous_channel_ = {};
+        have_sample_ = false;
+    }
+    set_key_guide(choices > 1 ? "Z/C Channel    Esc Back" : "Interface packets/s    Esc Back");
+    if (index) {
+        const auto& channel = channels_[index - 1];
+        lv_label_set_text_fmt(title_, "Channel activity   %u MHz", frequency_);
+        lv_label_set_text(status_, "Waiting for driver airtime sample");
+        if (fresh && previous_channel_.mhz == frequency_ && channel.active > previous_channel_.active &&
+            channel.busy >= previous_channel_.busy) {
+            const double busy = std::min(100.0, 100.0 * (channel.busy - previous_channel_.busy) /
+                                                   (channel.active - previous_channel_.active));
+            draw(busy, 100);
+            lv_label_set_text_fmt(status_, "%d%% busy airtime", static_cast<int>(std::round(busy)));
+        }
+        previous_channel_ = channel;
+        return;
+    }
+    lv_label_set_text_fmt(title_, "Adapter traffic   %s", interface_.c_str());
     uint64_t rx{}, tx{};
     const std::string path = "/sys/class/net/" + interface_ + "/statistics/";
     if (!(std::ifstream(path + "rx_packets") >> rx) || !(std::ifstream(path + "tx_packets") >> tx)) {
@@ -67,14 +116,8 @@ void TrafficScreen::sample() {
     const uint32_t elapsed = lv_tick_elaps(tick_);
     if (have_sample_ && elapsed && rx >= previous_rx_ && tx >= previous_tx_) {
         const double rate = (double(rx - previous_rx_) + double(tx - previous_tx_)) * 1000 / elapsed;
-        std::rotate(history_.begin(), history_.begin() + 1, history_.end());
-        history_.back() = rate;
+        draw(rate, 0);
         const double peak = *std::max_element(history_.begin(), history_.end());
-        for (size_t i = 0; i < bars_.size(); ++i) {
-            const int height = std::max(1, static_cast<int>(58 * history_[i] / std::max(1.0, peak)));
-            lv_obj_set_height(bars_[i], height);
-            lv_obj_set_y(bars_[i], 84 - height);
-        }
         const auto text = std::to_string(std::llround(rate)) + " pkt/s     Peak " + std::to_string(std::llround(peak));
         lv_label_set_text(status_, text.c_str());
     } else {

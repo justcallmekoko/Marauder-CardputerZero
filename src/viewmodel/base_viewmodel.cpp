@@ -643,7 +643,7 @@ void BaseViewModel::publish_adapter_detail() {
             << adapter.interface_name << "  ifindex " << (adapter.ifindex.empty() ? "?" : adapter.ifindex) << '\n'
             << "ID " << format::clip_for_display(adapter.stable_id, 30) << '\n'
             << "MAC " << (adapter.permanent_mac ? "PERMANENT" : "ASSIGNED") << '\n'
-            << "Monitor " << platform::wireless::capability_label(adapter.monitor_mode) << '\n'
+            << "Monitor now " << adapter.monitor_status << "   Capability " << platform::wireless::capability_label(adapter.monitor_mode) << '\n'
             << "Injection " << platform::wireless::capability_label(adapter.injection) << '\n'
             << adapter.capability_note;
     }

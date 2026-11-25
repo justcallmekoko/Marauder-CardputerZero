@@ -56,6 +56,8 @@ public:
     const auto& wifi_items() const { return wifi_networks_; }
     size_t wifi_cursor() const { return wifi_scan_detail_index_; }
     const auto& wifi_error() const { return wifi_scan_error_; }
+    void step_traffic_channel(int direction) { traffic_step_ = direction; }
+    int take_traffic_step() { int step = traffic_step_; traffic_step_ = 0; return step; }
     bool scanning() const { return wifi_scan_running_; }
     lv_subject_t* inventory_subject() { return inventory_generation_.native(); }
     void toggle_page();
@@ -161,6 +163,7 @@ private:
     bool adapter_details_expanded_{false};
     std::vector<platform::wireless::WifiNetwork> wifi_networks_;
     reactive::IntSubject inventory_generation_{0};
+    int traffic_step_{};
     bool stations_{}, collecting_stations_{};
     std::string wifi_scan_interface_;
     std::string wifi_scan_error_;

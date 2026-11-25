@@ -96,6 +96,10 @@ Catalog enumerate() {
         AdapterInfo adapter;
         adapter.interface_name = entry.path().filename().string();
         adapter.ifindex = read_value(entry.path() / "ifindex");
+        const auto link_type = read_value(entry.path() / "type");
+        // Linux ARPHRD_IEEE80211, PRISM and RADIOTAP identify monitor interfaces.
+        adapter.monitor_status = link_type == "801" || link_type == "802" || link_type == "803" ? "On" :
+                                 link_type == "1" ? "Off" : "Unknown";
         adapter.operstate = read_value(entry.path() / "operstate");
         adapter.mac_address = read_value(entry.path() / "address");
         adapter.permanent_mac = read_value(entry.path() / "addr_assign_type") == "0";

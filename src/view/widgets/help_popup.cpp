@@ -62,7 +62,7 @@ constexpr std::array<HelpRow, 5> kWifiScanRows = {{
 }};
 
 constexpr std::array<HelpRow, 5> kTrafficRows = {{
-    {"ESC", "Back to Activity"}, {"HELP", "Close help"}, {"", ""}, {"", ""}, {"", ""}
+    {"Z / C", "Browse channel surveys"}, {"ESC", "Back to Activity"}, {"HELP", "Close help"}, {"", ""}, {"", ""}
 }};
 
 constexpr std::array<HelpRow, 5> kDiagnosticsRows = {{

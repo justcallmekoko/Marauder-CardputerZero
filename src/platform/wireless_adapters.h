@@ -26,6 +26,7 @@ struct AdapterInfo {
     std::string manufacturer;
     std::string product_name;
     std::string bands;
+    std::string monitor_status;
     std::string display_name() const;
     std::string serial;
     std::string stable_id;

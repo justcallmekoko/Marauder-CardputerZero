@@ -156,13 +156,13 @@ public:
     Control& operator=(const Control&) = delete;
     std::string receive(int timeout_ms) {
         pollfd p{fd_, POLLIN, 0};
-        if (poll(&p, 1, timeout_ms) <= 0) return {};
+        if (poll(&p, 1, timeout_ms) <= 0) return "CONTROL-ERROR";
         std::array<char, 32768> data;
         const auto n = recv(fd_, data.data(), data.size(), MSG_TRUNC);
-        return n > 0 && static_cast<size_t>(n) <= data.size() ? std::string(data.data(), n) : "";
+        return n >= 0 && static_cast<size_t>(n) <= data.size() ? std::string(data.data(), n) : "CONTROL-ERROR";
     }
     std::string query(const std::string& command) {
-        if (!ready || send(fd_, command.data(), command.size(), 0) != static_cast<ssize_t>(command.size())) return {};
+        if (!ready || send(fd_, command.data(), command.size(), 0) != static_cast<ssize_t>(command.size())) return "CONTROL-ERROR";
         return receive(1200);
     }
     bool ready{};
@@ -232,7 +232,7 @@ WifiScanResult scan_wifi_networks(const std::string& interface_name, bool statio
         const auto reply = source->query(next);
         if (reply == "FAIL\n" || reply == "\n") break;
         // wpa_supplicant signals the end of its BSS table with an empty datagram.
-        if (!stations && reply.empty()) break;
+        if (reply.empty()) break;
         WifiNetwork item;
         if (!(stations ? parse_hotspot_station(reply, item) : parse_access_point(reply, item)))
             return {{}, "Cannot read radio inventory"};

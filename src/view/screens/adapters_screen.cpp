@@ -102,7 +102,7 @@ void AdaptersScreen::render() {
     const std::string description = std::string(active ? "SELECTED" : "AVAILABLE") + "\n" +
         radio.display_name() + "\n" +
         radio.bus_type + "  " + radio.operstate + "\n" + radio.driver + "  " + radio.phy_name +
-        "\n" + radio.mac_address;
+        "\nMonitor " + radio.monitor_status + " / " + platform::wireless::capability_label(radio.monitor_mode);
     lv_label_set_text(bands_, radio.bands.empty() ? "Bands unknown" : radio.bands.c_str());
     lv_obj_set_style_bg_color(bands_, colors.success, 0);
     lv_obj_set_style_bg_opa(bands_, LV_OPA_20, 0);
