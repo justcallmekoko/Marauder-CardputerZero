@@ -54,7 +54,7 @@ The GPS badge shows Off, Wait, No data, Busy, or the number of satellites used i
 
 Open **WiFi → General → Adapter Setup** to choose the WiFi interface used by the app. The border follows keyboard focus, and an asterisk marks the interface selected for use. Press `Enter` to select the highlighted adapter or `D` to inspect its details.
 
-Under **WiFi > Networks > Access Points**, the list refreshes every 20 seconds while browsing. Use F/X to highlight a network, Enter to inspect its managed-scan details, Esc to return, and D to rescan. The C++ collector speaks to the local Wi-Fi service directly and parses its discovery records. **Hotspot stations** lists clients of the selected adapter when it hosts an AP. Both inventories scroll one row at a time. **WiFi > Activity > Traffic graph** plots the selected adapter’s received and transmitted packets per second over the last 30 samples. The graph uses interface counters and scales to the visible peak. On drivers that report channel surveys, Z/C selects a frequency and plots changes in busy airtime. Sampling follows the driver’s channel visits. Choosing an adapter with a live Wi-Fi connection, a hosted hotspot, or an unknown connection state prompts for confirmation. Adapter details show monitor capability and current monitor status.
+Under **WiFi > Networks > Access Points**, the list shows cached APs as soon as the Wi-Fi service supplies them, adds new discoveries during refresh, and reconciles the results after each scan. Scans repeat every 20 seconds while browsing. Use F/X to highlight a network, Enter to inspect its managed-scan details, Esc to return, and D to rescan. The C++ collector speaks to the local Wi-Fi service directly and parses its discovery records. **Hotspot stations** lists clients of the selected adapter when it hosts an AP. Both inventories scroll one row at a time. **WiFi > Activity > Traffic graph** plots the selected adapter’s received and transmitted packets per second over the last 30 samples. The graph uses interface counters and scales to the visible peak. On drivers that report channel surveys, Z/C selects a frequency and plots changes in busy airtime. Sampling follows the driver’s channel visits. Choosing an adapter with a live Wi-Fi connection, a hosted hotspot, or an unknown connection state prompts for confirmation. Adapter details show monitor capability and current monitor status.
 
 The bottom strip shows the current screen’s shortcuts. System Info is canonically located at **Device > System Info** and exposes Summary, System, Interfaces, USB/Peripherals, and Tools pages. On Adapters and System Info, `D` toggles details/summary. On System Info, `F`/`X` changes page, `C`/`Enter` refreshes, and `Z`/`Esc` returns to Device with its selection retained.
 
@@ -98,7 +98,7 @@ cmake --build --preset linux-x86-64-dbg
 cmake --workflow --preset cp0-cross-package
 ```
 
-The expected artifact is `dist/Marauder_0.6.18_rev1_arm64.deb`. Packaging and deployment remain separate actions.
+The expected artifact is `dist/Marauder_0.6.19_rev1_arm64.deb`. Packaging and deployment remain separate actions.
 
 ## Safety and scope
 

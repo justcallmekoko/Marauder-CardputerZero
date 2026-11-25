@@ -215,7 +215,8 @@ bool parse_hotspot_station(std::string_view reply, WifiNetwork& station) {
     return true;
 }
 
-WifiScanResult scan_wifi_networks(const std::string& interface_name, bool stations) {
+WifiScanResult scan_wifi_networks(const std::string& interface_name, bool stations,
+                                 const std::function<void(WifiNetwork)>& discovered) {
     if (!safe_interface_name(interface_name)) return {{}, "Invalid adapter name"};
 #if !defined(__linux__)
     return {{}, "WiFi inventory requires Linux"};
@@ -234,11 +235,35 @@ WifiScanResult scan_wifi_networks(const std::string& interface_name, bool statio
         if (events.query("ATTACH") != "OK\n") return {{}, "Cannot watch WiFi scan"};
         const auto scan = wifi.query("SCAN");
         if (scan != "OK\n" && scan.find("FAIL-BUSY") == scan.npos) return {{}, "Scan unavailable"};
+        // Existing service records are available while the radio runs its new scan.
+        if (discovered) {
+            auto reply = wifi.query("BSS FIRST");
+            for (size_t i = 0; i < 1024; ++i) {
+                WifiNetwork ap;
+                if (!parse_access_point(reply, ap)) break;
+                discovered(std::move(ap));
+                const auto id = field(reply, "id");
+                if (id.empty()) break;
+                reply = wifi.query("BSS NEXT-" + id);
+            }
+        }
         const auto until = std::chrono::steady_clock::now() + std::chrono::seconds(12);
         for (;;) {
             const auto left = std::chrono::duration_cast<std::chrono::milliseconds>(until - std::chrono::steady_clock::now()).count();
             if (left <= 0) return {{}, "Scan timed out"};
             const auto event = events.receive(static_cast<int>(left));
+            const std::string marker = "CTRL-EVENT-BSS-ADDED ";
+            const auto added = event.find(marker);
+            if (discovered && added != event.npos) {
+                const auto begin = added + marker.size();
+                const auto end = event.find(' ', begin);
+                int id{};
+                if (end != event.npos && number(event.substr(begin, end - begin), id) && id >= 0) {
+                    WifiNetwork ap;
+                    if (parse_access_point(wifi.query("BSS ID-" + std::to_string(id)), ap))
+                        discovered(std::move(ap));
+                }
+            }
             if (event.find("CTRL-EVENT-SCAN-RESULTS") != event.npos) break;
             if (event.empty() || event.find("CTRL-EVENT-SCAN-FAILED") != event.npos) return {{}, "Scan did not complete"};
         }
@@ -253,6 +278,7 @@ WifiScanResult scan_wifi_networks(const std::string& interface_name, bool statio
         WifiNetwork item;
         if (!(stations ? parse_hotspot_station(reply, item) : parse_access_point(reply, item)))
             return {{}, "Cannot read radio inventory"};
+        if (discovered && !stations) discovered(item);
         item.vendor = registered_vendor(item.bssid);
         next = stations ? "STA-NEXT " + item.bssid : "BSS NEXT-" + field(reply,"id");
         result.networks.push_back(std::move(item));

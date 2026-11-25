@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <functional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -32,6 +33,7 @@ struct WifiScanResult {
 
 bool parse_access_point(std::string_view reply, WifiNetwork& ap);
 bool parse_hotspot_station(std::string_view reply, WifiNetwork& station);
-WifiScanResult scan_wifi_networks(const std::string& interface_name, bool stations = false);
+WifiScanResult scan_wifi_networks(const std::string& interface_name, bool stations = false,
+                                 const std::function<void(WifiNetwork)>& discovered = {});
 
 } // namespace platform::wireless

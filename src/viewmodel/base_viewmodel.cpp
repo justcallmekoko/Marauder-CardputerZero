@@ -461,7 +461,11 @@ void BaseViewModel::start_wifi_scan() {
         wifi_scan_thread_ = std::thread([this, interface_name, stations = stations_] {
             platform::wireless::WifiScanResult result;
             try {
-                result = platform::wireless::scan_wifi_networks(interface_name, stations);
+                result = platform::wireless::scan_wifi_networks(interface_name, stations,
+                    [this](platform::wireless::WifiNetwork ap) {
+                        std::lock_guard<std::mutex> lock(wifi_scan_mutex_);
+                        incoming_aps_.push_back(std::move(ap));
+                    });
             } catch (...) {
                 result.error = "Unexpected Wi-Fi scan failure";
             }
@@ -556,7 +560,25 @@ void BaseViewModel::wifi_scan_timer_cb(lv_timer_t* timer) {
 }
 
 void BaseViewModel::finish_wifi_scan_if_ready() {
-    if (!wifi_scan_ready_.exchange(false)) return;
+    if (!wifi_scan_ready_.exchange(false)) {
+        std::vector<platform::wireless::WifiNetwork> incoming;
+        {
+            std::lock_guard<std::mutex> lock(wifi_scan_mutex_);
+            incoming.swap(incoming_aps_);
+        }
+        if (incoming.empty() || collecting_stations_ != stations_ || wifi_scan_interface_.empty()) return;
+        bool changed = false;
+        for (auto& ap : incoming) {
+            const auto known = std::find_if(wifi_networks_.begin(), wifi_networks_.end(),
+                [&](const auto& item) { return item.bssid == ap.bssid; });
+            if (known == wifi_networks_.end()) {
+                wifi_networks_.push_back(std::move(ap));
+                changed = true;
+            }
+        }
+        if (changed) publish_wifi_scan();
+        return;
+    }
     if (wifi_scan_thread_.joinable()) wifi_scan_thread_.join();
     platform::wireless::WifiScanResult completed;
     std::string completed_interface;
@@ -565,6 +587,7 @@ void BaseViewModel::finish_wifi_scan_if_ready() {
         completed = std::move(pending_wifi_scan_);
         completed_interface = std::move(pending_wifi_scan_interface_);
         pending_wifi_scan_ = {};
+        incoming_aps_.clear();
     }
     const auto selected = std::find_if(adapters_.begin(), adapters_.end(), [&](const auto& adapter) {
         return adapter.stable_id == model_.selected_adapter_id();

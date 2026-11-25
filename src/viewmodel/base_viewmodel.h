@@ -174,6 +174,7 @@ private:
     std::mutex wifi_scan_mutex_;
     platform::wireless::WifiScanResult pending_wifi_scan_;
     std::string pending_wifi_scan_interface_;
+    std::vector<platform::wireless::WifiNetwork> incoming_aps_;
     std::thread wifi_scan_thread_;
     uint32_t last_wifi_scan_tick_{};
     lv_timer_t* wifi_scan_timer_{nullptr};

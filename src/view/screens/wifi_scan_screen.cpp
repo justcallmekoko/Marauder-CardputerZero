@@ -56,7 +56,7 @@ void WifiScanScreen::render() {
     lv_label_set_text(title_, stations ? (details ? "Station info" : "Hotspot stations") :
                                          (details ? "Access point info" : "Access points"));
     lv_obj_set_style_text_color(title_, colors.text, 0);
-    const auto count = vm.scanning() ? "Refreshing" : !vm.wifi_error().empty() ? "Refresh failed" :
+    const auto count = vm.scanning() ? (items.empty() ? "Searching" : "Refreshing") : !vm.wifi_error().empty() ? "Refresh failed" :
         items.empty() ? "0 seen" : std::to_string(cursor + 1) + " / " + std::to_string(items.size());
     lv_label_set_text(count_, count.c_str());
     lv_obj_set_style_text_color(count_, accent, 0);
@@ -82,7 +82,7 @@ void WifiScanScreen::render() {
     if (details) {
         const auto& item = items[cursor];
         message = stations ? item.bssid : item.ssid + "\n" + item.bssid;
-        message += "\nVendor  " + item.vendor.substr(0, 40);
+        message += "\nVendor  " + (item.vendor.empty() ? std::string("Pending") : item.vendor.substr(0, 40));
         if (stations) message += "\nRX  " + (item.rx_packets.empty() ? "unknown" : item.rx_packets) +
             "    TX  " + (item.tx_packets.empty() ? "unknown" : item.tx_packets) + " packets";
         else message += "\nCH " + std::to_string(item.channel) + "    " + std::to_string(item.frequency_mhz) +
