@@ -89,6 +89,8 @@ BaseViewModel::~BaseViewModel() {
     }
     if (wifi_scan_thread_.joinable()) wifi_scan_thread_.join();
     if (radio_job_.valid()) radio_job_.wait();
+    if (monitor_job_.valid()) monitor_job_.wait();
+    monitor_session_.stop();
     gps_session_.stop();
     platform::end_radio_session(radio_session_);
 }
@@ -219,9 +221,6 @@ void BaseViewModel::marauder_menu_activate() {
             break;
         case model::MarauderMenuAction::OpenDiagnostics:
             show_diagnostics_page();
-            break;
-        case Action::OpenStations:
-            show_wifi_scan_page(true);
             break;
         case Action::OpenTraffic:
             model_.set_current_page(model::AppPage::Traffic);
@@ -381,6 +380,30 @@ void BaseViewModel::publish_diagnostics() {
     diagnostics_generation_subject_.set(diagnostics_generation_subject_.value() + 1);
 }
 
+void BaseViewModel::toggle_monitor() {
+    if (monitor_busy() || highlighted_adapter_ >= adapters_.size()) return;
+    const auto& adapter = adapters_[highlighted_adapter_];
+    if (adapter.stable_id != model_.selected_adapter_id()) adapter_error_ = "Select adapter first";
+    else if (wifi_scan_running_) adapter_error_ = "Wait for scan to finish";
+    else if (monitor_owner_.empty() && adapter.monitor_mode != platform::wireless::CapabilityState::Supported)
+        adapter_error_ = "Monitor support unavailable";
+    else {
+        const bool start = monitor_owner_.empty();
+        const auto name = adapter.interface_name;
+        monitor_owner_ = adapter.stable_id;
+        try {
+            monitor_job_ = std::async(std::launch::async, [this, name, start] {
+                return start ? monitor_session_.start(name) : monitor_session_.stop();
+            });
+            adapter_error_ = "Switching radio mode...";
+        } catch (const std::system_error&) {
+            if (start) monitor_owner_.clear();
+            adapter_error_ = "Cannot switch mode now";
+        }
+    }
+    publish_adapter_detail();
+}
+
 void BaseViewModel::refresh_adapters() {
     auto catalog = platform::wireless::enumerate();
     adapters_ = std::move(catalog.adapters);
@@ -416,6 +439,11 @@ void BaseViewModel::select_highlighted_adapter() {
     if (adapters_.empty()) return;
     const auto& adapter = adapters_[highlighted_adapter_];
     const bool changed = model_.selected_adapter_id() != adapter.stable_id;
+    if (changed && !monitor_owner_.empty()) {
+        adapter_error_ = "Turn monitor off first";
+        publish_adapter_detail();
+        return;
+    }
     if (!model_.set_selected_adapter_id(adapter.stable_id)) {
         adapter_error_ = "Could not save WiFi selection";
         publish_adapter_detail();
@@ -441,6 +469,11 @@ void BaseViewModel::toggle_adapter_details() {
 void BaseViewModel::start_wifi_scan() {
     if (wifi_scan_running_) return;
     last_wifi_scan_tick_ = lv_tick_get();
+    if (!monitor_owner_.empty()) {
+        wifi_scan_error_ = "Turn monitor off for AP scans";
+        publish_wifi_scan();
+        return;
+    }
     const auto selected = std::find_if(adapters_.begin(), adapters_.end(), [&](const auto& adapter) {
         return adapter.stable_id == model_.selected_adapter_id();
     });
@@ -549,6 +582,13 @@ void BaseViewModel::wifi_scan_timer_cb(lv_timer_t* timer) {
     auto* self = static_cast<BaseViewModel*>(lv_timer_get_user_data(timer));
     if (self) {
         self->idle_display();
+        if (self->monitor_busy() && self->monitor_job_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+            const auto message = self->monitor_job_.get();
+            if (message != "Monitor on") self->monitor_owner_.clear();
+            self->refresh_adapters();
+            self->adapter_error_ = message;
+            self->publish_adapter_detail();
+        }
         self->finish_wifi_scan_if_ready();
         if (self->current_page() == model::AppPage::WifiScan && !self->wifi_details_open() &&
             !self->wifi_scan_running_ && lv_tick_elaps(self->last_wifi_scan_tick_) >= 20000) {

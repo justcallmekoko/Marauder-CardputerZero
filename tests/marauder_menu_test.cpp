@@ -50,10 +50,7 @@ int main() {
     if (menu.activate() != MarauderMenuAction::None || menu.depth() != 3) return 5;
     if (menu.activate() != MarauderMenuAction::OpenWifiScan) return 6;
 
-    // The companion inventory reads local hotspot clients.
-    menu.next();
-    if (!menu.item(menu.selected_index()).available) return 7;
-    if (menu.activate() != MarauderMenuAction::OpenStations || menu.depth() != 3) return 8;
+    if (menu.item_count() != 1) return 7;
 
     // Back restores the selection in each parent frame.
     if (!menu.back() || menu.depth() != 2 || menu.selected_index() != 0) return 9;

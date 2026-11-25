@@ -11,6 +11,18 @@ struct RadioInventory {
     std::string message;
     std::vector<RadioDevice> devices;
 };
+class MonitorSession {
+public:
+    MonitorSession() = default;
+    MonitorSession(const MonitorSession&) = delete;
+    MonitorSession& operator=(const MonitorSession&) = delete;
+    ~MonitorSession();
+    std::string start(const std::string& name);
+    std::string stop();
+private:
+    int channel_{-1}, child_{-1};
+};
+
 class GpsSession {
 public:
     GpsSession() = default;

@@ -15,6 +15,56 @@ extern char** environ;
 #endif
 
 namespace platform {
+MonitorSession::~MonitorSession() { stop(); }
+
+std::string MonitorSession::start(const std::string& name) {
+#if defined(__linux__) && !USE_DESKTOP
+    int ends[2];
+    if (channel_ >= 0 || socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, ends) != 0)
+        return "Monitor session unavailable";
+    posix_spawn_file_actions_t actions;
+    int err = posix_spawn_file_actions_init(&actions);
+    if (!err) {
+        err = posix_spawn_file_actions_adddup2(&actions, ends[1], STDIN_FILENO);
+        if (!err) err = posix_spawn_file_actions_adddup2(&actions, ends[1], STDOUT_FILENO);
+        char sudo[] = "/usr/bin/sudo", noninteractive[] = "-n", helper[] = "/usr/lib/marauder/monitor-session";
+        char* args[] = {sudo, noninteractive, helper, const_cast<char*>(name.c_str()), nullptr};
+        if (!err) err = posix_spawn(&child_, sudo, &actions, nullptr, args, environ);
+        posix_spawn_file_actions_destroy(&actions);
+    }
+    close(ends[1]);
+    if (err) { close(ends[0]); return "Cannot open monitor helper"; }
+    channel_ = ends[0];
+    std::string line;
+    char c;
+    while (line.size() < 128) {
+        auto n = recv(channel_, &c, 1, 0);
+        if (n < 0 && errno == EINTR) continue;
+        if (n != 1 || c == '\n') break;
+        line += c;
+    }
+    if (line != "Monitor on") stop();
+    return line.empty() ? "Monitor permission unavailable" : line;
+#else
+    return "Device control unavailable";
+#endif
+}
+
+std::string MonitorSession::stop() {
+#if defined(__linux__) && !USE_DESKTOP
+    if (channel_ >= 0) {
+        shutdown(channel_, SHUT_WR);
+        int status{};
+        int rc;
+        do { rc = waitpid(child_, &status, 0); } while (rc < 0 && errno == EINTR);
+        close(channel_);
+        channel_ = child_ = -1;
+        if (rc < 0 || !WIFEXITED(status) || WEXITSTATUS(status) != 0) return "Check adapter restore";
+    }
+#endif
+    return "Monitor off";
+}
+
 GpsSession::~GpsSession() { stop(); }
 
 void GpsSession::stop() {

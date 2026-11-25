@@ -238,6 +238,7 @@ private:
         }
 
         if (view_model_.current_page() == model::AppPage::Adapters) {
+            if (key == 'm' || key == 'M') { view_model_.toggle_monitor(); return true; }
             if (action == NavigationAction::Previous) { view_model_.previous_adapter(); return true; }
             if (action == NavigationAction::Next) { view_model_.next_adapter(); return true; }
             if (action == NavigationAction::Primary) {

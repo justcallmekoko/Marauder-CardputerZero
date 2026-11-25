@@ -72,8 +72,8 @@ void AdaptersScreen::render() {
         else lv_obj_add_flag(obj, LV_OBJ_FLAG_HIDDEN);
     };
     set_key_guide(radios.empty() ? "Z/Esc  Back" : summary ?
-        "F/X  Browse    Enter  Select    D  Details    Esc  Back" :
-        "F/X  Browse    Enter  Select    D  Summary    Esc  Back");
+        "F/X Browse  Enter Use  M Monitor  D Info  Esc Back" :
+        "F/X Browse  Enter Use  M Monitor  D List  Esc Back");
     visible(expanded_, !summary);
     visible(heading_, summary);
     visible(info_, summary);

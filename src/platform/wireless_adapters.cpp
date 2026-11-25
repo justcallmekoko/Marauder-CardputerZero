@@ -89,7 +89,7 @@ Catalog enumerate() {
             catalog.error = "Unable to enumerate network interfaces";
             break;
         }
-        if (!fs::is_directory(entry.path() / "wireless")) {
+        if (!fs::is_directory(entry.path() / "wireless") && !fs::exists(entry.path() / "phy80211")) {
             continue;
         }
 

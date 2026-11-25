@@ -98,6 +98,8 @@ public:
     std::size_t radio_cursor() const { return radio_cursor_; }
     bool radio_busy() const { return radio_job_.valid(); }
     void refresh_adapters();
+    void toggle_monitor();
+    bool monitor_busy() const { return monitor_job_.valid(); }
     void previous_adapter();
     void next_adapter();
     void select_highlighted_adapter();
@@ -127,6 +129,9 @@ private:
     void update_gps_status();
     void sync_gps_rows();
     reactive::StringSubject<16> gps_status_{"Off"};
+    platform::MonitorSession monitor_session_;
+    std::future<std::string> monitor_job_;
+    std::string monitor_owner_;
     platform::GpsSession gps_session_;
     std::string gps_id_, radio_session_;
     void finish_radio_setting();
