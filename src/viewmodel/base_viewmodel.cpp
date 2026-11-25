@@ -799,7 +799,9 @@ void BaseViewModel::finish_wifi_scan_if_ready() {
             ap->security_info = frame.security_info;
             if (frame.has_rssi) { ap->rssi = frame.rssi; ap->has_rssi = true; }
         }
-        if (frame.frequency_mhz) {
+        // Data-frame radiotap channels can reflect a hop transition. Once the AP
+        // advertises its channel, do not let later data frames move the target.
+        if (frame.frequency_mhz && (frame.beacon || !ap->frequency_mhz)) {
             ap->frequency_mhz = frame.frequency_mhz;
             ap->channel = platform::wireless::channel_number(frame.frequency_mhz);
         }
