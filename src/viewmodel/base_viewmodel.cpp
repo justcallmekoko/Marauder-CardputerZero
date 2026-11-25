@@ -213,6 +213,10 @@ void BaseViewModel::marauder_menu_activate() {
         case model::MarauderMenuAction::OpenDiagnostics:
             show_diagnostics_page();
             break;
+        case Action::OpenTraffic:
+            model_.set_current_page(model::AppPage::Traffic);
+            publish_navigation();
+            break;
         case Action::OpenRadioSetup:
             model_.set_current_page(model::AppPage::RadioSetup);
             publish_navigation();
@@ -412,7 +416,6 @@ void BaseViewModel::select_highlighted_adapter() {
         wifi_networks_.clear();
         wifi_scan_interface_.clear();
         wifi_scan_error_.clear();
-        wifi_scan_page_ = 0;
         wifi_scan_detail_index_ = 0;
         wifi_scan_details_expanded_ = false;
     }
@@ -427,6 +430,7 @@ void BaseViewModel::toggle_adapter_details() {
 
 void BaseViewModel::start_wifi_scan() {
     if (wifi_scan_running_) return;
+    last_wifi_scan_tick_ = lv_tick_get();
     const auto selected = std::find_if(adapters_.begin(), adapters_.end(), [&](const auto& adapter) {
         return adapter.stable_id == model_.selected_adapter_id();
     });
@@ -465,33 +469,18 @@ void BaseViewModel::start_wifi_scan() {
 }
 
 void BaseViewModel::previous_wifi_scan_page() {
-    if (wifi_scan_details_expanded_) {
-        if (wifi_scan_detail_index_ > 0) --wifi_scan_detail_index_;
-    } else {
-        const std::size_t pages = std::max<std::size_t>(1, (wifi_networks_.size() + 4) / 5);
-        wifi_scan_page_ = wifi_scan_page_ == 0 ? pages - 1 : wifi_scan_page_ - 1;
-    }
+    if (wifi_scan_detail_index_ > 0) --wifi_scan_detail_index_;
     publish_wifi_scan();
 }
 
 void BaseViewModel::next_wifi_scan_page() {
-    if (wifi_scan_details_expanded_) {
-        if (wifi_scan_detail_index_ + 1 < std::max<std::size_t>(1, wifi_networks_.size())) ++wifi_scan_detail_index_;
-    } else {
-        const std::size_t pages = std::max<std::size_t>(1, (wifi_networks_.size() + 4) / 5);
-        wifi_scan_page_ = (wifi_scan_page_ + 1) % pages;
-    }
+    if (wifi_scan_detail_index_ + 1 < wifi_networks_.size()) ++wifi_scan_detail_index_;
     publish_wifi_scan();
 }
 
 void BaseViewModel::toggle_wifi_scan_details() {
-    if (!wifi_scan_details_expanded_) {
-        wifi_scan_detail_index_ = std::min(wifi_scan_page_ * 5, wifi_networks_.empty() ? std::size_t{0} : wifi_networks_.size() - 1);
-        wifi_scan_details_expanded_ = true;
-    } else {
-        wifi_scan_page_ = wifi_scan_detail_index_ / 5;
-        wifi_scan_details_expanded_ = false;
-    }
+    if (wifi_networks_.empty()) return;
+    wifi_scan_details_expanded_ = !wifi_scan_details_expanded_;
     publish_wifi_scan();
 }
 
@@ -546,6 +535,10 @@ void BaseViewModel::wifi_scan_timer_cb(lv_timer_t* timer) {
     if (self) {
         self->idle_display();
         self->finish_wifi_scan_if_ready();
+        if (self->current_page() == model::AppPage::WifiScan && !self->wifi_details_open() &&
+            !self->wifi_scan_running_ && lv_tick_elaps(self->last_wifi_scan_tick_) >= 20000) {
+            self->start_wifi_scan();
+        }
         self->finish_radio_setting();
         self->update_gps_status();
     }
@@ -567,11 +560,20 @@ void BaseViewModel::finish_wifi_scan_if_ready() {
     });
     if (selected != adapters_.end() && selected->interface_name == completed_interface) {
         wifi_scan_interface_ = completed_interface;
-        wifi_networks_ = std::move(completed.networks);
         wifi_scan_error_ = std::move(completed.error);
-        wifi_scan_page_ = 0;
-        wifi_scan_detail_index_ = 0;
-        wifi_scan_details_expanded_ = false;
+        if (wifi_scan_error_.empty()) {
+            const auto focused = wifi_scan_detail_index_ < wifi_networks_.size() ?
+                wifi_networks_[wifi_scan_detail_index_].bssid : std::string{};
+            wifi_networks_ = std::move(completed.networks);
+            const auto match = std::find_if(wifi_networks_.begin(), wifi_networks_.end(),
+                [&](const auto& network) { return network.bssid == focused; });
+            if (match == wifi_networks_.end()) {
+                wifi_scan_detail_index_ = 0;
+                wifi_scan_details_expanded_ = false;
+            } else {
+                wifi_scan_detail_index_ = static_cast<std::size_t>(match - wifi_networks_.begin());
+            }
+        }
     }
     wifi_scan_running_ = false;
     publish_wifi_scan();
@@ -584,13 +586,12 @@ void BaseViewModel::publish_navigation() {
 }
 
 void BaseViewModel::publish_wifi_scan() {
-    const auto index = wifi_scan_details_expanded_ ? wifi_scan_detail_index_ : wifi_scan_page_;
     const auto text = format::wifi_scan_page(wifi_scan_interface_,
                                              wifi_networks_,
                                              wifi_scan_error_,
                                              wifi_scan_running_,
                                              wifi_scan_details_expanded_,
-                                             index);
+                                             wifi_scan_detail_index_);
     wifi_scan_subject_.set(text.c_str());
 }
 

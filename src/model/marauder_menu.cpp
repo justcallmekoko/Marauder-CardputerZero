@@ -22,17 +22,18 @@ const std::vector<Item>& items_for(Id menu) {
         {"Device", Color::Blue, Action::None, Id::Device, true, true},
     };
     static const std::vector<Item> wifi = {
-        {"Scanners", Color::Orange, Action::None, Id::WifiScanners, true, true},
-        {"Sniffers", Color::Yellow, Action::None, Id::WifiSniffers, true, true},
+        {"Networks", Color::Orange, Action::None, Id::WifiNetworks, true, true},
+        {"Activity", Color::Yellow, Action::None, Id::WifiActivity, true, true},
         {"Attacks", Color::Red, Action::None, Id::WifiAttacks, true, true},
         {"General", Color::Purple, Action::None, Id::WifiGeneral, true, true},
     };
     static const std::vector<Item> wifi_scanners = {
         {"Access Points", Color::Orange, Action::OpenWifiScan, Id::Main, false, true},
         {"Stations", Color::Cyan, Action::None, Id::Main, false, false},
-        {"Packet Monitor", Color::Blue, Action::None, Id::Main, false, false},
     };
     static const std::vector<Item> wifi_sniffers = {
+        {"Traffic graph", Color::Green, Action::OpenTraffic, Id::Main, false, true},
+        {"Beacon frames", Color::Orange, Action::None, Id::Main, false, false},
         {"Probe Requests", Color::Cyan, Action::None, Id::Main, false, false},
         {"Deauth", Color::Red, Action::None, Id::Main, false, false},
         {"Pwnagotchi", Color::Orange, Action::None, Id::Main, false, false},
@@ -44,7 +45,6 @@ const std::vector<Item>& items_for(Id menu) {
     };
     static const std::vector<Item> wifi_general = {
         {"Adapter Setup", Color::Purple, Action::OpenAdapters, Id::Main, false, true},
-        {"Scan Networks", Color::Green, Action::OpenWifiScan, Id::Main, false, true},
         {"Saved Networks", Color::LightGrey, Action::None, Id::Main, false, false},
     };
     static const std::vector<Item> bluetooth = {
@@ -89,8 +89,8 @@ const std::vector<Item>& items_for(Id menu) {
         case Id::FilesAndMemory: return files_memory;
         case Id::Main: return main;
         case Id::Wifi: return wifi;
-        case Id::WifiScanners: return wifi_scanners;
-        case Id::WifiSniffers: return wifi_sniffers;
+        case Id::WifiNetworks: return wifi_scanners;
+        case Id::WifiActivity: return wifi_sniffers;
         case Id::WifiAttacks: return wifi_attacks;
         case Id::WifiGeneral: return wifi_general;
         case Id::Bluetooth: return bluetooth;
@@ -107,8 +107,8 @@ const char* title_for(Id menu) {
     switch (menu) {
         case Id::Main: return "MARAUDER";
         case Id::Wifi: return "WiFi";
-        case Id::WifiScanners: return "WiFi > Scanners";
-        case Id::WifiSniffers: return "WiFi > Sniffers";
+        case Id::WifiNetworks: return "WiFi > Networks";
+        case Id::WifiActivity: return "WiFi > Activity";
         case Id::WifiAttacks: return "WiFi > Attacks";
         case Id::WifiGeneral: return "WiFi > General";
         case Id::Bluetooth: return "Bluetooth";

@@ -177,6 +177,10 @@ private:
         }
 
         if (key == LV_KEY_ESC && !long_pressed) {
+            if (view_model_.current_page() == model::AppPage::WifiScan && view_model_.wifi_details_open()) {
+                view_model_.toggle_wifi_scan_details();
+                return true;
+            }
             switch (escape_action(view_model_.current_page(),
                                   view_model_.marauder_menu_at_root())) {
                 case EscapeAction::ExitApplication:
@@ -233,8 +237,8 @@ private:
         if (view_model_.current_page() == model::AppPage::WifiScan) {
             if (action == NavigationAction::Previous) { view_model_.previous_wifi_scan_page(); return true; }
             if (action == NavigationAction::Next) { view_model_.next_wifi_scan_page(); return true; }
-            if (action == NavigationAction::Primary) { view_model_.start_wifi_scan(); return true; }
-            if (action == NavigationAction::Details) { view_model_.toggle_wifi_scan_details(); return true; }
+            if (action == NavigationAction::Primary) { view_model_.toggle_wifi_scan_details(); return true; }
+            if (action == NavigationAction::Details) { view_model_.start_wifi_scan(); return true; }
         }
 
         if (view_model_.current_page() != model::AppPage::Dashboard && action == NavigationAction::Back) {

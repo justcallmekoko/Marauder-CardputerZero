@@ -213,6 +213,7 @@ std::string wifi_scan_page(const std::string& interface_name,
             const auto& network = networks[selected];
             out << bounded_line("SSID " + network.ssid) << '\n'
                 << bounded_line("BSSID " + network.bssid) << '\n'
+                << bounded_line("VENDOR " + (network.vendor.empty() ? std::string("Unknown") : network.vendor)) << '\n'
                 << bounded_line("SEC " + network.security) << '\n'
                 << "SIGNAL " << network.signal_percent << "%  CHANNEL " << network.channel << '\n'
                 << "FREQ " << network.frequency_mhz << " MHz\n";
@@ -222,7 +223,7 @@ std::string wifi_scan_page(const std::string& interface_name,
     }
 
     const std::size_t pages = std::max<std::size_t>(1, (networks.size() + kWifiRows - 1) / kWifiRows);
-    const std::size_t selected = std::min(page_index, pages - 1);
+    const std::size_t selected = std::min(page_index / kWifiRows, pages - 1);
     out << bounded_line("WIFI SCAN " + interface_name + "  " + std::to_string(selected + 1) + "/" + std::to_string(pages)) << '\n';
     if (running) out << "SCANNING - previous results\n";
     else if (!error.empty()) out << bounded_line(error) << '\n';
@@ -231,7 +232,7 @@ std::string wifi_scan_page(const std::string& interface_name,
     const auto end = std::min(begin + kWifiRows, networks.size());
     for (std::size_t index = begin; index < end; ++index) {
         const auto& network = networks[index];
-        out << bounded_line(std::to_string(network.signal_percent) + "% C" + std::to_string(network.channel) + " " +
+        out << bounded_line(std::string(index == page_index ? "> " : "  ") + std::to_string(network.signal_percent) + "% C" + std::to_string(network.channel) + " " +
                             network.ssid + " " + network.security) << '\n';
     }
     if (begin == end && !running && error.empty()) out << "No networks found\n";

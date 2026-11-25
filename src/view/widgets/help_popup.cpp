@@ -56,9 +56,13 @@ constexpr std::array<HelpRow, 5> kAdapterRows = {{
 constexpr std::array<HelpRow, 5> kWifiScanRows = {{
     {"Z / ESC", "Back to originating menu"},
     {"F / X", "Previous / next result"},
-    {"C / ENTER", "Rescan selected adapter"},
-    {"D", "Details / summary"},
+    {"C / ENTER", "Toggle AP info"},
+    {"D", "Rescan selected adapter"},
     {"HELP", "Context help"},
+}};
+
+constexpr std::array<HelpRow, 5> kTrafficRows = {{
+    {"ESC", "Back to Activity"}, {"HELP", "Close help"}, {"", ""}, {"", ""}, {"", ""}
 }};
 
 constexpr std::array<HelpRow, 5> kDiagnosticsRows = {{
@@ -193,12 +197,13 @@ void HelpPopup::update_rows(model::AppPage page) {
     const bool list = page == model::AppPage::Dashboard && view_model_.menu_columns() == 1;
     const bool radios = page == model::AppPage::RadioSetup;
     const bool adapters = page == model::AppPage::Adapters;
+    const bool traffic = page == model::AppPage::Traffic;
     const bool wifi_scan = page == model::AppPage::WifiScan;
     const bool diagnostics = page == model::AppPage::Diagnostics;
-    lv_label_set_text(page_badge_, list ? "DEVICE" : radios ? "RADIO SETUP" : adapters ? "ADAPTERS" : wifi_scan ? "WIFI SCAN" : diagnostics ? "SYSTEM INFO" : "MENU");
+    lv_label_set_text(page_badge_, traffic ? "ACTIVITY" : list ? "DEVICE" : radios ? "RADIO SETUP" : adapters ? "ADAPTERS" : wifi_scan ? "WIFI SCAN" : diagnostics ? "SYSTEM INFO" : "MENU");
     for (std::size_t i = 0; i < rows_.size(); ++i) {
         lv_obj_remove_flag(rows_[i].row, LV_OBJ_FLAG_HIDDEN);
-        const auto& row = list ? kDeviceRows[i] : radios ? kRadioRows[i] : adapters ? kAdapterRows[i] : wifi_scan ? kWifiScanRows[i] : diagnostics ? kDiagnosticsRows[i] : kDashboardRows[i];
+        const auto& row = traffic ? kTrafficRows[i] : list ? kDeviceRows[i] : radios ? kRadioRows[i] : adapters ? kAdapterRows[i] : wifi_scan ? kWifiScanRows[i] : diagnostics ? kDiagnosticsRows[i] : kDashboardRows[i];
         lv_label_set_text(rows_[i].key, row.key);
         lv_label_set_text(rows_[i].action, row.action);
         if (list && !*row.key) lv_obj_add_flag(rows_[i].row, LV_OBJ_FLAG_HIDDEN);

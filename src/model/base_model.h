@@ -18,6 +18,7 @@ enum class AppPage {
     WifiScan = 2,
     Diagnostics = 3,
     RadioSetup,
+    Traffic,
 };
 
 std::string saved_gps_id();

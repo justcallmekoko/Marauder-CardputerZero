@@ -9,6 +9,8 @@
 #include <cctype>
 #include <charconv>
 #include <cstdio>
+#include <fstream>
+#include <unordered_map>
 
 #if !defined(_WIN32)
 #include <filesystem>
@@ -70,6 +72,52 @@ std::string sanitize_text(std::string_view value) {
     return clean;
 }
 
+#if !defined(_WIN32)
+std::string registered_vendor(const std::string& address) {
+    std::string digits;
+    for (unsigned char c : address) {
+        if (c == ':') continue;
+        if (!std::isxdigit(c)) return "Unknown";
+        digits.push_back(static_cast<char>(std::toupper(c)));
+    }
+    if (digits.size() != 12) return "Unknown";
+    if (std::string_view("2367ABEF").find(digits[1]) != std::string_view::npos)
+        return "Private/local address";
+
+    static const auto names = [] {
+        std::unordered_map<std::string, std::string> prefixes;
+        for (const char* file : {"oui", "mam", "oui36", "iab"}) {
+            std::ifstream input(std::string("/usr/share/ieee-data/") + file + ".csv");
+            std::string line;
+            while (std::getline(input, line)) {
+                const auto registry = line.find(',');
+                if (registry == std::string::npos) continue;
+                const auto end = line.find(',', registry + 1);
+                if (end == std::string::npos || end + 1 == line.size()) continue;
+                const auto prefix = line.substr(registry + 1, end - registry - 1);
+                if (prefix.size() != 6 && prefix.size() != 7 && prefix.size() != 9) continue;
+                std::string name;
+                const bool quoted = line[end + 1] == '"';
+                for (auto i = end + 1 + quoted; i < line.size(); ++i) {
+                    if (!quoted && line[i] == ',') break;
+                    if (quoted && line[i] == '"') {
+                        if (i + 1 == line.size() || line[i + 1] != '"') break;
+                        ++i;
+                    }
+                    name.push_back(line[i]);
+                }
+                if (!name.empty()) prefixes.emplace(prefix, sanitize_text(name));
+            }
+        }
+        return prefixes;
+    }();
+    for (auto length : {9, 7, 6}) {
+        const auto it = names.find(digits.substr(0, length));
+        if (it != names.end()) return it->second;
+    }
+    return "Unknown";
+}
+#endif
 } // namespace
 
 std::vector<std::string> split_nmcli_terse_row(std::string_view row) {
@@ -154,7 +202,9 @@ WifiScanResult scan_wifi_networks(const std::string& interface_name) {
     if (status == -1 || !WIFEXITED(status) || WEXITSTATUS(status) != 0) {
         return {{}, "Wi-Fi scan failed"};
     }
-    return parse_nmcli_wifi_scan(output);
+    auto result = parse_nmcli_wifi_scan(output);
+    for (auto& network : result.networks) network.vendor = registered_vendor(network.bssid);
+    return result;
 #endif
 }
 

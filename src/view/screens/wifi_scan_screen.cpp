@@ -18,8 +18,8 @@ void WifiScanScreen::build_content(lv_obj_t* content) {
     reactive::observe_obj(content, view_model().wifi_scan_subject(), [](lv_observer_t* observer, lv_subject_t*) {
         auto* screen = static_cast<WifiScanScreen*>(lv_observer_get_user_data(observer));
         screen->set_key_guide(screen->view_model().wifi_details_open() ?
-            "F/X  Item    Enter  Rescan    D  Summary    Esc  Back" :
-            "F/X  Page    Enter  Rescan    D  Details    Esc  Back");
+            "F/X  AP    D  Rescan    Esc  List" :
+            "F/X  AP    Enter  Info    D  Rescan    Esc  Back");
     }, this);
     auto* panel = lv_obj_create(content);
     lv_obj_remove_style_all(panel);

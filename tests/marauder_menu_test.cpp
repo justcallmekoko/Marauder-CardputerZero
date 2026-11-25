@@ -45,7 +45,7 @@ int main() {
     menu.next();
     if (menu.selected_index() != 0) return 3;
 
-    // WiFi > Scanners > Access Points routes to the implemented managed scan.
+    // WiFi > Networks > Access Points routes to the implemented managed scan.
     if (menu.activate() != MarauderMenuAction::None || menu.depth() != 2) return 4;
     if (menu.activate() != MarauderMenuAction::None || menu.depth() != 3) return 5;
     if (menu.activate() != MarauderMenuAction::OpenWifiScan) return 6;

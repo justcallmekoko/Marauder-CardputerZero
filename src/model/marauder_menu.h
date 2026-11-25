@@ -12,8 +12,8 @@ namespace model {
 enum class MarauderMenuId {
     Main,
     Wifi,
-    WifiScanners,
-    WifiSniffers,
+    WifiNetworks,
+    WifiActivity,
     WifiAttacks,
     WifiGeneral,
     Bluetooth,
@@ -28,6 +28,7 @@ enum class MarauderMenuId {
 enum class MarauderMenuAction {
     None,
     OpenWifiScan,
+    OpenTraffic,
     OpenAdapters,
     OpenDiagnostics,
     CycleBatteryDisplay,

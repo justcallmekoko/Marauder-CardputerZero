@@ -17,6 +17,7 @@ struct WifiNetwork {
     int frequency_mhz{0};
     int signal_percent{0};
     std::string security;
+    std::string vendor{};
 };
 
 struct WifiScanResult {

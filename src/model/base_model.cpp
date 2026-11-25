@@ -182,6 +182,7 @@ void BaseModel::toggle_page() {
         case AppPage::WifiScan:
             current_page_ = AppPage::Diagnostics;
             break;
+        case AppPage::Traffic:
         case AppPage::RadioSetup:
         case AppPage::Diagnostics:
             current_page_ = AppPage::Dashboard;

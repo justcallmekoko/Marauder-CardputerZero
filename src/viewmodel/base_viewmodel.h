@@ -156,7 +156,6 @@ private:
     std::vector<platform::wireless::WifiNetwork> wifi_networks_;
     std::string wifi_scan_interface_;
     std::string wifi_scan_error_;
-    std::size_t wifi_scan_page_{0};
     std::size_t wifi_scan_detail_index_{0};
     bool wifi_scan_details_expanded_{false};
     std::atomic<bool> wifi_scan_running_{false};
@@ -165,6 +164,7 @@ private:
     platform::wireless::WifiScanResult pending_wifi_scan_;
     std::string pending_wifi_scan_interface_;
     std::thread wifi_scan_thread_;
+    uint32_t last_wifi_scan_tick_{};
     lv_timer_t* wifi_scan_timer_{nullptr};
 };
 
