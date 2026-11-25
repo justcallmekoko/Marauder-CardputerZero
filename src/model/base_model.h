@@ -17,6 +17,7 @@ enum class AppPage {
     Adapters = 1,
     WifiScan = 2,
     Diagnostics = 3,
+    RadioSetup,
 };
 
 class BaseModel {

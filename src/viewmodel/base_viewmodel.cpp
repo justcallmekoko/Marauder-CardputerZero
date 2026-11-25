@@ -112,18 +112,10 @@ void BaseViewModel::marauder_menu_activate() {
         case model::MarauderMenuAction::OpenDiagnostics:
             show_diagnostics_page();
             break;
-        case Action::EnableWifi:
-        case Action::EnableBluetooth:
-        case Action::EnableGps:
-            if (!radio_job_.valid()) {
-                const auto radio = action == Action::EnableWifi ? platform::Radio::Wifi :
-                    action == Action::EnableBluetooth ? platform::Radio::Bluetooth : platform::Radio::Gps;
-                try {
-                    radio_message_ = "Checking radio...";
-                    radio_job_ = std::async(std::launch::async, platform::enable_radio, radio);
-                } catch (const std::system_error&) { radio_message_ = "Radio worker unavailable"; }
-                marauder_menu_generation_subject_.set(marauder_menu_generation_subject_.value() + 1);
-            }
+        case Action::OpenRadioSetup:
+            model_.set_current_page(model::AppPage::RadioSetup);
+            publish_navigation();
+            refresh_radios();
             break;
         case Action::CycleStorage:
         case Action::CycleCache:
@@ -133,7 +125,6 @@ void BaseViewModel::marauder_menu_activate() {
     }
 }
 const char* BaseViewModel::settings_message() const {
-    if (marauder_menu_.current_menu() == model::MarauderMenuId::RadioSetup) return radio_message_.c_str();
     if (marauder_menu_.current_menu() == model::MarauderMenuId::FilesAndMemory) return resource_message_.c_str();
     return "";
 }
@@ -146,10 +137,39 @@ std::string BaseViewModel::setting_value(model::MarauderMenuAction action) const
     return {};
 }
 
+void BaseViewModel::load_radios(std::string key, bool enabled) {
+    if (radio_busy()) return;
+    radio_list_.message = key.empty() ? "Refreshing" : "Applying";
+    try {
+        radio_job_ = std::async(std::launch::async, platform::read_radios, std::move(key), enabled);
+    } catch (const std::system_error&) { radio_list_.message = "Worker unavailable"; }
+    marauder_menu_generation_subject_.set(marauder_menu_generation_subject_.value() + 1);
+}
+
+void BaseViewModel::refresh_radios() { load_radios({}, false); }
+
+void BaseViewModel::move_radio(int direction) {
+    if (radios().empty()) return;
+    if (direction < 0 && radio_cursor_ > 0) --radio_cursor_;
+    if (direction > 0 && radio_cursor_ + 1 < radios().size()) ++radio_cursor_;
+    marauder_menu_generation_subject_.set(marauder_menu_generation_subject_.value() + 1);
+}
+
+void BaseViewModel::toggle_radio() {
+    if (radios().empty()) return;
+    const auto& radio = radios()[radio_cursor_];
+    if (radio.state == "On" || radio.state == "Off") load_radios(radio.id, radio.state == "Off");
+}
+
 void BaseViewModel::finish_radio_setting() {
-    if (!radio_job_.valid() || radio_job_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return;
-    try { radio_message_ = radio_job_.get(); }
-    catch (const std::exception&) { radio_message_ = "Radio request failed"; }
+    if (!radio_busy() || radio_job_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return;
+    const auto selected = radios().empty() ? std::string{} : radios()[radio_cursor_].id;
+    try { radio_list_ = radio_job_.get(); }
+    catch (const std::exception&) { radio_list_ = {"Radio request failed", {}}; }
+    radio_cursor_ = 0;
+    for (std::size_t i = 0; i < radios().size(); ++i) {
+        if (radios()[i].id == selected) { radio_cursor_ = i; break; }
+    }
     marauder_menu_generation_subject_.set(marauder_menu_generation_subject_.value() + 1);
 }
 

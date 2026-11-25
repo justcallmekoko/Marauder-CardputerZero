@@ -1,0 +1,157 @@
+#!/usr/bin/python3 -I
+# SPDX-License-Identifier: AGPL-3.0-only
+"""Inventory physical radios and change only the chosen device."""
+from dataclasses import dataclass
+from pathlib import Path
+import hashlib
+import json
+import os
+import socket
+import struct
+import subprocess
+import sys
+import time
+
+SYS = Path("/sys/class")
+
+def text(path):
+    try:
+        return path.read_text().strip()
+    except OSError:
+        return ""
+
+def bus_info(path):
+    for parent in [path, *path.parents]:
+        if (parent / "idVendor").exists():
+            ids = text(parent / "idVendor") + ":" + text(parent / "idProduct")
+            return "External USB", text(parent / "product"), ids
+    if "/platform/" in str(path):
+        return "Internal", "", ""
+    return "Unknown bus", "", ""
+
+@dataclass
+class Device:
+    kind: str
+    name: str
+    location: str
+    product: str
+    driver: str
+    detail: str
+    state: str
+    identity: str
+    switch: str = ""
+
+    @property
+    def key(self):
+        return hashlib.sha256((self.kind + ":" + self.identity).encode()).hexdigest()
+
+def gps_devices():
+    try:
+        with socket.create_connection(("127.0.0.1", 2947), timeout=1) as sock:
+            sock.settimeout(1)
+            sock.sendall(b"?DEVICES;\n")
+            with sock.makefile("rb") as stream:
+                for _ in range(4):
+                    packet = json.loads(stream.readline(65536))
+                    if packet.get("class") == "DEVICES":
+                        return {str(Path(d["path"]).resolve()): d for d in packet["devices"]
+                                if d.get("path","").startswith("/dev/")}
+    except (OSError, ValueError, KeyError):
+        pass
+    return None
+
+def inventory():
+    devices = []
+    switches = {text(r / "name"): r for r in (SYS / "rfkill").glob("rfkill*")}
+    for kind, nodes in [("WiFi", (SYS / "net").glob("*")), ("Bluetooth", (SYS / "bluetooth").glob("hci*"))]:
+        for node in sorted(nodes):
+            if kind == "WiFi" and not ((node / "wireless").exists() or (node / "phy80211").exists()):
+                continue
+            physical = (node / "device").resolve()
+            location, product, ids = bus_info(physical)
+            phy = (node / "phy80211").resolve().name if kind == "WiFi" else node.name
+            switch = switches.get(phy)
+            state = "Unknown"
+            if switch:
+                state = "Locked" if text(switch/"hard") == "1" else "Off" if text(switch/"soft") == "1" else "On"
+            if kind == "Bluetooth" and state == "On":
+                state = bluetooth_power(node.name)
+            driver = (physical / "driver").resolve().name if (physical / "driver").exists() else ""
+            devices.append(Device(kind,node.name,location,product or ("WiFi adapter" if kind=="WiFi" else "Bluetooth controller"),
+                                  driver or phy, "  ".join(filter(None,[ids,text(node/"address")])),state,
+                                  str(physical)+"/"+phy,str(switch or "")))
+    attached = gps_devices()
+    ports = {Path(raw) for raw in (attached or {})}
+    ports.update(Path("/dev").glob("gnss[0-9]*"))
+    ports.update(Path("/dev").glob("ttyACM[0-9]*"))
+    ports.update(Path("/dev").glob("ttyUSB[0-9]*"))
+    uart = Path("/dev/serial0")
+    if uart.exists():
+        ports.add(uart.resolve())
+    for port in sorted({p.resolve() for p in ports}):
+        if not port.is_char_device() or port.name in text(SYS/"tty/console/active").split():
+            continue
+        physical = (SYS / ("gnss" if port.name.startswith("gnss") else "tty") / port.name / "device").resolve()
+        location, product, ids = bus_info(physical)
+        if port == uart.resolve():
+            location = "External UART"
+        record = (attached or {}).get(str(port), {})
+        confirmed = record.get("driver") or port.name.startswith("gnss")
+        devices.append(Device("GPS",port.name,location,record.get("driver") or product or "Serial receiver port",
+                              "GPS receiver" if confirmed else "Unverified GPS port",ids or str(port),
+                              "Unknown" if attached is None else "On" if record else "Off",
+                              str(physical)+"/"+port.name,record.get("path",str(port))))
+    return devices
+
+def bluetooth_power(name):
+    result = subprocess.run(["/usr/bin/busctl","--system","--timeout=1","get-property","org.bluez",
+                             "/org/bluez/"+name,"org.bluez.Adapter1","Powered"],capture_output=True,text=True)
+    return {"b true":"On","b false":"Off"}.get(result.stdout.strip(),"Unknown")
+
+def change(device, enable):
+    if device.state not in ("On","Off") or not device.switch:
+        raise ValueError("Device unavailable")
+    if (device.state == "On") == enable:
+        return
+    if device.kind == "GPS":
+        subprocess.run(["/usr/bin/pkexec","--disable-internal-agent","/usr/lib/marauder/gps-port",
+                        "on" if enable else "off",device.switch],check=True,timeout=8)
+    else:
+        switch = Path(device.switch)
+        index = int(switch.name.removeprefix("rfkill"))
+        with open("/dev/rfkill","wb",buffering=0) as f:
+            f.write(struct.pack("=IBBBB",index,0,2,int(not enable),0))
+        if device.kind=="Bluetooth" and enable:
+            for _ in range(8):
+                result=subprocess.run(["/usr/bin/busctl","--system","--timeout=1","set-property","org.bluez",
+                                       "/org/bluez/"+device.name,"org.bluez.Adapter1","Powered","b","true"],capture_output=True)
+                if result.returncode==0:
+                    break
+                time.sleep(.15)
+
+def emit(fields):
+    print("\t".join(" ".join(str(x).split())[:180] for x in fields))
+
+if __name__=="__main__":
+    result=""
+    devices=inventory()
+    if len(sys.argv)==3:
+        key,action=sys.argv[1:]
+        device=next((d for d in devices if d.key==key),None)
+        try:
+            if device is None or action not in ("on","off"):
+                raise ValueError("Device changed")
+            change(device,action=="on")
+            for _ in range(4):
+                devices=inventory()
+                if any(d.key==key and d.state.lower()==action for d in devices):
+                    result=device.name+" "+("enabled" if action=="on" else "disabled")
+                    break
+                time.sleep(.15)
+            if not result: result="State unconfirmed"
+        except (OSError,ValueError,subprocess.SubprocessError):
+            result="Change failed"
+            devices=inventory()
+    emit(["status",result or "Ready"])
+    for d in devices:
+        emit(["radio",d.key,d.kind,d.name,d.location,d.product,d.driver,d.detail,d.state])

@@ -21,7 +21,7 @@ const std::vector<Item>& items_for(Id menu) {
         {"GPS", Color::Red, Action::None, Id::Gps, true, true},
         {"Device", Color::Blue, Action::None, Id::Device, true, true},
         {"Settings", Color::LightGrey, Action::None, Id::Settings, true, true},
-        {"Radios", Color::Purple, Action::OpenAdapters, Id::Main, false, true},
+        {"Radios", Color::Purple, Action::OpenRadioSetup, Id::Main, false, true},
     };
     static const std::vector<Item> wifi = {
         {"Scanners", Color::Orange, Action::None, Id::WifiScanners, true, true},
@@ -66,23 +66,16 @@ const std::vector<Item>& items_for(Id menu) {
     };
     static const std::vector<Item> settings = {
         {"Battery", Color::Green, Action::CycleBatteryDisplay, Id::Main, false, true},
-        {"Radio setup", Color::Cyan, Action::None, Id::RadioSetup, true, true},
+        {"Radio setup", Color::Cyan, Action::OpenRadioSetup, Id::Main, false, true},
         {"Files and RAM", Color::Blue, Action::None, Id::FilesAndMemory, true, true},
         {"Adapter Setup", Color::Green, Action::OpenAdapters, Id::Main, false, true},
     };
 
-    static const std::vector<Item> radio_setup = {
-        {"Enable WiFi", Color::Green, Action::EnableWifi, Id::Main, false, true},
-        {"Enable Bluetooth", Color::Cyan, Action::EnableBluetooth, Id::Main, false, true},
-        {"Enable GPS", Color::Red, Action::EnableGps, Id::Main, false, true},
-        {"WiFi adapters", Color::Purple, Action::OpenAdapters, Id::Main, false, true},
-    };
     static const std::vector<Item> files_memory = {
         {"Screenshots", Color::Blue, Action::CycleStorage, Id::Main, false, true},
         {"Image cache", Color::Purple, Action::CycleCache, Id::Main, false, true},
     };
     switch (menu) {
-        case Id::RadioSetup: return radio_setup;
         case Id::FilesAndMemory: return files_memory;
         case Id::Main: return main;
         case Id::Wifi: return wifi;
@@ -110,7 +103,6 @@ const char* title_for(Id menu) {
         case Id::Gps: return "GPS";
         case Id::Device: return "Device";
         case Id::Settings: return "Settings";
-        case Id::RadioSetup: return "Radio setup";
         case Id::FilesAndMemory: return "Files and RAM";
     }
     return "MARAUDER";

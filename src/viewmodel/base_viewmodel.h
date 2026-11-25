@@ -15,6 +15,7 @@
 
 #include "wireless_adapters.h"
 #include "wireless_scan.h"
+#include "radio_power.h"
 
 #include <atomic>
 #include <cstddef>
@@ -74,6 +75,13 @@ public:
     bool screenshots_in_documents() const { return model_.screenshots_in_documents(); }
     std::string setting_value(model::MarauderMenuAction action) const;
     const char* settings_message() const;
+    void refresh_radios();
+    void move_radio(int direction);
+    void toggle_radio();
+    const auto& radios() const { return radio_list_.devices; }
+    const auto& radio_message() const { return radio_list_.message; }
+    std::size_t radio_cursor() const { return radio_cursor_; }
+    bool radio_busy() const { return radio_job_.valid(); }
     void refresh_adapters();
     void previous_adapter();
     void next_adapter();
@@ -96,8 +104,10 @@ private:
     static void wifi_scan_timer_cb(lv_timer_t* timer);
 
     void finish_radio_setting();
-    std::future<std::string> radio_job_;
-    std::string radio_message_;
+    void load_radios(std::string key, bool enabled);
+    std::future<platform::RadioInventory> radio_job_;
+    platform::RadioInventory radio_list_;
+    std::size_t radio_cursor_{0};
     std::string resource_message_;
     model::BaseModel model_;
     model::MarauderMenuModel marauder_menu_;

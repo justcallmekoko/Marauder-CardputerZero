@@ -8,6 +8,7 @@
 
 #include "dashboard_screen.h"
 #include "adapters_screen.h"
+#include "radio_setup_screen.h"
 #include "diagnostics_screen.h"
 #include "wifi_scan_screen.h"
 
@@ -97,6 +98,11 @@ void ScreenManager::flush_requested_page() {
     }
 
     switch (requested_page_) {
+        case model::AppPage::RadioSetup:
+            load_screen(std::make_unique<screen::RadioSetupScreen>(view_model_, assets_));
+            loaded_page_ = requested_page_;
+            has_loaded_page_ = true;
+            return;
         case model::AppPage::Adapters:
             show_adapters_screen();
             return;

@@ -20,7 +20,6 @@ enum class MarauderMenuId {
     Gps,
     Device,
     Settings,
-    RadioSetup,
     FilesAndMemory,
 };
 
@@ -30,9 +29,7 @@ enum class MarauderMenuAction {
     OpenAdapters,
     OpenDiagnostics,
     CycleBatteryDisplay,
-    EnableWifi,
-    EnableBluetooth,
-    EnableGps,
+    OpenRadioSetup,
     CycleStorage,
     CycleCache,
 };

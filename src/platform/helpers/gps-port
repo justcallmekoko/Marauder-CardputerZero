@@ -1,0 +1,35 @@
+#!/usr/bin/python3 -I
+# SPDX-License-Identifier: AGPL-3.0-only
+"""Attach/detach one locally present receiver port via gpsd's control socket."""
+from pathlib import Path
+import re
+import socket
+import sys
+
+def allowed(raw):
+    if not re.fullmatch(r"/dev/(?:[A-Za-z0-9_.-]+|serial/by-(?:id|path)/[A-Za-z0-9_.:+-]+)", raw):
+        return False
+    path = Path(raw).resolve()
+    if path.parent != Path("/dev") or not path.is_char_device():
+        return False
+    consoles = Path("/sys/class/tty/console/active").read_text().split()
+    if path.name in consoles:
+        return False
+    if path == Path("/dev/serial0").resolve():
+        return True
+    if re.fullmatch(r"gnss[0-9]+", path.name):
+        return (Path("/sys/class/gnss") / path.name).exists()
+    return (re.fullmatch(r"tty(?:USB|ACM)[0-9]+", path.name) and
+            any((p / "idVendor").is_file() for p in
+                (Path("/sys/class/tty") / path.name / "device").resolve().parents))
+
+if __name__ == "__main__":
+    if len(sys.argv) != 3 or sys.argv[1] not in ("on", "off") or not allowed(sys.argv[2]):
+        sys.exit("Unsupported GPS port")
+    with socket.socket(socket.AF_UNIX) as sock:
+        sock.settimeout(4)
+        sock.connect("/run/gpsd.sock")
+        prefix = "+" if sys.argv[1] == "on" else "-"
+        sock.sendall((prefix + sys.argv[2] + "\n").encode())
+        if not sock.recv(256).startswith(b"OK"):
+            sys.exit("GPSD rejected port")
