@@ -5,12 +5,18 @@
 #include "theme.h"
 
 #include <algorithm>
+#include <iomanip>
+#include <sstream>
 #include <string>
 
 namespace screen {
 namespace {
 std::string size_label(std::uintmax_t bytes) {
-    if (bytes >= 1048576) return std::to_string(bytes / 1048576) + " MiB";
+    if (bytes >= 1048576) {
+        std::ostringstream text;
+        text << std::fixed << std::setprecision(1) << static_cast<double>(bytes) / 1048576.0 << " MiB";
+        return text.str();
+    }
     if (bytes >= 1024) return std::to_string(bytes / 1024) + " KiB";
     return std::to_string(bytes) + " B";
 }
@@ -95,6 +101,6 @@ void PcapFilesScreen::render() {
         lv_obj_set_style_text_color(row.name, colors.text, 0);
         lv_obj_set_style_text_color(row.meta, focus ? colors.error : colors.text_disabled, 0);
     }
-    set_key_guide(details ? "Esc List    P Capture" : "F/X Browse  Enter Info  D Refresh  P Capture  Esc Back");
+    set_key_guide(details ? "Esc List    P Capture" : "F/X Files  Enter Info  D Reload  P Rec  Esc Back");
 }
 } // namespace screen
