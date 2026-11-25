@@ -3,18 +3,73 @@
 #include <cstdio>
 #include <sstream>
 
-namespace platform {
-std::string read_gps_status() {
 #if defined(__linux__) && !USE_DESKTOP
-    FILE* pipe = popen("/usr/bin/timeout 5 /usr/lib/marauder/radio-inventory --gps-status", "r");
-    if (pipe) {
-        char buffer[24]{};
-        std::string value = std::fgets(buffer, sizeof(buffer), pipe) ? buffer : "";
-        value.erase(value.find_last_not_of("\r\n") + 1);
-        if (pclose(pipe) == 0 && !value.empty()) return value;
+#include <cerrno>
+#include <spawn.h>
+#include <sys/socket.h>
+#include <sys/wait.h>
+#include <unistd.h>
+extern char** environ;
+#endif
+
+namespace platform {
+GpsSession::~GpsSession() { stop(); }
+
+void GpsSession::stop() {
+#if defined(__linux__) && !USE_DESKTOP
+    if (socket_ >= 0) {
+        shutdown(socket_, SHUT_WR);
+        if (child_ > 0) {
+            while (waitpid(child_, nullptr, 0) < 0 && errno == EINTR) {}
+        }
+        close(socket_);
     }
 #endif
-    return "?";
+    child_ = socket_ = -1;
+    pending_.clear();
+}
+
+bool GpsSession::start(const std::string& id) {
+    stop();
+#if defined(__linux__) && !USE_DESKTOP
+    int ends[2];
+    if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, ends) != 0) return false;
+    posix_spawn_file_actions_t actions;
+    int err = posix_spawn_file_actions_init(&actions);
+    if (!err) {
+        err = posix_spawn_file_actions_adddup2(&actions, ends[1], STDIN_FILENO);
+        if (!err) err = posix_spawn_file_actions_adddup2(&actions, ends[1], STDOUT_FILENO);
+        char program[] = "/usr/lib/marauder/gps-session";
+        char* args[] = {program, const_cast<char*>(id.c_str()), nullptr};
+        if (!err) err = posix_spawn(&child_, program, &actions, nullptr, args, environ);
+        posix_spawn_file_actions_destroy(&actions);
+    }
+    close(ends[1]);
+    if (!err) { socket_ = ends[0]; return true; }
+    close(ends[0]);
+#endif
+    return false;
+}
+
+std::string GpsSession::poll() {
+    std::string state;
+#if defined(__linux__) && !USE_DESKTOP
+    if (socket_ < 0) return {};
+    char buffer[256];
+    for (;;) {
+        auto n = recv(socket_, buffer, sizeof(buffer), MSG_DONTWAIT);
+        if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) break;
+        if (n < 0 && errno == EINTR) continue;
+        if (n <= 0) { stop(); return "Unavailable"; }
+        pending_.append(buffer, n);
+        std::size_t end;
+        while ((end = pending_.find('\n')) != std::string::npos) {
+            state = pending_.substr(0, end);
+            pending_.erase(0, end + 1);
+        }
+    }
+#endif
+    return state;
 }
 
 RadioInventory read_radios(std::string id, bool enable) {

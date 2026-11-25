@@ -49,6 +49,7 @@ void RadioSetupScreen::build_content(lv_obj_t* content) {
     location_ = label(content, 164, 72, 150, 14, small);
     driver_ = label(content, 164, 88, 150, 14, small);
     detail_ = label(content, 164, 103, 150, 25, small);
+    reactive::observe_obj(content, view_model().gps_status_subject(), changed, this);
     reactive::observe_obj(content, view_model().marauder_menu_generation_subject(), changed, this);
 }
 void RadioSetupScreen::changed(lv_observer_t* observer, lv_subject_t*) {
@@ -89,13 +90,16 @@ void RadioSetupScreen::render() {
     }
     const auto& d = devices[cursor];
     const bool gps = d.kind == "GPS";
-    put(type_, gps && d.state == "On" ? "GPS / Attached" : d.kind, accent(d.kind));
+    put(type_, gps && d.state == "On" ? "GPS / Selected" : d.kind, accent(d.kind));
     put(product_, d.product, colors.text);
     put(location_, d.location, colors.text);
-    put(driver_, d.driver, colors.text_disabled);
+    const std::string receiver_state = lv_subject_get_string(vm.gps_status_subject());
+    const bool verified = gps && d.state == "On" && (receiver_state == "No fix" ||
+        receiver_state == "Fix" || receiver_state == "2D" || receiver_state == "3D");
+    put(driver_, verified ? "GPS receiver" : d.driver, colors.text_disabled);
     put(detail_, d.detail, colors.text_disabled);
-    const char* action = d.state == "On" ? (gps ? "Detach" : "Disable") :
-                         d.state == "Off" ? (gps ? "Attach" : "Enable") : "";
+    const char* action = d.state == "On" ? "Disable" :
+                         d.state == "Off" ? "Enable" : "";
     const std::string guide = std::string("F/X Browse   ") +
         (!vm.radio_busy() && *action ? std::string("Enter ") + action + "   " : "") + "D Refresh   Esc Back";
     set_key_guide(guide.c_str());

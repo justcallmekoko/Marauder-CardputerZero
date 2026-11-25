@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<policyconfig>
-  <action id="com.justcallmekoko.marauder.gps-port">
-    <description>Attach or detach a local Cardputer receiver port</description>
-    <message>Authorize a local GPS receiver change</message>
-    <defaults><allow_any>no</allow_any><allow_inactive>no</allow_inactive><allow_active>yes</allow_active></defaults>
-    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/marauder/gps-port</annotate>
-  </action>
-</policyconfig>

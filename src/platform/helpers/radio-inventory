@@ -60,37 +60,6 @@ def gps_devices():
         pass
     return None
 
-def gps_status():
-    modes = None
-    try:
-        with socket.create_connection(("127.0.0.1", 2947), timeout=1) as sock:
-            sock.sendall(b'?WATCH={"enable":true,"json":true};\n')
-            deadline = time.monotonic() + 2.5
-            with sock.makefile("rb") as stream:
-                while time.monotonic() < deadline:
-                    sock.settimeout(max(.01, deadline - time.monotonic()))
-                    line = stream.readline(65536)
-                    if not line:
-                        return "?"
-                    packet = json.loads(line)
-                    if packet.get("class") == "DEVICES":
-                        modes = {d["path"]: 0 for d in packet["devices"] if d.get("path")}
-                        if not modes:
-                            return "Off"
-                    elif packet.get("class") == "TPV" and modes and packet.get("device") in modes:
-                        mode = packet.get("mode", 0)
-                        if mode in (0, 1, 2, 3):
-                            modes[packet["device"]] = mode
-                        if all(modes.values()) or mode == 3:
-                            break
-    except TimeoutError:
-        pass
-    except (OSError, ValueError, KeyError):
-        return "?"
-    if modes is None:
-        return "?"
-    return ("Wait", "No fix", "2D", "3D")[max(modes.values(), default=0)]
-
 def inventory():
     devices = []
     switches = {text(r / "name"): r for r in (SYS / "rfkill").glob("rfkill*")}
@@ -111,7 +80,11 @@ def inventory():
             devices.append(Device(kind,node.name,location,product or ("WiFi adapter" if kind=="WiFi" else "Bluetooth controller"),
                                   driver or phy, "  ".join(filter(None,[ids,text(node/"address")])),state,
                                   str(physical)+"/"+phy,str(switch or "")))
-    attached = gps_devices()
+    devices.extend(gps_ports(gps_devices()))
+    return devices
+
+def gps_ports(attached):
+    devices = []
     ports = {Path(raw) for raw in (attached or {})}
     ports.update(Path("/dev").glob("gnss[0-9]*"))
     ports.update(Path("/dev").glob("ttyACM[0-9]*"))
@@ -126,12 +99,14 @@ def inventory():
         location, product, ids = bus_info(physical)
         if port == uart.resolve():
             location = "External UART"
+        if port == Path("/dev/serial1").resolve() or ids == "303a:1001":
+            continue
         record = (attached or {}).get(str(port), {})
         confirmed = record.get("driver") or port.name.startswith("gnss")
         devices.append(Device("GPS",port.name,location,record.get("driver") or product or "Serial receiver port",
                               "GPS receiver" if confirmed else "Unverified GPS port",ids or str(port),
-                              "Unknown" if attached is None else "On" if record else "Off",
-                              str(physical)+"/"+port.name,record.get("path",str(port))))
+                              "Off",
+                              str(physical)+"/"+port.name,record.get("path","")))
     return devices
 
 def bluetooth_power(name):
@@ -145,28 +120,23 @@ def change(device, enable):
     if (device.state == "On") == enable:
         return
     if device.kind == "GPS":
-        subprocess.run(["/usr/bin/pkexec","--disable-internal-agent","/usr/lib/marauder/gps-port",
-                        "on" if enable else "off",device.switch],check=True,timeout=8)
-    else:
-        switch = Path(device.switch)
-        index = int(switch.name.removeprefix("rfkill"))
-        with open("/dev/rfkill","wb",buffering=0) as f:
-            f.write(struct.pack("=IBBBB",index,0,2,int(not enable),0))
-        if device.kind=="Bluetooth" and enable:
-            for _ in range(8):
-                result=subprocess.run(["/usr/bin/busctl","--system","--timeout=1","set-property","org.bluez",
-                                       "/org/bluez/"+device.name,"org.bluez.Adapter1","Powered","b","true"],capture_output=True)
-                if result.returncode==0:
-                    break
-                time.sleep(.15)
+        raise ValueError("GPS is session-local")
+    switch = Path(device.switch)
+    index = int(switch.name.removeprefix("rfkill"))
+    with open("/dev/rfkill","wb",buffering=0) as f:
+        f.write(struct.pack("=IBBBB",index,0,2,int(not enable),0))
+    if device.kind=="Bluetooth" and enable:
+        for _ in range(8):
+            result=subprocess.run(["/usr/bin/busctl","--system","--timeout=1","set-property","org.bluez",
+                                   "/org/bluez/"+device.name,"org.bluez.Adapter1","Powered","b","true"],capture_output=True)
+            if result.returncode==0:
+                break
+            time.sleep(.15)
 
 def emit(fields):
     print("\t".join(" ".join(str(x).split())[:180] for x in fields))
 
 if __name__=="__main__":
-    if sys.argv[1:] == ["--gps-status"]:
-        print(gps_status())
-        sys.exit(0)
     result=""
     devices=inventory()
     if len(sys.argv)==3:

@@ -126,14 +126,14 @@ void TitleBar::build() {
     }
     auto* gps = lv_label_create(status);
     const auto* small = assets_.load_standard_font(10);
-    configure_label(gps, view_model_.dark_mode_subject(), small ? small : &lv_font_montserrat_10, 68);
+    configure_label(gps, view_model_.dark_mode_subject(), small ? small : &lv_font_montserrat_10, 79);
     reactive::observe_obj(gps, view_model_.gps_status_subject(), [](lv_observer_t* observer, lv_subject_t* subject) {
         auto* label = static_cast<lv_obj_t*>(lv_observer_get_target(observer));
         const std::string state = lv_subject_get_string(subject);
         const auto colors = view::palette(true);
         auto ink = colors.text_disabled;
-        if (state == "2D" || state == "3D") ink = colors.success;
-        else if (state == "Wait" || state == "No fix") ink = colors.warning;
+        if (state == "Fix" || state == "2D" || state == "3D") ink = colors.success;
+        else if (state == "Wait" || state == "No fix" || state == "No data" || state == "Busy") ink = colors.warning;
         lv_label_set_text_fmt(label, "GPS %s", state.c_str());
         lv_obj_set_style_text_color(label, ink, 0);
     }, nullptr);

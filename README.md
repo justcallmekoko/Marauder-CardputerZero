@@ -42,11 +42,9 @@ The launcher has six tiles. Use `F/X` for up/down and `Z/C` for left/right. `Ent
 
 The menu text uses the classic 5×7 glyphs from the Cardputer firmware. Under **Settings → Battery**, press `Enter` to cycle through icon, percentage, and both. The choice is saved per user. Battery indicators are red at 20% or below, amber through 50%, and green above 50%.
 
-**Settings → Radio setup** and **Radios** list WiFi, Bluetooth and GPS devices. Browse with F/X, toggle the highlighted adapter with Enter, and refresh after connecting hardware with D. GPS actions attach or detach the selected port in gpsd. Serial ports without a recognized receiver are labeled unverified.
+**Settings → Radio setup** and **Radios** list WiFi, Bluetooth and GPS devices. Browse with F/X, toggle the highlighted adapter with Enter, and refresh after connecting hardware with D. GPS selection is local to the running app. Select a USB or Cap/Grove port to read it. Marauder listens through gpsd when it already manages that port. Otherwise it checks serial data for checksum-valid NMEA. Disable GPS or exit to release the reader, restore serial settings, and return connector power to its initial state.
 
-**Settings → Files and RAM** selects the destination for future screenshots (`~/Pictures/Screenshots` or `~/Documents/Marauder`) and the decoded-image cache budget (off, 256 KiB, or 1024 KiB). Both choices persist per user and apply immediately.
-
-The GPS badge updates across screens. **GPS Off** means gpsd has no attached port. **GPS Wait** means a port is configured and waiting for a receiver report. **GPS No fix**, **GPS 2D**, and **GPS 3D** show the strongest current receiver report. **GPS ?** means gpsd status is unavailable.
+The GPS badge shows Off, Wait, No data, Busy, or the current fix. A valid sentence can confirm a receiver even before a satellite fix. USB serial bridges appear as candidates until receiver data is recognized.
 
 Open **WiFi → General → Adapter Setup** to choose the WiFi interface used by the app. The border follows keyboard focus, and an asterisk marks the interface selected for use. Press `Enter` to select the highlighted adapter or `D` to inspect its details.
 
@@ -92,7 +90,7 @@ cmake --build --preset linux-x86-64-dbg
 cmake --workflow --preset cp0-cross-package
 ```
 
-The expected artifact is `dist/Marauder_0.6.8_rev1_arm64.deb`. Packaging and deployment remain separate actions.
+The expected artifact is `dist/Marauder_0.6.9_rev1_arm64.deb`. Packaging and deployment remain separate actions.
 
 ## Safety and scope
 

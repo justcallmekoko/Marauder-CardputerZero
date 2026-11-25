@@ -30,8 +30,7 @@ if(APP_INSTALL_SYSTEMD_SERVICE)
     )
 endif()
 
-install(PROGRAMS src/platform/helpers/radio-inventory src/platform/helpers/gps-port DESTINATION lib/marauder)
-install(FILES src/platform/helpers/com.justcallmekoko.marauder.gps-port.policy DESTINATION share/polkit-1/actions)
+install(PROGRAMS src/platform/helpers/radio-inventory src/platform/helpers/gps-session DESTINATION lib/marauder)
 
 install(TARGETS ${PROJECT_NAME}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
@@ -95,7 +94,7 @@ set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "${APP_DEBIAN_ARCHITECTURE}")
 set(CPACK_DEBIAN_PACKAGE_MAINTAINER "${APP_MAINTAINER}")
 set(CPACK_DEBIAN_PACKAGE_SECTION "utils")
 set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
-set(APP_DEBIAN_DEPENDS "libc6, libstdc++6, libgcc-s1, libfreetype6, libpng16-16t64, libjpeg62-turbo, zlib1g, iw, network-manager, python3, pkexec, bluez")
+set(APP_DEBIAN_DEPENDS "libc6, libstdc++6, libgcc-s1, libfreetype6, libpng16-16t64, libjpeg62-turbo, zlib1g, iw, network-manager, python3 (>= 3.12), bluez")
 if(FMT_INCLUDE_DIR AND FMT_LIBRARY)
     string(APPEND APP_DEBIAN_DEPENDS ", libfmt10")
 endif()

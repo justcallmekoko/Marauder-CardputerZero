@@ -106,9 +106,10 @@ private:
     static void wifi_scan_timer_cb(lv_timer_t* timer);
 
     void update_gps_status();
-    reactive::StringSubject<16> gps_status_{"..."};
-    std::future<std::string> gps_job_;
-    std::chrono::steady_clock::time_point next_gps_read_{};
+    void sync_gps_rows();
+    reactive::StringSubject<16> gps_status_{"Off"};
+    platform::GpsSession gps_session_;
+    std::string gps_id_;
     void finish_radio_setting();
     void load_radios(std::string key, bool enabled);
     std::future<platform::RadioInventory> radio_job_;

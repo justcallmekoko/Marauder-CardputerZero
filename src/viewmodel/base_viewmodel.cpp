@@ -158,20 +158,38 @@ void BaseViewModel::move_radio(int direction) {
 void BaseViewModel::toggle_radio() {
     if (radios().empty()) return;
     const auto& radio = radios()[radio_cursor_];
+    if (radio_busy()) return;
+    if (radio.kind == "GPS") {
+        if (gps_id_ == radio.id) {
+            gps_session_.stop();
+            gps_id_.clear();
+            gps_status_.set("Off");
+            radio_list_.message = "GPS released";
+        } else if (gps_session_.start(radio.id)) {
+            gps_id_ = radio.id;
+            gps_status_.set("Wait");
+            radio_list_.message = "GPS selected";
+        } else {
+            gps_id_.clear();
+            gps_status_.set("Unavailable");
+            radio_list_.message = "GPS reader unavailable";
+        }
+        sync_gps_rows();
+        marauder_menu_generation_subject_.set(marauder_menu_generation_subject_.value() + 1);
+        return;
+    }
     if (radio.state == "On" || radio.state == "Off") load_radios(radio.id, radio.state == "Off");
 }
 
 void BaseViewModel::update_gps_status() {
-    const auto now = std::chrono::steady_clock::now();
-    try {
-        if (gps_job_.valid()) {
-            if (gps_job_.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
-                gps_status_.set(gps_job_.get().c_str());
-        } else if (now >= next_gps_read_) {
-            next_gps_read_ = now + std::chrono::seconds(5);
-            gps_job_ = std::async(std::launch::async, platform::read_gps_status);
-        }
-    } catch (const std::exception&) { gps_status_.set("?"); }
+    const auto state = gps_session_.poll();
+    if (!state.empty()) gps_status_.set(state.c_str());
+}
+
+void BaseViewModel::sync_gps_rows() {
+    for (auto& d : radio_list_.devices) {
+        if (d.kind == "GPS") d.state = d.id == gps_id_ ? "On" : "Off";
+    }
 }
 
 void BaseViewModel::finish_radio_setting() {
@@ -179,6 +197,7 @@ void BaseViewModel::finish_radio_setting() {
     const auto selected = radios().empty() ? std::string{} : radios()[radio_cursor_].id;
     try { radio_list_ = radio_job_.get(); }
     catch (const std::exception&) { radio_list_ = {"Radio request failed", {}}; }
+    sync_gps_rows();
     radio_cursor_ = 0;
     for (std::size_t i = 0; i < radios().size(); ++i) {
         if (radios()[i].id == selected) { radio_cursor_ = i; break; }

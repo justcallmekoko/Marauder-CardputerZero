@@ -1,0 +1,166 @@
+#!/usr/bin/python3 -I
+# SPDX-License-Identifier: AGPL-3.0-only
+"""Read the selected GPS until the owning app closes stdin."""
+import contextlib
+import errno
+import fcntl
+import json
+import os
+from pathlib import Path
+import re
+import select
+import socket
+import sys
+import termios
+import time
+import tty
+
+class SessionEnded(Exception):
+    pass
+
+def ready(fd=None, timeout=0):
+    readers = [0] if fd is None else [0, fd]
+    events, _, _ = select.select(readers, [], [], timeout)
+    if 0 in events:
+        raise SessionEnded
+    return fd in events
+
+last_status = None
+
+def report(value):
+    global last_status
+    if value != last_status:
+        print(value, flush=True)
+        last_status = value
+
+def fix(sentence):
+    match = re.fullmatch(rb"\$([A-Z]{2}(GGA|RMC|GSA),[^*]*)\*([\da-fA-F]{2})", sentence.strip())
+    if not match:
+        return None
+    total = 0
+    for byte in match[1]:
+        total ^= byte
+    if total != int(match[3], 16):
+        return None
+    fields = match[1].split(b",")
+    if match[2] == b"GSA" and len(fields) >= 3:
+        return {b"1": "No fix", b"2": "2D", b"3": "3D"}.get(fields[2])
+    if match[2] == b"RMC" and len(fields) >= 3:
+        return {b"A": "Fix", b"V": "No fix"}.get(fields[2])
+    if match[2] == b"GGA" and len(fields) >= 7 and fields[6].isdigit():
+        return "Fix" if int(fields[6]) else "No fix"
+
+@contextlib.contextmanager
+def supply(uart):
+    changed = []
+    try:
+        if uart:
+            for name in ("ext_5v_out", "grove_5v_out"):
+                node = Path("/sys/class/leds") / name / "brightness"
+                if node.exists() and node.read_text().strip() == "0":
+                    node.write_text("1")
+                    changed.append(node)
+            if changed:
+                ready(timeout=1.5)
+        yield
+    finally:
+        for node in reversed(changed):
+            with contextlib.suppress(OSError):
+                node.write_text("0")
+
+def serial_status(port, uart):
+    fd = os.open(port, os.O_RDONLY | os.O_NOCTTY | os.O_NONBLOCK)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        saved = termios.tcgetattr(fd)
+        try:
+            with supply(uart):
+                for speed in (termios.B115200, termios.B9600, termios.B38400, termios.B460800):
+                    settings = saved.copy()
+                    settings[6] = saved[6].copy()
+                    tty.cfmakeraw(settings)
+                    settings[4] = settings[5] = speed
+                    termios.tcsetattr(fd, termios.TCSANOW, settings)
+                    deadline = time.monotonic() + 3
+                    buf = b""
+                    dimension = None
+                    while time.monotonic() < deadline:
+                        if not ready(fd, .3):
+                            continue
+                        data = os.read(fd, 2048)
+                        if not data:
+                            raise OSError(errno.ENODEV, "Disconnected")
+                        buf += data
+                        while b"\n" in buf:
+                            line, buf = buf.split(b"\n", 1)
+                            value = fix(line)
+                            if value:
+                                if value in ("2D", "3D", "No fix"):
+                                    dimension = value
+                                report(dimension if value == "Fix" and dimension in ("2D", "3D") else value)
+                                deadline = time.monotonic() + 5
+                        buf = buf[-512:]
+                    report("No data")
+        finally:
+            with contextlib.suppress(OSError, termios.error):
+                termios.tcsetattr(fd, termios.TCSANOW, saved)
+    finally:
+        os.close(fd)
+
+def shared_status(port, path):
+    with socket.create_connection(("127.0.0.1", 2947), timeout=1) as sock:
+        watch = {"enable": True, "json": True, "device": path}
+        sock.sendall(("?WATCH=" + json.dumps(watch, separators=(",", ":")) + ";\n").encode())
+        buf = b""
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            if not ready(sock, .3):
+                continue
+            chunk = sock.recv(8192)
+            if not chunk:
+                break
+            buf += chunk
+            while b"\n" in buf:
+                line, buf = buf.split(b"\n", 1)
+                msg = json.loads(line)
+                if msg.get("class") == "TPV" and Path(msg.get("device", "")).resolve() == port:
+                    mode = msg.get("mode")
+                    if mode in (1, 2, 3):
+                        report(("Wait", "No fix", "2D", "3D")[mode])
+                        deadline = time.monotonic() + 5
+            if len(buf) > 65536:
+                break
+        report("No data")
+
+def main(key):
+    import runpy
+    api = runpy.run_path(str(Path(__file__).with_name("radio-inventory")))
+    while True:
+        ready()
+        ports = api["gps_ports"](api["gps_devices"]())
+        selected = next((p for p in ports if p.key == key), None)
+        if selected is None:
+            report("Missing")
+        else:
+            port = Path("/dev") / selected.name
+            report("Wait")
+            try:
+                if selected.switch:
+                    shared_status(port, selected.switch)
+                elif port.name.startswith("gnss"):
+                    report("Needs gpsd")
+                else:
+                    serial_status(port, selected.location == "External UART")
+            except PermissionError:
+                report("Denied")
+            except BlockingIOError:
+                report("Busy")
+            except (OSError, ValueError, termios.error):
+                report("Unavailable")
+        ready(timeout=1)
+
+if __name__ == "__main__":
+    try:
+        main(sys.argv[1])
+    except (SessionEnded, BrokenPipeError):
+        pass
