@@ -115,7 +115,14 @@ void BaseViewModel::show_adapters_page() {
     model_.set_current_page(model::AppPage::Adapters);
     publish_navigation();
 }
-void BaseViewModel::show_wifi_scan_page() {
+void BaseViewModel::show_wifi_scan_page(bool stations) {
+    if (stations != stations_) {
+        wifi_networks_.clear();
+        wifi_scan_detail_index_ = 0;
+        wifi_scan_details_expanded_ = false;
+        wifi_scan_error_.clear();
+        stations_ = stations;
+    }
     model_.set_current_page(model::AppPage::WifiScan);
     publish_navigation();
     if (wifi_networks_.empty() && !wifi_scan_running_) start_wifi_scan();
@@ -212,6 +219,9 @@ void BaseViewModel::marauder_menu_activate() {
             break;
         case model::MarauderMenuAction::OpenDiagnostics:
             show_diagnostics_page();
+            break;
+        case Action::OpenStations:
+            show_wifi_scan_page(true);
             break;
         case Action::OpenTraffic:
             model_.set_current_page(model::AppPage::Traffic);
@@ -445,12 +455,13 @@ void BaseViewModel::start_wifi_scan() {
     wifi_scan_running_ = true;
     wifi_scan_ready_ = false;
     publish_wifi_scan();
+    collecting_stations_ = stations_;
     const auto interface_name = wifi_scan_interface_;
     try {
-        wifi_scan_thread_ = std::thread([this, interface_name] {
+        wifi_scan_thread_ = std::thread([this, interface_name, stations = stations_] {
             platform::wireless::WifiScanResult result;
             try {
-                result = platform::wireless::scan_wifi_networks(interface_name);
+                result = platform::wireless::scan_wifi_networks(interface_name, stations);
             } catch (...) {
                 result.error = "Unexpected Wi-Fi scan failure";
             }
@@ -558,6 +569,11 @@ void BaseViewModel::finish_wifi_scan_if_ready() {
     const auto selected = std::find_if(adapters_.begin(), adapters_.end(), [&](const auto& adapter) {
         return adapter.stable_id == model_.selected_adapter_id();
     });
+    if (collecting_stations_ != stations_) {
+        wifi_scan_running_ = false;
+        if (current_page() == model::AppPage::WifiScan) start_wifi_scan();
+        return;
+    }
     if (selected != adapters_.end() && selected->interface_name == completed_interface) {
         wifi_scan_interface_ = completed_interface;
         wifi_scan_error_ = std::move(completed.error);
@@ -593,6 +609,7 @@ void BaseViewModel::publish_wifi_scan() {
                                              wifi_scan_details_expanded_,
                                              wifi_scan_detail_index_);
     wifi_scan_subject_.set(text.c_str());
+    inventory_generation_.set(inventory_generation_.value() + 1);
 }
 
 void BaseViewModel::publish_adapter_detail() {

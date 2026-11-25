@@ -51,7 +51,13 @@ public:
     void show_dashboard_page();
     void show_diagnostics_page();
     void show_adapters_page();
-    void show_wifi_scan_page();
+    void show_wifi_scan_page(bool stations = false);
+    bool station_list() const { return stations_; }
+    const auto& wifi_items() const { return wifi_networks_; }
+    size_t wifi_cursor() const { return wifi_scan_detail_index_; }
+    const auto& wifi_error() const { return wifi_scan_error_; }
+    bool scanning() const { return wifi_scan_running_; }
+    lv_subject_t* inventory_subject() { return inventory_generation_.native(); }
     void toggle_page();
     const char* marauder_menu_title() const;
     std::size_t marauder_menu_item_count() const;
@@ -154,6 +160,8 @@ private:
     std::size_t highlighted_adapter_{0};
     bool adapter_details_expanded_{false};
     std::vector<platform::wireless::WifiNetwork> wifi_networks_;
+    reactive::IntSubject inventory_generation_{0};
+    bool stations_{}, collecting_stations_{};
     std::string wifi_scan_interface_;
     std::string wifi_scan_error_;
     std::size_t wifi_scan_detail_index_{0};

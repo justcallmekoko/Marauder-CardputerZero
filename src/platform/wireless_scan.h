@@ -18,6 +18,8 @@ struct WifiNetwork {
     int signal_percent{0};
     std::string security;
     std::string vendor{};
+    int rssi{0};
+    std::string rx_packets{}, tx_packets{};
 };
 
 struct WifiScanResult {
@@ -25,8 +27,8 @@ struct WifiScanResult {
     std::string error;
 };
 
-std::vector<std::string> split_nmcli_terse_row(std::string_view row);
-WifiScanResult parse_nmcli_wifi_scan(std::string_view output);
-WifiScanResult scan_wifi_networks(const std::string& interface_name);
+bool parse_access_point(std::string_view reply, WifiNetwork& ap);
+bool parse_hotspot_station(std::string_view reply, WifiNetwork& station);
+WifiScanResult scan_wifi_networks(const std::string& interface_name, bool stations = false);
 
 } // namespace platform::wireless

@@ -28,6 +28,7 @@ enum class MarauderMenuId {
 enum class MarauderMenuAction {
     None,
     OpenWifiScan,
+    OpenStations,
     OpenTraffic,
     OpenAdapters,
     OpenDiagnostics,

@@ -29,7 +29,7 @@ const std::vector<Item>& items_for(Id menu) {
     };
     static const std::vector<Item> wifi_networks = {
         {"Access Points", Color::Orange, Action::OpenWifiScan, Id::Main, false, true},
-        {"Stations", Color::Cyan, Action::None, Id::Main, false, false},
+        {"Hotspot stations", Color::Cyan, Action::OpenStations, Id::Main, false, true},
     };
     static const std::vector<Item> wifi_activity = {
         {"Traffic graph", Color::Green, Action::OpenTraffic, Id::Main, false, true},
