@@ -180,7 +180,8 @@ std::string system_info_page(const platform::diagnostics::Snapshot& snapshot,
     std::ostringstream out;
     out << model::system_info_page_title(navigation.page()) << ' '
         << (navigation.page_index() + 1) << '/' << model::SystemInfoModel::kPageCount << "  "
-        << (navigation.subpage_index() + 1) << '/' << navigation.subpage_count() << '\n';
+        << (navigation.subpage_index() + 1) << '/' << navigation.subpage_count()
+        << (navigation.details_expanded() ? "  Details" : "") << '\n';
     const auto count = category_item_count(snapshot, navigation.page());
     const auto begin = navigation.subpage_index() * model::SystemInfoModel::kRowsPerSubpage;
     const auto end = std::min(begin + model::SystemInfoModel::kRowsPerSubpage, count);

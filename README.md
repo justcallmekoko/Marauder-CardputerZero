@@ -7,7 +7,7 @@ Native C++17/LVGL 9.5 port of ESP32 Marauder for the ARM64 Linux-based Cardputer
 ## Current milestone
 
 - Cardputer Zero APPLaunch integration and Debian packaging scaffold
-- 320x170 LVGL interface with a classic Marauder-style hierarchical menu
+- 320x170 LVGL interface with a six-tile keyboard launcher
 - Dashboard, wireless-adapter selection, and five bounded keyboard-reachable System Info pages
 - Read-only wireless adapter catalog with interface, driver, PHY, bus, VID/PID, MAC, stable identity, and explicit monitor/injection verification state
 - Keyboard-driven adapter browsing and in-app selection without changing interface state
@@ -23,7 +23,7 @@ Native C++17/LVGL 9.5 port of ESP32 Marauder for the ARM64 Linux-based Cardputer
   - serial, I2C, SPI, and GPIO device nodes
   - availability of radio and diagnostic command-line tools
   - gpsd socket presence
-- Fixed classic Marauder dark/multicolor appearance
+- Graphite theme with muted category accents
 - No background service and no permanent root process
 
 ## Hardware contract under evaluation
@@ -38,9 +38,11 @@ The adapter layer enumerates Linux wireless interfaces, correlates USB metadata,
 
 ## Keyboard workflow
 
-The main screen follows the Marauder hierarchy and classic black/multicolor palette: **WiFi**, **Bluetooth**, **GPS**, **Device**, and **Settings**. Use the printed arrow cluster directly: `F` is Up, `X` is Down, `Z` is Left, and `C` is Right. No `Fn`, `Sym`, `Caps`, or other modifier is required. Use `Enter` to activate. `Esc` backs out of submenus and secondary screens, and exits immediately from the main-menu root. Unimplemented functions are visibly marked `soon` rather than silently doing nothing.
+The launcher has six tiles. Press `F` or `X` to move focus and `C` or `Enter` to open a tile. `Z` and `Esc` return from submenus. At the launcher root, `Esc` exits. Unimplemented functions carry a “soon” label.
 
-There is no on-screen quick-action strip. System Info is canonically located at **Device > System Info** and exposes Summary, System, Interfaces, USB/Peripherals, and Tools pages. On Adapters, Wi-Fi results, and System Info, `D` toggles details/summary. On System Info, `F`/`X` changes page, `C`/`Enter` refreshes, and `Z`/`Esc` returns to Device with its selection retained.
+Open **Radios** to browse detected interfaces. The border follows keyboard focus, and an asterisk marks the interface selected for use. Press `Enter` to select the highlighted adapter or `D` to inspect its details.
+
+The bottom strip shows the current screen’s shortcuts. System Info is canonically located at **Device > System Info** and exposes Summary, System, Interfaces, USB/Peripherals, and Tools pages. On Adapters, Wi-Fi results, and System Info, `D` toggles details/summary. On System Info, `F`/`X` changes page, `C`/`Enter` refreshes, and `Z`/`Esc` returns to Device with its selection retained.
 
 Managed-mode scans use the target’s existing NetworkManager service when available; the Cardputer Zero base image has been validated with it. Scans do not enable monitor mode and do not test injection.
 
@@ -58,7 +60,7 @@ Hardware discovery stays in the platform layer. Blocking scans and packet proces
 
 ## UI direction
 
-The Cardputer Zero application should maintain a similar look and feel to the Cardputer ADV version of ESP32Marauder. Preserve its compact information hierarchy, high-contrast Marauder visual identity, familiar terminology, and keyboard-first interaction patterns where practical, while adapting layouts to Linux/LVGL and the Cardputer Zero display rather than forcing a pixel-for-pixel copy.
+The 320×170 screen reserves a top bar for device status and a bottom strip for keyboard controls. Pastel accents identify categories and outlined tiles show keyboard focus.
 
 ## Build
 
@@ -82,7 +84,7 @@ cmake --build --preset linux-x86-64-dbg
 cmake --workflow --preset cp0-cross-package
 ```
 
-The expected artifact is `dist/Marauder_0.6.3_rev1_arm64.deb`. Packaging and deployment remain separate actions.
+The expected artifact is `dist/Marauder_0.6.4_rev1_arm64.deb`. Packaging and deployment remain separate actions.
 
 ## Safety and scope
 

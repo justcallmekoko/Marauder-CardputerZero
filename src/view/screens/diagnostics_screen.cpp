@@ -20,7 +20,6 @@ DiagnosticsScreen::~DiagnosticsScreen() {
 }
 
 void DiagnosticsScreen::build_content(lv_obj_t* content) {
-    set_key_guide("F/X  Page    Enter  Refresh    D  Details    Esc  Back");
     scroll_ = lv_obj_create(content);
     lv_obj_remove_style_all(scroll_);
     lv_obj_set_size(scroll_, LV_PCT(100), LV_PCT(100));
@@ -44,7 +43,11 @@ void DiagnosticsScreen::build_content(lv_obj_t* content) {
 
 void DiagnosticsScreen::diagnostics_changed_cb(lv_observer_t* observer, lv_subject_t*) {
     auto* screen = static_cast<DiagnosticsScreen*>(lv_observer_get_user_data(observer));
-    if (screen && screen->scroll_) lv_obj_scroll_to_y(screen->scroll_, 0, LV_ANIM_OFF);
+    if (!screen || !screen->scroll_) return;
+    lv_obj_scroll_to_y(screen->scroll_, 0, LV_ANIM_OFF);
+    screen->set_key_guide(screen->view_model().system_details_open() ?
+        "F/X  Page    Enter  Refresh    D  Less    Esc  Back" :
+        "F/X  Page    Enter  Refresh    D  More    Esc  Back");
 }
 
 } // namespace screen

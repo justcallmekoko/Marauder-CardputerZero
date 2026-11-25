@@ -73,6 +73,8 @@ public:
     void next_adapter();
     void select_highlighted_adapter();
     void toggle_adapter_details();
+    bool wifi_details_open() const { return wifi_scan_details_expanded_; }
+    bool system_details_open() const { return system_info_.details_expanded(); }
     void start_wifi_scan();
     void previous_wifi_scan_page();
     void next_wifi_scan_page();
