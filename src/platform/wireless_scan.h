@@ -27,7 +27,6 @@ struct WifiNetwork {
     std::string ssid;
     int channel{0};
     int frequency_mhz{0};
-    bool channel_advertised{false};
     int signal_percent{0};
     std::string security;
     SecurityInfo security_info;
@@ -36,6 +35,7 @@ struct WifiNetwork {
     bool has_rssi{};
     unsigned frames{};
     std::vector<Client> clients;
+    bool channel_advertised{false};
 };
 
 struct WifiScanResult {
