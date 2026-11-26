@@ -887,7 +887,10 @@ void BaseViewModel::start_wifi_scan(bool clear_results) {
 void BaseViewModel::stop_wifi_capture() {
     wifi_capture_stop_ = true;
     if (wifi_scan_thread_.joinable()) wifi_scan_thread_.join();
-    if (wifi_hop_job_.valid()) wifi_hop_job_.wait();
+    if (wifi_hop_job_.valid()) {
+        wifi_hop_job_.wait();
+        wifi_hop_job_ = {}; // A later scan must not consume this session's tune result.
+    }
     wifi_scan_running_ = false;
     std::vector<platform::remote_id::Packet> remote;
     std::vector<platform::wireless::PineappleObservation> pineapple;
