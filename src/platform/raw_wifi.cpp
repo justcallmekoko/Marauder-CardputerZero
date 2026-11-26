@@ -47,6 +47,14 @@ bool radiotap(const uint8_t* bytes, std::size_t size, std::size_t& header,
 }
 }
 
+const char* frame_kind_label(FrameKind kind) {
+    static constexpr const char* labels[] = {"Beacon", "Probe", "Deauth / disassoc", "EAPOL / PMKID",
+        "SAE", "Data", "Association", "Authentication", "Action", "Control", "Other"};
+    const auto index = static_cast<unsigned>(kind);
+    return index < static_cast<unsigned>(FrameKind::Count) ? labels[index] : "Other";
+}
+uint32_t frame_kind_bit(FrameKind kind) { return 1u << static_cast<unsigned>(kind); }
+
 bool parse_frame_summary(const uint8_t* bytes, std::size_t size, FrameSummary& out) {
     out = {};
     std::size_t header{};
@@ -64,16 +72,53 @@ bool parse_frame_summary(const uint8_t* bytes, std::size_t size, FrameSummary& o
         out.sender = address(frame + 10);
         if (type == 2) {
             out.type = subtype == 4 || subtype == 12 ? "Null" : subtype >= 8 ? "QoS data" : "Data";
+            out.kind = FrameKind::Data;
+            const bool protected_payload = (control & 0x4000) != 0;
+            const std::size_t payload = 24 + ((control & 0x0300) == 0x0300 ? 6 : 0) +
+                ((subtype & 8) ? 2 : 0);
+            if (!protected_payload && payload + 8 <= length &&
+                frame[payload] == 0xAA && frame[payload + 1] == 0xAA && frame[payload + 2] == 0x03 &&
+                frame[payload + 6] == 0x88 && frame[payload + 7] == 0x8E) {
+                out.type = "EAPOL";
+                out.kind = FrameKind::Eapol;
+                // PMKID KDE in the EAPOL key data: vendor IE, OUI 00:0F:AC, type 4.
+                // Check the bounded key-data region; payload bytes are never retained.
+                const auto eapol = payload + 8;
+                if (eapol + 99 <= length && frame[eapol + 1] == 3) {
+                    const auto key_start = eapol + 99;
+                    const auto key_length = (unsigned(frame[eapol + 97]) << 8) | frame[eapol + 98];
+                    const auto end = std::min(length, key_start + key_length);
+                    for (auto pos = key_start; pos + 22 <= end;) {
+                        const auto item_length = frame[pos + 1];
+                        if (pos + 2 + item_length > end) break;
+                        if (frame[pos] == 221 && item_length >= 20 && frame[pos + 2] == 0 &&
+                            frame[pos + 3] == 0x0F && frame[pos + 4] == 0xAC && frame[pos + 5] == 4)
+                            { out.type = "PMKID"; break; }
+                        pos += 2 + item_length;
+                    }
+                }
+            }
         } else {
             static constexpr const char* names[] = {"Assoc req", "Assoc resp", "Reassoc req", "Reassoc resp",
                 "Probe req", "Probe resp", "Timing", "Reserved", "Beacon", "ATIM", "Disassoc",
                 "Auth", "Deauth", "Action", "Action", "Reserved"};
             out.type = names[subtype];
+            out.kind = subtype == 8 ? FrameKind::Beacon :
+                (subtype == 4 || subtype == 5) ? FrameKind::Probe :
+                (subtype == 10 || subtype == 12) ? FrameKind::Deauth :
+                (subtype <= 3) ? FrameKind::Association :
+                (subtype == 13 || subtype == 14) ? FrameKind::Action :
+                subtype == 11 ? FrameKind::Authentication : FrameKind::Other;
+            if (subtype == 11 && length >= 26 && le16(frame + 24) == 3) {
+                out.type = "SAE auth";
+                out.kind = FrameKind::Sae;
+            }
         }
     } else if (type == 1) {
         out.receiver = address(frame + 4);
         if (length >= 16 && subtype != 12 && subtype != 13) out.sender = address(frame + 10);
         out.type = subtype == 13 ? "ACK" : subtype == 12 ? "CTS" : subtype == 11 ? "RTS" : "Control";
+        out.kind = FrameKind::Control;
     } else return false;
     return true;
 }

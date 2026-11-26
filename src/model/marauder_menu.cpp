@@ -32,7 +32,7 @@ const std::vector<Item>& items_for(Id menu) {
     };
     static const std::vector<Item> wifi_activity = {
         {"Traffic graph", Color::Green, Action::OpenTraffic, Id::Main, false, true, RadioRequirement::Selected},
-        {"Beacon frames", Color::Orange, Action::None, Id::Main, false, false, RadioRequirement::Monitor},
+        {"Raw capture", Color::Orange, Action::OpenRawCapture, Id::Main, false, true, RadioRequirement::Monitor},
         {"Probe Requests", Color::Cyan, Action::None, Id::Main, false, false, RadioRequirement::Monitor},
         {"Deauth", Color::Red, Action::None, Id::Main, false, false, RadioRequirement::Monitor},
     };

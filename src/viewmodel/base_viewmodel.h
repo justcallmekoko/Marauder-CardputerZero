@@ -76,6 +76,7 @@ public:
     void show_diagnostics_page();
     void show_adapters_page();
     void show_wifi_scan_page();
+    void show_raw_capture_page();
     const auto& wifi_items() const { return wifi_networks_; }
     size_t wifi_cursor() const { return wifi_scan_detail_index_; }
     const auto& wifi_error() const { return wifi_scan_error_; }
@@ -150,6 +151,19 @@ public:
     const auto& wifi_feed_frames() const { return wifi_feed_frames_; }
     size_t wifi_feed_offset() const { return wifi_feed_offset_; }
     uint64_t wifi_feed_count() const { return wifi_feed_count_; }
+    const auto& raw_feed_frames() const { return raw_feed_frames_; }
+    size_t raw_feed_offset() const { return raw_feed_offset_; }
+    uint64_t raw_feed_count() const { return raw_frames_seen_; }
+    bool list_builder_active() const { return wifi_list_builder_; }
+    bool raw_session() const { return raw_session_; }
+    const auto& station_refs() const { return station_refs_; }
+    size_t station_cursor() const { return station_cursor_; }
+    uint32_t raw_filter_mask() const { return raw_filter_mask_; }
+    size_t raw_filter_cursor() const { return raw_filter_cursor_; }
+    uint64_t raw_displayed_count() const { return raw_displayed_count_; }
+    void toggle_list_builder();
+    void show_station_list();
+    void show_raw_filters();
     const auto& wifi_feed_target() const { return wifi_feed_target_; }
     bool wifi_feed_station() const { return wifi_feed_station_; }
     unsigned wifi_tuned_frequency() const { return wifi_tuned_frequency_; }
@@ -240,8 +254,19 @@ private:
     std::string wifi_feed_target_;
     bool wifi_feed_station_{};
     std::deque<platform::wireless::FrameSummary> wifi_feed_frames_;
+    std::deque<platform::wireless::FrameSummary> raw_feed_frames_;
     std::size_t wifi_feed_offset_{};
+    std::size_t raw_feed_offset_{};
     uint64_t wifi_feed_count_{};
+    std::atomic<uint64_t> raw_frames_seen_{0};
+    std::atomic<bool> wifi_list_builder_{true};
+    bool raw_session_{};
+    bool station_from_global_{};
+    std::vector<std::pair<size_t, size_t>> station_refs_;
+    size_t station_cursor_{};
+    uint32_t raw_filter_mask_{};
+    size_t raw_filter_cursor_{};
+    uint64_t raw_displayed_count_{};
     std::atomic<bool> wifi_capture_stop_{false};
     std::atomic<bool> wifi_capture_failed_{false};
     std::atomic<bool> wifi_scan_running_{false};

@@ -7,6 +7,12 @@
 #include "wifi_security.h"
 
 namespace platform::wireless {
+enum class FrameKind : uint8_t {
+    Beacon, Probe, Deauth, Eapol, Sae, Data, Association,
+    Authentication, Action, Control, Other, Count
+};
+const char* frame_kind_label(FrameKind kind);
+uint32_t frame_kind_bit(FrameKind kind);
 struct FrameObservation {
     std::string bssid;
     std::string client;
@@ -23,6 +29,7 @@ struct FrameObservation {
 
 struct FrameSummary {
     std::string type;
+    FrameKind kind{FrameKind::Other};
     std::string sender;
     std::string receiver;
     int frequency_mhz{};

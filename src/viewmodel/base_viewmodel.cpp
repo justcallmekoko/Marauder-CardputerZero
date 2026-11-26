@@ -128,6 +128,15 @@ void BaseViewModel::show_adapters_page() {
     publish_navigation();
 }
 void BaseViewModel::show_wifi_scan_page() {
+    raw_session_ = false;
+    model_.set_current_page(model::AppPage::WifiScan);
+    publish_navigation();
+    if (!wifi_scan_running_) start_wifi_scan();
+}
+void BaseViewModel::show_raw_capture_page() {
+    raw_session_ = true;
+    wifi_view_ = 7;
+    wifi_scan_details_expanded_ = true;
     model_.set_current_page(model::AppPage::WifiScan);
     publish_navigation();
     if (!wifi_scan_running_) start_wifi_scan();
@@ -329,6 +338,9 @@ void BaseViewModel::marauder_menu_activate() {
     switch (action) {
         case model::MarauderMenuAction::OpenWifiScan:
             show_wifi_scan_page();
+            break;
+        case model::MarauderMenuAction::OpenRawCapture:
+            show_raw_capture_page();
             break;
         case model::MarauderMenuAction::OpenAdapters:
             show_adapters_page();
@@ -613,13 +625,24 @@ void BaseViewModel::start_wifi_scan() {
         return;
     }
     wifi_networks_.clear();
+    station_refs_.clear();
     wifi_scan_detail_index_ = 0;
     wifi_client_index_ = 0;
-    wifi_view_ = 0;
+    station_cursor_ = 0;
+    station_from_global_ = false;
+    wifi_view_ = raw_session_ ? 7 : 0;
+    wifi_scan_details_expanded_ = raw_session_;
+    wifi_list_builder_ = !raw_session_;
     wifi_info_tab_ = 0;
     wifi_feed_frames_.clear();
+    raw_feed_frames_.clear();
     wifi_feed_target_.clear();
     wifi_feed_count_ = 0;
+    raw_feed_offset_ = 0;
+    raw_frames_seen_ = 0;
+    raw_displayed_count_ = 0;
+    raw_filter_mask_ = 0;
+    raw_filter_cursor_ = 0;
     wifi_capture_stop_ = false;
     wifi_capture_failed_ = false;
     wifi_hop_index_ = 0;
@@ -628,9 +651,9 @@ void BaseViewModel::start_wifi_scan() {
     wifi_hop_tick_ = 0;
     wifi_scan_running_ = true;
     try {
-        wifi_scan_thread_ = std::thread([this, capture] {
+        wifi_scan_thread_ = std::thread([this, capture, raw_mode = raw_session_] {
 #if defined(__linux__) && !USE_DESKTOP
-            uint8_t bytes[8192];
+            uint8_t bytes[65535];
             while (!wifi_capture_stop_) {
                 pollfd ready{capture, POLLIN, 0};
                 const int status = poll(&ready, 1, 150);
@@ -640,14 +663,18 @@ void BaseViewModel::start_wifi_scan() {
                 if (!(ready.revents & POLLIN)) continue;
                 const auto count = read(capture, bytes, sizeof(bytes));
                 if (count <= 0) break;
+                if (raw_mode) ++raw_frames_seen_;
                 platform::wireless::FrameObservation observation;
                 platform::wireless::FrameSummary summary;
                 const bool has_summary = platform::wireless::parse_frame_summary(bytes, static_cast<size_t>(count), summary);
-                const bool has_observation = platform::wireless::parse_monitor_frame(bytes, static_cast<size_t>(count), observation);
-                if (!has_summary && !has_observation) continue;
+                const bool has_observation = wifi_list_builder_ &&
+                    platform::wireless::parse_monitor_frame(bytes, static_cast<size_t>(count), observation);
+                if (raw_mode && !has_summary) summary.type = "Unparsed";
+                if (!raw_mode && !has_summary && !has_observation) continue;
                 std::lock_guard<std::mutex> lock(wifi_scan_mutex_);
-                if (has_observation && incoming_frames_.size() < 1024) incoming_frames_.push_back(std::move(observation));
-                if (has_summary && incoming_summaries_.size() < 1024) incoming_summaries_.push_back(std::move(summary));
+                if (has_observation && wifi_list_builder_ && incoming_frames_.size() < 1024)
+                    incoming_frames_.push_back(std::move(observation));
+                if ((has_summary || raw_mode) && incoming_summaries_.size() < 1024) incoming_summaries_.push_back(std::move(summary));
             }
             if (!wifi_capture_stop_) wifi_capture_failed_ = true;
             close(capture);
@@ -689,11 +716,12 @@ void BaseViewModel::advance_wifi_channel() {
     }
     const auto& recording = pcap_capture_.filter();
     const bool pinned = pcap_capture_.active() && recording.scope != platform::pcap::Scope::All;
-    if (!pinned && wifi_hop_tick_ && lv_tick_elaps(wifi_hop_tick_) < 650 && wifi_view_ == 0) return;
+    const bool hopping = wifi_view_ == 0 || wifi_view_ == 7 || wifi_view_ == 8 || wifi_view_ == 9;
+    if (!pinned && wifi_hop_tick_ && lv_tick_elaps(wifi_hop_tick_) < 650 && hopping) return;
     unsigned requested{};
     if (pinned) {
         requested = static_cast<unsigned>(recording.frequency_mhz);
-    } else if (wifi_view_ == 0) {
+    } else if (hopping) {
         wifi_hop_index_ = wifi_hop_tick_ ? (wifi_hop_index_ + 1) % wifi_frequencies_.size() : 0;
         requested = wifi_frequencies_[wifi_hop_index_];
     } else if (wifi_scan_detail_index_ < wifi_networks_.size()) {
@@ -709,6 +737,9 @@ void BaseViewModel::advance_wifi_channel() {
 }
 
 void BaseViewModel::previous_wifi_scan_page() {
+    if (wifi_view_ == 9) { if (raw_filter_cursor_) --raw_filter_cursor_; publish_wifi_scan(); return; }
+    if (wifi_view_ == 8) { if (station_cursor_) --station_cursor_; publish_wifi_scan(); return; }
+    if (wifi_view_ == 7) { if (raw_feed_offset_ + 1 < raw_feed_frames_.size()) ++raw_feed_offset_; publish_wifi_scan(); return; }
     if (wifi_view_ == 6) { if (wifi_feed_offset_ + 1 < wifi_feed_frames_.size()) ++wifi_feed_offset_; publish_wifi_scan(); return; }
     if (wifi_view_ == 4 || wifi_view_ == 5) { if (wifi_operation_index_) --wifi_operation_index_; publish_wifi_scan(); return; }
     auto& index = wifi_view_ == 2 || wifi_view_ == 3 ? wifi_client_index_ : wifi_scan_detail_index_;
@@ -717,6 +748,9 @@ void BaseViewModel::previous_wifi_scan_page() {
 }
 
 void BaseViewModel::next_wifi_scan_page() {
+    if (wifi_view_ == 9) { if (raw_filter_cursor_ < static_cast<size_t>(platform::wireless::FrameKind::Count)) ++raw_filter_cursor_; publish_wifi_scan(); return; }
+    if (wifi_view_ == 8) { if (station_cursor_ + 1 < station_refs_.size()) ++station_cursor_; publish_wifi_scan(); return; }
+    if (wifi_view_ == 7) { if (raw_feed_offset_) --raw_feed_offset_; publish_wifi_scan(); return; }
     if (wifi_view_ == 6) { if (wifi_feed_offset_) --wifi_feed_offset_; publish_wifi_scan(); return; }
     if (wifi_view_ == 4 || wifi_view_ == 5) {
         if (wifi_operation_index_ + 1 < (wifi_view_ == 4 ? 4u : 3u)) ++wifi_operation_index_;
@@ -730,6 +764,22 @@ void BaseViewModel::next_wifi_scan_page() {
 }
 
 void BaseViewModel::toggle_wifi_scan_details() {
+    if (wifi_view_ == 9) {
+        const auto bit = raw_filter_cursor_ ? platform::wireless::frame_kind_bit(
+            static_cast<platform::wireless::FrameKind>(raw_filter_cursor_ - 1)) : 0u;
+        raw_filter_mask_ = bit ? raw_filter_mask_ ^ bit : 0u;
+        raw_feed_frames_.clear(); raw_feed_offset_ = 0; raw_displayed_count_ = 0;
+        publish_wifi_scan(); return;
+    }
+    if (wifi_view_ == 7) { wifi_view_ = 0; wifi_scan_details_expanded_ = true; publish_wifi_scan(); return; }
+    if (wifi_view_ == 8) {
+        if (station_cursor_ >= station_refs_.size()) return;
+        wifi_scan_detail_index_ = station_refs_[station_cursor_].first;
+        wifi_client_index_ = station_refs_[station_cursor_].second;
+        station_from_global_ = true;
+        wifi_view_ = 5; wifi_operation_index_ = 0;
+        publish_wifi_scan(); return;
+    }
     if (wifi_networks_.empty()) return;
     if (wifi_view_ == 0) { wifi_view_ = 4; wifi_operation_index_ = 0; }
     else if (wifi_view_ == 4) {
@@ -753,6 +803,7 @@ void BaseViewModel::toggle_wifi_scan_details() {
             wifi_view_ = 6;
         }
     } else if (wifi_view_ == 2 && !wifi_networks_[wifi_scan_detail_index_].clients.empty()) {
+        station_from_global_ = false;
         wifi_view_ = 5; wifi_operation_index_ = 0;
     } else if (wifi_view_ == 5) {
         if (wifi_operation_index_ == 0) wifi_view_ = 3;
@@ -781,13 +832,38 @@ void BaseViewModel::toggle_wifi_scan_details() {
 }
 
 void BaseViewModel::wifi_back() {
+    if (wifi_view_ == 7) { show_dashboard_page(); return; }
+    if (wifi_view_ == 9 || wifi_view_ == 8 || (raw_session_ && wifi_view_ == 0)) wifi_view_ = 7;
+    else
     if (wifi_view_ == 6) wifi_view_ = wifi_feed_station_ ? 5 : 4;
     else if (wifi_view_ == 1 || wifi_view_ == 2) wifi_view_ = 4;
     else if (wifi_view_ == 3) wifi_view_ = 5;
-    else if (wifi_view_ == 5) wifi_view_ = 2;
+    else if (wifi_view_ == 5) wifi_view_ = station_from_global_ ? 8 : 2;
     else wifi_view_ = 0;
     if (wifi_view_ == 0) wifi_info_tab_ = 0;
     wifi_scan_details_expanded_ = wifi_view_ != 0;
+    publish_wifi_scan();
+}
+void BaseViewModel::toggle_list_builder() {
+    if (!wifi_scan_running_) return;
+    wifi_list_builder_ = !wifi_list_builder_;
+    if (!wifi_list_builder_) {
+        std::lock_guard<std::mutex> lock(wifi_scan_mutex_);
+        incoming_frames_.clear();
+    }
+    publish_wifi_scan();
+}
+void BaseViewModel::show_station_list() {
+    if (!raw_session_ || wifi_view_ != 7) return;
+    wifi_view_ = 8;
+    wifi_scan_details_expanded_ = true;
+    publish_wifi_scan();
+}
+void BaseViewModel::show_raw_filters() {
+    if (!raw_session_ || !wifi_scan_running_) return;
+    if (wifi_view_ == 9) wifi_view_ = 7;
+    else { wifi_view_ = 9; raw_filter_cursor_ = 0; }
+    wifi_scan_details_expanded_ = true;
     publish_wifi_scan();
 }
 
@@ -881,6 +957,15 @@ void BaseViewModel::finish_wifi_scan_if_ready() {
         summaries.swap(incoming_summaries_);
     }
     if (incoming.empty() && summaries.empty()) return;
+    if (raw_session_) {
+        for (const auto& frame : summaries) {
+            if (raw_filter_mask_ && !(raw_filter_mask_ & platform::wireless::frame_kind_bit(frame.kind))) continue;
+            ++raw_displayed_count_;
+            if (raw_feed_frames_.size() == 128) raw_feed_frames_.pop_front();
+            raw_feed_frames_.push_back(frame);
+            if (raw_feed_offset_) raw_feed_offset_ = std::min(raw_feed_offset_ + 1, raw_feed_frames_.size() - 1);
+        }
+    }
     if (wifi_view_ == 6 && !wifi_feed_target_.empty() && wifi_scan_detail_index_ < wifi_networks_.size()) {
         const int channel = wifi_networks_[wifi_scan_detail_index_].frequency_mhz;
         for (auto& frame : summaries) {
@@ -925,6 +1010,8 @@ void BaseViewModel::finish_wifi_scan_if_ready() {
             if (ap->clients.size() >= 64) continue;
             ap->clients.push_back({frame.client, platform::wireless::vendor_for_mac(frame.client)});
             client = std::prev(ap->clients.end());
+            station_refs_.emplace_back(static_cast<size_t>(ap - wifi_networks_.begin()),
+                                      static_cast<size_t>(client - ap->clients.begin()));
         }
         ++client->frames;
         if (frame.client_transmitted && frame.has_rssi) { client->rssi = frame.rssi; client->has_rssi = true; }

@@ -148,6 +148,19 @@ private:
             if (!long_pressed) view_model_.credential_key(key);
             return true;
         }
+        if ((key == 'b' || key == 'B') && view_model_.current_page() == model::AppPage::WifiScan) {
+            if (!long_pressed && view_model_.scanning()) {
+                view_model_.toggle_list_builder();
+                toast_->show(view_model_.list_builder_active() ? "List builder on" : "List builder paused",
+                             view::widgets::ToastTone::Success, 2200);
+            }
+            return true;
+        }
+        if ((key == 't' || key == 'T') && view_model_.current_page() == model::AppPage::WifiScan &&
+            view_model_.raw_session() && (view_model_.wifi_view() == 7 || view_model_.wifi_view() == 9)) {
+            if (!long_pressed) view_model_.show_raw_filters();
+            return true;
+        }
         if (key == 'p' || key == 'P') {
             if (!long_pressed) {
                 const bool was_recording = view_model_.pcap_active();
@@ -212,7 +225,8 @@ private:
                 view_model_.toggle_pcap_details();
                 return true;
             }
-            if (view_model_.current_page() == model::AppPage::WifiScan && view_model_.wifi_details_open()) {
+            if (view_model_.current_page() == model::AppPage::WifiScan &&
+                (view_model_.wifi_details_open() || (view_model_.raw_session() && view_model_.wifi_view() == 0))) {
                 view_model_.wifi_back();
                 return true;
             }
@@ -322,6 +336,9 @@ private:
             }
             if (action == NavigationAction::Primary) { view_model_.toggle_wifi_scan_details(); return true; }
             if (action == NavigationAction::Details) {
+                if (view_model_.raw_session() && view_model_.wifi_view() == 7) {
+                    view_model_.show_station_list(); return true;
+                }
                 if (view_model_.wifi_view() == 1) view_model_.advance_wifi_info_tab();
                 else if (view_model_.wifi_view() == 0) {
                     const auto warning = view_model_.collection_warning(model::RadioRequirement::Monitor);

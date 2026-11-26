@@ -51,6 +51,14 @@ int main() {
     if (menu.activate() != MarauderMenuAction::OpenWifiScan) return 6;
 
     if (menu.item_count() != 1) return 7;
+    menu.back();
+    menu.move(1, 0); // WiFi Activity.
+    if (menu.activate() != MarauderMenuAction::None) return 42;
+    menu.move(1, 0); // Raw capture.
+    if (menu.activate() != MarauderMenuAction::OpenRawCapture) return 43;
+    menu.back();
+    menu.move(-1, 0);
+    menu.activate();
 
     // Back restores the selection in each parent frame.
     if (!menu.back() || menu.depth() != 2 || menu.selected_index() != 0) return 9;
