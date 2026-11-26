@@ -700,12 +700,7 @@ void BaseViewModel::toggle_adapter_details() {
 
 void BaseViewModel::start_wifi_scan(bool clear_results) {
     stop_wifi_capture();
-    if (remote_session_) {
-        remote_store_.clear();
-        remote_cursor_ = 0;
-        remote_details_ = false;
-        remote_detail_tab_ = 0;
-    }
+    if (remote_session_) { remote_details_ = false; remote_detail_tab_ = 0; }
     const auto selected = std::find_if(adapters_.begin(), adapters_.end(), [&](const auto& adapter) {
         return adapter.stable_id == model_.selected_adapter_id();
     });
@@ -785,6 +780,10 @@ void BaseViewModel::start_wifi_scan(bool clear_results) {
                 platform::wireless::FrameObservation observation;
                 platform::wireless::FrameSummary summary;
                 const bool has_summary = platform::wireless::parse_frame_summary(bytes, static_cast<size_t>(count), summary);
+                platform::remote_id::Packet remote_packet;
+                const bool has_remote = raw_mode && has_summary &&
+                    summary.kind == platform::wireless::FrameKind::RemoteId &&
+                    platform::remote_id::decode_monitor_frame(bytes, static_cast<size_t>(count), remote_packet);
                 const bool has_observation = wifi_list_builder_ &&
                     platform::wireless::parse_monitor_frame(bytes, static_cast<size_t>(count), observation);
                 if (raw_mode && !has_summary) summary.type = "Unparsed";
@@ -793,6 +792,7 @@ void BaseViewModel::start_wifi_scan(bool clear_results) {
                 if (has_observation && wifi_list_builder_ && incoming_frames_.size() < 1024)
                     incoming_frames_.push_back(std::move(observation));
                 if ((has_summary || raw_mode) && incoming_summaries_.size() < 1024) incoming_summaries_.push_back(std::move(summary));
+                if (has_remote && incoming_remote_.size() < 128) incoming_remote_.push_back(std::move(remote_packet));
             }
             if (!wifi_capture_stop_) wifi_capture_failed_ = true;
             close(capture);
@@ -814,10 +814,14 @@ void BaseViewModel::stop_wifi_capture() {
     if (wifi_scan_thread_.joinable()) wifi_scan_thread_.join();
     if (wifi_hop_job_.valid()) wifi_hop_job_.wait();
     wifi_scan_running_ = false;
-    std::lock_guard<std::mutex> lock(wifi_scan_mutex_);
-    incoming_frames_.clear();
-    incoming_summaries_.clear();
-    incoming_remote_.clear();
+    std::vector<platform::remote_id::Packet> remote;
+    {
+        std::lock_guard<std::mutex> lock(wifi_scan_mutex_);
+        incoming_frames_.clear();
+        incoming_summaries_.clear();
+        remote.swap(incoming_remote_);
+    }
+    if (!remote.empty()) finish_remote_observations(remote);
 }
 
 void BaseViewModel::advance_wifi_channel() {
@@ -1127,7 +1131,8 @@ void BaseViewModel::finish_wifi_scan_if_ready() {
         summaries.swap(incoming_summaries_);
         remote.swap(incoming_remote_);
     }
-    if (remote_session_) { finish_remote_observations(remote); return; }
+    if (raw_session_ || remote_session_) finish_remote_observations(remote);
+    if (remote_session_) return;
     if (incoming.empty() && summaries.empty()) return;
     if (raw_session_) {
         for (const auto& frame : summaries) {
