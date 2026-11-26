@@ -130,7 +130,7 @@ void RemoteIdScreen::render() {
     int32_t origin_lat{}, origin_lon{};
     const bool have_gps = vm.remote_position(origin_lat, origin_lon);
     static constexpr const char* tabs[] = {"Aircraft / ID", "Aircraft / Position", "Aircraft / Operator"};
-    lv_label_set_text(title_, details ? tabs[vm.remote_detail_tab()] : "Remote ID radar");
+    lv_label_set_text(title_, details ? tabs[vm.remote_detail_tab()] : "Remote ID map");
     const auto count = std::to_string(total) + " seen  CH " +
         std::to_string(platform::wireless::channel_number(vm.wifi_tuned_frequency()));
     lv_label_set_text(count_, count.c_str());
