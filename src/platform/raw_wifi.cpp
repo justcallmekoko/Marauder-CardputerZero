@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "raw_wifi.h"
 #include "remote_id_wifi.h"
+#include "pineapple_wifi.h"
 #include <algorithm>
 #include <cstdio>
 
@@ -50,7 +51,7 @@ bool radiotap(const uint8_t* bytes, std::size_t size, std::size_t& header,
 
 const char* frame_kind_label(FrameKind kind) {
     static constexpr const char* labels[] = {"Beacon", "Probe", "Deauth / disassoc", "EAPOL / PMKID",
-        "Remote ID", "SAE", "Data", "Association", "Authentication", "Action", "Control", "Other"};
+        "Remote ID", "Pineapple", "SAE", "Data", "Association", "Authentication", "Action", "Control", "Other"};
     const auto index = static_cast<unsigned>(kind);
     return index < static_cast<unsigned>(FrameKind::Count) ? labels[index] : "Other";
 }
@@ -130,6 +131,13 @@ bool parse_frame_summary(const uint8_t* bytes, std::size_t size, FrameSummary& o
         if (platform::remote_id::decode_monitor_frame(bytes, size, remote)) {
             out.type = "Remote ID";
             out.kind = FrameKind::RemoteId;
+        }
+    }
+    if (type == 0 && subtype == 8 && out.kind == FrameKind::Beacon) {
+        PineappleObservation candidate;
+        if (detect_pineapple_beacon(bytes, size, candidate)) {
+            out.type = "Pineapple";
+            out.kind = FrameKind::Pineapple;
         }
     }
     return true;

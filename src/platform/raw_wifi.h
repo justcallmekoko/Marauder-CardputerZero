@@ -8,7 +8,7 @@
 
 namespace platform::wireless {
 enum class FrameKind : uint8_t {
-    Beacon, Probe, Deauth, Eapol, RemoteId, Sae, Data, Association,
+    Beacon, Probe, Deauth, Eapol, RemoteId, Pineapple, Sae, Data, Association,
     Authentication, Action, Control, Other, Count
 };
 const char* frame_kind_label(FrameKind kind);

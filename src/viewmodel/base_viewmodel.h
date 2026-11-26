@@ -18,6 +18,7 @@
 #include "wireless_scan.h"
 #include "radio_power.h"
 #include "raw_wifi.h"
+#include "pineapple_wifi.h"
 #include "remote_id_wifi.h"
 #include "pcap_capture.h"
 
@@ -35,7 +36,7 @@ namespace viewmodel {
 
 class BaseViewModel {
 public:
-    enum class FoxTarget { None, AccessPoint, Station, Aircraft };
+    enum class FoxTarget { None, AccessPoint, Station, Aircraft, Pineapple };
     BaseViewModel();
     ~BaseViewModel();
 
@@ -58,7 +59,8 @@ public:
     std::string toggle_selected_pcap_capture();
     bool pcap_action_selected() const {
         return (wifi_view_ == 4 && wifi_operation_index_ == 3) ||
-               (wifi_view_ == 5 && wifi_operation_index_ == 2);
+               (wifi_view_ == 5 && wifi_operation_index_ == 2) ||
+               (wifi_view_ == 12 && pineapple_action_cursor_ == 3);
     }
     bool pcap_recording_target(platform::pcap::Scope scope, const std::string& mac) const {
         const auto& filter = pcap_capture_.filter();
@@ -82,6 +84,11 @@ public:
     void show_wifi_scan_page();
     void show_raw_capture_page();
     void show_remote_id_page();
+    void show_pineapple_page();
+    const auto& pineapple_items() const { return pineapple_items_; }
+    std::size_t pineapple_cursor() const { return pineapple_cursor_; }
+    std::size_t pineapple_action_cursor() const { return pineapple_action_cursor_; }
+    bool pineapple_session() const { return pineapple_session_; }
     std::size_t remote_count() const { return remote_store_.size(); }
     const RemoteIdRecord* remote_record(std::size_t index) const { return remote_store_.at(index); }
     std::size_t remote_cursor() const { return remote_cursor_; }
@@ -214,8 +221,10 @@ private:
     void publish_wifi_scan();
     void publish_remote();
     void finish_remote_observations(std::vector<platform::remote_id::Packet>& incoming);
+    void finish_pineapple_observations(std::vector<platform::wireless::PineappleObservation>& incoming);
     void finish_wifi_scan_if_ready();
     bool begin_wifi_fox_hunt(bool station);
+    bool begin_pineapple_fox_hunt();
     void begin_remote_fox_hunt();
     void stop_wifi_capture();
     std::string start_pcap_capture(platform::pcap::Filter filter);
@@ -297,6 +306,11 @@ private:
     bool raw_auto_hop_{};
     std::size_t raw_channel_index_{};
     bool remote_session_{};
+    bool pineapple_session_{};
+    std::vector<platform::wireless::PineappleObservation> pineapple_items_;
+    std::size_t pineapple_cursor_{};
+    std::size_t pineapple_action_cursor_{};
+    uint32_t pineapple_ui_tick_{};
     std::array<RemoteIdRecord, 32> remote_storage_{};
     RemoteIdStore remote_store_{remote_storage_.data(), remote_storage_.size()};
     std::size_t remote_cursor_{};
@@ -321,6 +335,7 @@ private:
     std::vector<platform::wireless::FrameObservation> incoming_frames_;
     std::vector<platform::wireless::FrameSummary> incoming_summaries_;
     std::vector<platform::remote_id::Packet> incoming_remote_;
+    std::vector<platform::wireless::PineappleObservation> incoming_pineapple_;
     std::thread wifi_scan_thread_;
     std::vector<unsigned> wifi_frequencies_;
     std::future<std::string> wifi_hop_job_;

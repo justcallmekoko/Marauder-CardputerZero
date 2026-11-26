@@ -361,7 +361,7 @@ private:
                     view_model_.show_station_list(); return true;
                 }
                 if (view_model_.wifi_view() == 1) view_model_.advance_wifi_info_tab();
-                else if (view_model_.wifi_view() == 0) {
+                else if (view_model_.wifi_view() == 0 || view_model_.wifi_view() == 11) {
                     const auto warning = view_model_.collection_warning(model::RadioRequirement::Monitor);
                     if (warning.empty()) view_model_.start_wifi_scan(true);
                     else show_confirmation(warning, "Enter Adapters", DialogAction::OpenAdapters);

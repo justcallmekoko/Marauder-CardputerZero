@@ -30,6 +30,7 @@ enum class MarauderMenuAction {
     OpenWifiScan,
     OpenRawCapture,
     OpenRemoteId,
+    OpenPineapple,
     OpenTraffic,
     OpenPcapFiles,
     CycleTrafficSource,
