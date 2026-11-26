@@ -56,6 +56,8 @@ int main() {
     if (menu.activate() != MarauderMenuAction::None) return 42;
     menu.move(1, 0); // Raw capture.
     if (menu.activate() != MarauderMenuAction::OpenRawCapture) return 43;
+    menu.move(0, 1); // Remote ID.
+    if (menu.activate() != MarauderMenuAction::OpenRemoteId) return 44;
     menu.back();
     menu.move(-1, 0);
     menu.activate();

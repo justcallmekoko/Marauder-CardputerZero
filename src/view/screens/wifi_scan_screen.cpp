@@ -15,6 +15,7 @@ lv_color_t frame_color(platform::wireless::FrameKind kind) {
         case K::Probe: return lv_color_hex(0x8FBFC9);
         case K::Deauth: return lv_color_hex(0xC68B92);
         case K::Eapol: return lv_color_hex(0xC6A0CB);
+        case K::RemoteId: return lv_color_hex(0xD1A8BE);
         case K::Sae: return lv_color_hex(0xD4B58E);
         case K::Data: return lv_color_hex(0x91A9CC);
         case K::Association: return lv_color_hex(0xAEC39C);

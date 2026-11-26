@@ -6,7 +6,7 @@
 
 cmake_minimum_required(VERSION 3.31)
 
-project(marauder_cardputerzero VERSION 0.6.32 LANGUAGES C CXX)
+project(marauder_cardputerzero VERSION 0.6.33 LANGUAGES C CXX)
 
 include(CTest)
 find_package(Threads REQUIRED)
@@ -625,13 +625,21 @@ target_link_libraries(${PROJECT_NAME}
 
 if(BUILD_TESTING AND USE_DESKTOP)
     add_executable(pcap_capture_test tests/pcap_capture_test.cpp src/platform/pcap_capture.cpp
-        src/platform/raw_wifi.cpp src/platform/wifi_security.cpp)
+        src/platform/raw_wifi.cpp src/platform/wifi_security.cpp src/platform/remote_id_wifi.cpp
+        src/platform/RemoteIdDecoder.cpp src/platform/RemoteIdModel.cpp)
     target_include_directories(pcap_capture_test PRIVATE src/platform)
     target_compile_definitions(pcap_capture_test PRIVATE USE_DESKTOP=1)
     add_test(NAME pcap_capture_test COMMAND pcap_capture_test)
-    add_executable(raw_wifi_test tests/raw_wifi_test.cpp src/platform/raw_wifi.cpp src/platform/wifi_security.cpp)
+    add_executable(raw_wifi_test tests/raw_wifi_test.cpp src/platform/raw_wifi.cpp src/platform/wifi_security.cpp
+        src/platform/remote_id_wifi.cpp src/platform/RemoteIdDecoder.cpp src/platform/RemoteIdModel.cpp)
     target_include_directories(raw_wifi_test PRIVATE src/platform)
     add_test(NAME raw_wifi_test COMMAND raw_wifi_test)
+    add_executable(remote_id_wifi_test tests/remote_id_wifi_test.cpp src/platform/remote_id_wifi.cpp
+        src/platform/RemoteIdDecoder.cpp src/platform/RemoteIdModel.cpp src/platform/raw_wifi.cpp
+        src/platform/wifi_security.cpp)
+    target_include_directories(remote_id_wifi_test PRIVATE src/platform)
+    add_test(NAME remote_id_wifi_test COMMAND remote_id_wifi_test)
+    add_test(NAME gps_session_test COMMAND python3 ${CMAKE_CURRENT_SOURCE_DIR}/tests/gps_session_test.py)
     add_executable(wifi_security_test tests/wifi_security_test.cpp src/platform/wifi_security.cpp)
     target_include_directories(wifi_security_test PRIVATE src/platform)
     add_test(NAME wifi_security_test COMMAND wifi_security_test)

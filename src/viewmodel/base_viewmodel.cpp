@@ -18,6 +18,7 @@
 #include <sstream>
 #include <system_error>
 #include <iterator>
+#include <cstring>
 #if defined(__linux__) && !USE_DESKTOP
 #include <cerrno>
 #include <poll.h>
@@ -59,6 +60,43 @@ std::pair<std::string,std::string> active_wifi_profile() {
 }
 
 int page_to_int(model::AppPage page) { return static_cast<int>(page); }
+void merge_remote_record(RemoteIdRecord& target, const RemoteIdRecord& source) {
+    if (source.hasUasId && remoteIdShouldReplaceBasicId(target.idType, target.hasUasId, source.idType)) {
+        std::memcpy(target.uasId, source.uasId, sizeof(target.uasId));
+        target.hasUasId = true;
+        target.idType = source.idType;
+        target.uaType = source.uaType;
+    }
+    if (source.hasOperatorId) {
+        std::memcpy(target.operatorId, source.operatorId, sizeof(target.operatorId));
+        target.hasOperatorId = true;
+    }
+    if (source.hasDescription) {
+        std::memcpy(target.description, source.description, sizeof(target.description));
+        target.hasDescription = true;
+    }
+    if (source.hasLocation) {
+        remoteIdUpdateLocation(target, source.latitudeE7, source.longitudeE7);
+        target.altitudeGeoM = source.altitudeGeoM;
+        target.altitudePressureM = source.altitudePressureM;
+        target.heightM = source.heightM;
+        target.horizontalSpeedMps = source.horizontalSpeedMps;
+        target.verticalSpeedMps = source.verticalSpeedMps;
+        target.directionDeg = source.directionDeg;
+        target.operationalStatus = source.operationalStatus;
+        target.altitudeGeoValid = source.altitudeGeoValid;
+        target.horizontalSpeedValid = source.horizontalSpeedValid;
+        target.directionValid = source.directionValid;
+    }
+    if (source.hasOperatorLocation) {
+        target.hasOperatorLocation = true;
+        target.operatorLatitudeE7 = source.operatorLatitudeE7;
+        target.operatorLongitudeE7 = source.operatorLongitudeE7;
+        target.operatorAltitudeGeoM = source.operatorAltitudeGeoM;
+        target.operatorAltitudeValid = source.operatorAltitudeValid;
+    }
+    target.hasAuthentication |= source.hasAuthentication;
+}
 }
 
 BaseViewModel::BaseViewModel()
@@ -129,18 +167,39 @@ void BaseViewModel::show_adapters_page() {
 }
 void BaseViewModel::show_wifi_scan_page() {
     raw_session_ = false;
+    remote_session_ = false;
     model_.set_current_page(model::AppPage::WifiScan);
     publish_navigation();
     if (!wifi_scan_running_) start_wifi_scan();
 }
 void BaseViewModel::show_raw_capture_page() {
     raw_session_ = true;
+    remote_session_ = false;
     wifi_view_ = 7;
     wifi_scan_details_expanded_ = true;
     model_.set_current_page(model::AppPage::WifiScan);
     publish_navigation();
     if (!wifi_scan_running_) start_wifi_scan();
 }
+void BaseViewModel::show_remote_id_page() {
+    remote_session_ = true;
+    raw_session_ = false;
+    model_.set_current_page(model::AppPage::RemoteId);
+    publish_navigation();
+    if (!wifi_scan_running_) start_wifi_scan();
+}
+void BaseViewModel::remote_move(int direction) {
+    if (remote_details_) {
+        if (direction < 0) remote_detail_tab_ = (remote_detail_tab_ + 2) % 3;
+        else if (direction > 0) remote_detail_tab_ = (remote_detail_tab_ + 1) % 3;
+    } else if (direction < 0 && remote_cursor_) --remote_cursor_;
+    else if (direction > 0 && remote_cursor_ + 1 < remote_store_.size()) ++remote_cursor_;
+    publish_remote();
+}
+void BaseViewModel::remote_open_details() {
+    if (remote_cursor_ < remote_store_.size()) { remote_details_ = true; remote_detail_tab_ = 0; publish_remote(); }
+}
+void BaseViewModel::remote_back() { remote_details_ = false; publish_remote(); }
 void BaseViewModel::show_pcap_files_page() {
     stop_wifi_capture();
     refresh_pcap_files();
@@ -342,6 +401,9 @@ void BaseViewModel::marauder_menu_activate() {
         case model::MarauderMenuAction::OpenRawCapture:
             show_raw_capture_page();
             break;
+        case model::MarauderMenuAction::OpenRemoteId:
+            show_remote_id_page();
+            break;
         case model::MarauderMenuAction::OpenAdapters:
             show_adapters_page();
             break;
@@ -449,7 +511,10 @@ void BaseViewModel::toggle_radio() {
 
 void BaseViewModel::update_gps_status() {
     const auto state = gps_session_.poll();
-    if (!state.empty()) gps_status_.set(state.c_str());
+    if (!state.empty()) {
+        gps_status_.set(state.c_str());
+        if (model_.current_page() == model::AppPage::RemoteId) publish_remote();
+    }
 }
 
 void BaseViewModel::sync_gps_rows() {
@@ -602,6 +667,12 @@ void BaseViewModel::toggle_adapter_details() {
 
 void BaseViewModel::start_wifi_scan() {
     stop_wifi_capture();
+    if (remote_session_) {
+        remote_store_.clear();
+        remote_cursor_ = 0;
+        remote_details_ = false;
+        remote_detail_tab_ = 0;
+    }
     const auto selected = std::find_if(adapters_.begin(), adapters_.end(), [&](const auto& adapter) {
         return adapter.stable_id == model_.selected_adapter_id();
     });
@@ -632,7 +703,7 @@ void BaseViewModel::start_wifi_scan() {
     station_from_global_ = false;
     wifi_view_ = raw_session_ ? 7 : 0;
     wifi_scan_details_expanded_ = raw_session_;
-    wifi_list_builder_ = !raw_session_;
+    wifi_list_builder_ = !raw_session_ && !remote_session_;
     wifi_info_tab_ = 0;
     wifi_feed_frames_.clear();
     raw_feed_frames_.clear();
@@ -651,7 +722,7 @@ void BaseViewModel::start_wifi_scan() {
     wifi_hop_tick_ = 0;
     wifi_scan_running_ = true;
     try {
-        wifi_scan_thread_ = std::thread([this, capture, raw_mode = raw_session_] {
+        wifi_scan_thread_ = std::thread([this, capture, raw_mode = raw_session_, remote_mode = remote_session_] {
 #if defined(__linux__) && !USE_DESKTOP
             uint8_t bytes[65535];
             while (!wifi_capture_stop_) {
@@ -663,6 +734,14 @@ void BaseViewModel::start_wifi_scan() {
                 if (!(ready.revents & POLLIN)) continue;
                 const auto count = read(capture, bytes, sizeof(bytes));
                 if (count <= 0) break;
+                if (remote_mode) {
+                    platform::remote_id::Packet packet;
+                    if (platform::remote_id::decode_monitor_frame(bytes, static_cast<size_t>(count), packet)) {
+                        std::lock_guard<std::mutex> lock(wifi_scan_mutex_);
+                        if (incoming_remote_.size() < 128) incoming_remote_.push_back(std::move(packet));
+                    }
+                    continue;
+                }
                 if (raw_mode) ++raw_frames_seen_;
                 platform::wireless::FrameObservation observation;
                 platform::wireless::FrameSummary summary;
@@ -699,6 +778,7 @@ void BaseViewModel::stop_wifi_capture() {
     std::lock_guard<std::mutex> lock(wifi_scan_mutex_);
     incoming_frames_.clear();
     incoming_summaries_.clear();
+    incoming_remote_.clear();
 }
 
 void BaseViewModel::advance_wifi_channel() {
@@ -716,7 +796,7 @@ void BaseViewModel::advance_wifi_channel() {
     }
     const auto& recording = pcap_capture_.filter();
     const bool pinned = pcap_capture_.active() && recording.scope != platform::pcap::Scope::All;
-    const bool hopping = wifi_view_ == 0 || wifi_view_ == 7 || wifi_view_ == 8 || wifi_view_ == 9;
+    const bool hopping = remote_session_ || wifi_view_ == 0 || wifi_view_ == 7 || wifi_view_ == 8 || wifi_view_ == 9;
     if (!pinned && wifi_hop_tick_ && lv_tick_elaps(wifi_hop_tick_) < 650 && hopping) return;
     unsigned requested{};
     if (pinned) {
@@ -951,11 +1031,14 @@ void BaseViewModel::wifi_scan_timer_cb(lv_timer_t* timer) {
 void BaseViewModel::finish_wifi_scan_if_ready() {
     std::vector<platform::wireless::FrameObservation> incoming;
     std::vector<platform::wireless::FrameSummary> summaries;
+    std::vector<platform::remote_id::Packet> remote;
     {
         std::lock_guard<std::mutex> lock(wifi_scan_mutex_);
         incoming.swap(incoming_frames_);
         summaries.swap(incoming_summaries_);
+        remote.swap(incoming_remote_);
     }
+    if (remote_session_) { finish_remote_observations(remote); return; }
     if (incoming.empty() && summaries.empty()) return;
     if (raw_session_) {
         for (const auto& frame : summaries) {
@@ -1017,6 +1100,33 @@ void BaseViewModel::finish_wifi_scan_if_ready() {
         if (frame.client_transmitted && frame.has_rssi) { client->rssi = frame.rssi; client->has_rssi = true; }
     }
     publish_wifi_scan();
+}
+void BaseViewModel::finish_remote_observations(std::vector<platform::remote_id::Packet>& incoming) {
+    const uint32_t now = lv_tick_get();
+    bool changed = false;
+    for (const auto& packet : incoming) {
+        const auto& decoded = packet.record;
+        auto* record = remote_store_.findByMac(decoded.mac);
+        if (!record && decoded.hasUasId) record = remote_store_.findByUasId(decoded.uasId);
+        if (!record) record = &remote_store_.observe(decoded.mac, packet.transport,
+                                                    decoded.rssi, now);
+        else if (std::memcmp(record->mac, decoded.mac, 6) == 0)
+            remote_store_.observe(decoded.mac, packet.transport, decoded.rssi, now);
+        else {
+            std::memcpy(record->mac, decoded.mac, 6);
+            record->lastSeenMs = now;
+            ++record->packetCount;
+            record->rssi = decoded.rssi;
+            record->transportMask |= static_cast<uint8_t>(packet.transport);
+        }
+        merge_remote_record(*record, decoded);
+        record->lastWifiChannel = decoded.lastWifiChannel;
+        changed = true;
+    }
+    if (remote_store_.updateLifecycle(now, 15000) || changed) publish_remote();
+}
+void BaseViewModel::publish_remote() {
+    inventory_generation_.set(inventory_generation_.value() + 1);
 }
 
 void BaseViewModel::publish_navigation() {

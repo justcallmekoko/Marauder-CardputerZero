@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "raw_wifi.h"
+#include "remote_id_wifi.h"
 #include <algorithm>
 #include <cstdio>
 
@@ -49,11 +50,15 @@ bool radiotap(const uint8_t* bytes, std::size_t size, std::size_t& header,
 
 const char* frame_kind_label(FrameKind kind) {
     static constexpr const char* labels[] = {"Beacon", "Probe", "Deauth / disassoc", "EAPOL / PMKID",
-        "SAE", "Data", "Association", "Authentication", "Action", "Control", "Other"};
+        "Remote ID", "SAE", "Data", "Association", "Authentication", "Action", "Control", "Other"};
     const auto index = static_cast<unsigned>(kind);
     return index < static_cast<unsigned>(FrameKind::Count) ? labels[index] : "Other";
 }
 uint32_t frame_kind_bit(FrameKind kind) { return 1u << static_cast<unsigned>(kind); }
+bool monitor_header(const uint8_t* bytes, std::size_t size, std::size_t& header,
+                    int& frequency, int& rssi, bool& has_rssi) {
+    return radiotap(bytes, size, header, frequency, rssi, has_rssi);
+}
 
 bool parse_frame_summary(const uint8_t* bytes, std::size_t size, FrameSummary& out) {
     out = {};
@@ -120,6 +125,13 @@ bool parse_frame_summary(const uint8_t* bytes, std::size_t size, FrameSummary& o
         out.type = subtype == 13 ? "ACK" : subtype == 12 ? "CTS" : subtype == 11 ? "RTS" : "Control";
         out.kind = FrameKind::Control;
     } else return false;
+    if (type == 0 && (subtype == 8 || subtype == 13)) {
+        platform::remote_id::Packet remote;
+        if (platform::remote_id::decode_monitor_frame(bytes, size, remote)) {
+            out.type = "Remote ID";
+            out.kind = FrameKind::RemoteId;
+        }
+    }
     return true;
 }
 

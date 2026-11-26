@@ -221,6 +221,10 @@ private:
         }
 
         if (key == LV_KEY_ESC && !long_pressed) {
+            if (view_model_.current_page() == model::AppPage::RemoteId && view_model_.remote_details()) {
+                view_model_.remote_back();
+                return true;
+            }
             if (view_model_.current_page() == model::AppPage::PcapFiles && view_model_.pcap_details()) {
                 view_model_.toggle_pcap_details();
                 return true;
@@ -281,6 +285,12 @@ private:
             if (action == NavigationAction::Next) { view_model_.move_pcap_file(1); return true; }
             if (key == LV_KEY_ENTER) { view_model_.toggle_pcap_details(); return true; }
             if (action == NavigationAction::Details) { view_model_.refresh_pcap_files(); return true; }
+        }
+
+        if (view_model_.current_page() == model::AppPage::RemoteId) {
+            if (action == NavigationAction::Previous) { view_model_.remote_move(-1); return true; }
+            if (action == NavigationAction::Next) { view_model_.remote_move(1); return true; }
+            if (action == NavigationAction::Primary) { view_model_.remote_open_details(); return true; }
         }
 
         if (view_model_.current_page() == model::AppPage::RadioSetup) {

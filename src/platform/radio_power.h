@@ -3,6 +3,8 @@
 #include <string>
 #include <vector>
 #include <mutex>
+#include <chrono>
+#include <cstdint>
 
 namespace platform {
 struct RadioDevice {
@@ -36,10 +38,14 @@ public:
     bool start(const std::string& id);
     void stop();
     std::string poll();
+    bool position(int32_t& latitude_e7, int32_t& longitude_e7) const;
 private:
     int socket_{-1};
     int child_{-1};
     std::string pending_;
+    int32_t latitude_e7_{}, longitude_e7_{};
+    bool position_valid_{};
+    std::chrono::steady_clock::time_point position_time_{};
 };
 std::string begin_radio_session();
 void end_radio_session(const std::string& directory);

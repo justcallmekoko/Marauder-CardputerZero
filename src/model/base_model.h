@@ -20,6 +20,7 @@ enum class AppPage {
     RadioSetup,
     Traffic,
     PcapFiles,
+    RemoteId,
 };
 
 std::string saved_gps_id();

@@ -135,6 +135,7 @@ void GpsSession::stop() {
 #endif
     child_ = socket_ = -1;
     pending_.clear();
+    position_valid_ = false;
 }
 
 bool GpsSession::start(const std::string& id) {
@@ -174,10 +175,38 @@ std::string GpsSession::poll() {
         while ((end = pending_.find('\n')) != std::string::npos) {
             state = pending_.substr(0, end);
             pending_.erase(0, end + 1);
+            const auto first = state.find('\t');
+            if (first != std::string::npos) {
+                const auto second = state.find('\t', first + 1);
+                if (second != std::string::npos) {
+                    try {
+                        const auto lat = std::stoll(state.substr(first + 1, second - first - 1));
+                        const auto lon = std::stoll(state.substr(second + 1));
+                        if (lat >= -900000000 && lat <= 900000000 &&
+                            lon >= -1800000000 && lon <= 1800000000 && (lat || lon)) {
+                            latitude_e7_ = static_cast<int32_t>(lat);
+                            longitude_e7_ = static_cast<int32_t>(lon);
+                            position_time_ = std::chrono::steady_clock::now();
+                            position_valid_ = true;
+                        }
+                    } catch (const std::exception&) { position_valid_ = false; }
+                }
+                state.resize(first);
+            } else if (state == "No fix" || state == "No data" || state == "Wait" ||
+                       state == "Unavailable" || state == "Missing" || state == "Busy") {
+                position_valid_ = false;
+            }
         }
     }
 #endif
     return state;
+}
+bool GpsSession::position(int32_t& latitude_e7, int32_t& longitude_e7) const {
+    if (!position_valid_ || std::chrono::steady_clock::now() - position_time_ > std::chrono::seconds(10))
+        return false;
+    latitude_e7 = latitude_e7_;
+    longitude_e7 = longitude_e7_;
+    return true;
 }
 
 std::string begin_radio_session() {

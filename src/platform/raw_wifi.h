@@ -8,11 +8,13 @@
 
 namespace platform::wireless {
 enum class FrameKind : uint8_t {
-    Beacon, Probe, Deauth, Eapol, Sae, Data, Association,
+    Beacon, Probe, Deauth, Eapol, RemoteId, Sae, Data, Association,
     Authentication, Action, Control, Other, Count
 };
 const char* frame_kind_label(FrameKind kind);
 uint32_t frame_kind_bit(FrameKind kind);
+bool monitor_header(const uint8_t* bytes, std::size_t size, std::size_t& header,
+                    int& frequency, int& rssi, bool& has_rssi);
 struct FrameObservation {
     std::string bssid;
     std::string client;

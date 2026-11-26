@@ -17,9 +17,11 @@
 #include "wireless_scan.h"
 #include "radio_power.h"
 #include "raw_wifi.h"
+#include "remote_id_wifi.h"
 #include "pcap_capture.h"
 
 #include <atomic>
+#include <array>
 #include <cstddef>
 #include <mutex>
 #include <future>
@@ -77,6 +79,16 @@ public:
     void show_adapters_page();
     void show_wifi_scan_page();
     void show_raw_capture_page();
+    void show_remote_id_page();
+    std::size_t remote_count() const { return remote_store_.size(); }
+    const RemoteIdRecord* remote_record(std::size_t index) const { return remote_store_.at(index); }
+    std::size_t remote_cursor() const { return remote_cursor_; }
+    bool remote_details() const { return remote_details_; }
+    unsigned remote_detail_tab() const { return remote_detail_tab_; }
+    bool remote_position(int32_t& lat_e7, int32_t& lon_e7) const { return gps_session_.position(lat_e7, lon_e7); }
+    void remote_move(int direction);
+    void remote_open_details();
+    void remote_back();
     const auto& wifi_items() const { return wifi_networks_; }
     size_t wifi_cursor() const { return wifi_scan_detail_index_; }
     const auto& wifi_error() const { return wifi_scan_error_; }
@@ -187,6 +199,8 @@ private:
     void publish_adapter_detail();
     void publish_diagnostics();
     void publish_wifi_scan();
+    void publish_remote();
+    void finish_remote_observations(std::vector<platform::remote_id::Packet>& incoming);
     void finish_wifi_scan_if_ready();
     void stop_wifi_capture();
     std::string start_pcap_capture(platform::pcap::Filter filter);
@@ -261,6 +275,12 @@ private:
     std::atomic<uint64_t> raw_frames_seen_{0};
     std::atomic<bool> wifi_list_builder_{true};
     bool raw_session_{};
+    bool remote_session_{};
+    std::array<RemoteIdRecord, 32> remote_storage_{};
+    RemoteIdStore remote_store_{remote_storage_.data(), remote_storage_.size()};
+    std::size_t remote_cursor_{};
+    bool remote_details_{};
+    unsigned remote_detail_tab_{};
     bool station_from_global_{};
     std::vector<std::pair<size_t, size_t>> station_refs_;
     size_t station_cursor_{};
@@ -273,6 +293,7 @@ private:
     std::mutex wifi_scan_mutex_;
     std::vector<platform::wireless::FrameObservation> incoming_frames_;
     std::vector<platform::wireless::FrameSummary> incoming_summaries_;
+    std::vector<platform::remote_id::Packet> incoming_remote_;
     std::thread wifi_scan_thread_;
     std::vector<unsigned> wifi_frequencies_;
     std::future<std::string> wifi_hop_job_;
