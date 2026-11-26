@@ -6,6 +6,9 @@
 
 using platform::wireless::FrameObservation;
 using platform::wireless::parse_monitor_frame;
+using platform::wireless::parse_frame_summary;
+using platform::wireless::frame_matches_target;
+using platform::wireless::FrameKind;
 
 int main() {
     // Radiotap with channel 6 and -48 dBm, followed by a beacon.
@@ -13,9 +16,13 @@ int main() {
     beacon.resize(13 + 36, 0);
     beacon[13] = 0x80;
     const uint8_t ap[6]{0x10, 0x20, 0x30, 0x40, 0x50, 0x60};
-    for (int i = 0; i < 6; ++i) beacon[13 + 16 + i] = ap[i];
+    for (int i = 0; i < 6; ++i) {
+        beacon[13 + 4 + i] = 0xff;
+        beacon[13 + 10 + i] = ap[i];
+        beacon[13 + 16 + i] = ap[i];
+    }
     beacon[13 + 34] = 0x10;
-    beacon.insert(beacon.end(), {0, 4, 'T', 'e', 's', 't',
+    beacon.insert(beacon.end(), {0, 4, 'T', 'e', 's', 't', 3, 1, 1,
         48, 20, 1, 0, 0, 15, 172, 4, 1, 0, 0, 15, 172, 4,
         1, 0, 0, 15, 172, 2, 0, 0});
     FrameObservation observed;
@@ -24,6 +31,17 @@ int main() {
     assert(observed.ssid == "Test" && observed.security == "WPA2 Personal");
     assert(observed.security_info.akm == "PSK" && observed.security_info.pairwise == "CCMP-128");
     assert(observed.frequency_mhz == 2437 && observed.has_rssi && observed.rssi == -48);
+    assert(observed.advertised_frequency_mhz == 2412);
+    auto ht_beacon = beacon;
+    ht_beacon[13 + 36 + 6] = 61; // HT Operation primary channel, without DS Parameters.
+    ht_beacon[13 + 36 + 8] = 36;
+    assert(parse_monitor_frame(ht_beacon.data(), ht_beacon.size(), observed));
+    assert(observed.advertised_frequency_mhz == 5180);
+    platform::wireless::FrameSummary summary;
+    assert(parse_frame_summary(beacon.data(), beacon.size(), summary));
+    assert(summary.type == "Beacon" && summary.sender == observed.bssid);
+    assert(summary.kind == FrameKind::Beacon);
+    assert(summary.receiver == "FF:FF:FF:FF:FF:FF");
 
     std::vector<uint8_t> uplink{0, 0, 13, 0, 0x28, 0, 0, 0, 0x85, 0x09, 0, 0, 0xc4};
     uplink.resize(13 + 24, 0);
@@ -33,11 +51,50 @@ int main() {
     assert(parse_monitor_frame(uplink.data(), uplink.size(), observed));
     assert(observed.client == "22:33:44:55:66:77" && observed.client_transmitted);
     assert(observed.rssi == -60);
+    assert(parse_frame_summary(uplink.data(), uplink.size(), summary));
+    assert(summary.type == "Data" && summary.sender == observed.client && summary.receiver == observed.bssid);
+    assert(summary.kind == FrameKind::Data);
+    assert(frame_matches_target(summary, observed.client, 2437));
+    assert(frame_matches_target(summary, observed.bssid, 2437));
+    assert(!frame_matches_target(summary, observed.client, 2462));
+    assert(!frame_matches_target(summary, "AA:BB:CC:DD:EE:FF", 2437));
 
     uplink[14] = 0x02; // From DS: AP transmitter, client receiver.
     for (int i = 0; i < 6; ++i) { uplink[13 + 4 + i] = client[i]; uplink[13 + 10 + i] = ap[i]; }
     assert(parse_monitor_frame(uplink.data(), uplink.size(), observed));
     assert(observed.client == "22:33:44:55:66:77" && !observed.client_transmitted);
+    assert(parse_frame_summary(uplink.data(), uplink.size(), summary));
+    assert(summary.sender == observed.bssid && summary.receiver == observed.client);
+    uplink[13] = 0xD4; uplink[14] = 0; uplink.resize(13 + 10);
+    assert(parse_frame_summary(uplink.data(), uplink.size(), summary));
+    assert(summary.type == "ACK" && summary.sender.empty() && summary.receiver == observed.client);
+    assert(summary.kind == FrameKind::Control);
+    auto sae = beacon;
+    sae[2] = 13;
+    sae[13] = 0xB0; // Authentication subtype, SAE algorithm 3.
+    sae[13 + 24] = 3;
+    sae[13 + 25] = 0;
+    assert(parse_frame_summary(sae.data(), sae.size(), summary));
+    assert(summary.type == "SAE auth" && summary.kind == FrameKind::Sae);
+    auto eapol = uplink;
+    eapol[13] = 0x08;
+    eapol[14] = 0x01;
+    eapol.resize(13 + 24);
+    eapol.insert(eapol.end(), {0xAA, 0xAA, 0x03, 0, 0, 0, 0x88, 0x8E});
+    eapol.resize(13 + 24 + 8 + 99 + 22, 0);
+    const auto key = 13 + 24 + 8;
+    eapol[key + 1] = 3; // EAPOL-Key.
+    eapol[key + 98] = 22; // Key data length.
+    eapol[key + 99] = 221; eapol[key + 100] = 20;
+    eapol[key + 102] = 0x0F; eapol[key + 103] = 0xAC; eapol[key + 104] = 4;
+    assert(parse_frame_summary(eapol.data(), eapol.size(), summary));
+    assert(summary.type == "PMKID" && summary.kind == FrameKind::Eapol);
+    eapol[key + 104] = 0;
+    assert(parse_frame_summary(eapol.data(), eapol.size(), summary));
+    assert(summary.type == "EAPOL" && summary.kind == FrameKind::Eapol);
+    eapol[14] |= 0x40; // Protected data must not be inspected as clear EAPOL.
+    assert(parse_frame_summary(eapol.data(), eapol.size(), summary));
+    assert(summary.kind == FrameKind::Data);
     assert(!parse_monitor_frame(beacon.data(), 7, observed));
     beacon[2] = 0xff;
     assert(!parse_monitor_frame(beacon.data(), beacon.size(), observed));

@@ -31,6 +31,7 @@ private:
     app::AssetManager& assets_;
     lv_obj_t* time_label_{nullptr};
     lv_obj_t* wifi_label_{nullptr};
+    lv_obj_t* pcap_label_{nullptr};
     lv_obj_t* ethernet_label_{nullptr};
     lv_obj_t* battery_icon_label_{nullptr};
     lv_obj_t* battery_percent_label_{nullptr};

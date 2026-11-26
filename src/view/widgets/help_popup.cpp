@@ -56,9 +56,23 @@ constexpr std::array<HelpRow, 5> kAdapterRows = {{
 constexpr std::array<HelpRow, 5> kWifiScanRows = {{
     {"Z / ESC", "Back to originating menu"},
     {"F / X", "Previous / next result"},
-    {"C / ENTER", "AP info / observed clients"},
+    {"C / ENTER", "Open AP, station, or Fox hunt"},
     {"D", "Restart / AP security pages"},
     {"HELP", "Context help"},
+}};
+constexpr std::array<HelpRow, 5> kRawCaptureRows = {{
+    {"Z / C", "Previous / next supported channel"},
+    {"H", "Toggle automatic channel hopping"},
+    {"B", "Build AP and station lists"},
+    {"T", "Frame-type filters"},
+    {"ENTER", "Show observed access points"},
+}};
+constexpr std::array<HelpRow, 5> kRemoteIdRows = {{
+    {"F / X", "Select aircraft, action, or tab"},
+    {"ENTER", "Open aircraft actions"},
+    {"ESC", "Back to actions or map"},
+    {"P", "Start / stop PCAP"},
+    {"HELP", "Close help"},
 }};
 
 constexpr std::array<HelpRow, 5> kTrafficRows = {{
@@ -71,6 +85,14 @@ constexpr std::array<HelpRow, 5> kDiagnosticsRows = {{
     {"C / ENTER", "Refresh diagnostics"},
     {"D", "Details / summary"},
     {"HELP", "Context help"},
+}};
+
+constexpr std::array<HelpRow, 5> kPcapRows = {{
+    {"F / X", "Browse captures"},
+    {"ENTER", "File information"},
+    {"D", "Refresh file list"},
+    {"P", "Start / stop PCAP"},
+    {"ESC", "Back to Device"},
 }};
 
 } // namespace
@@ -153,7 +175,7 @@ void HelpPopup::build() {
     }
 
     footer_ = lv_label_create(panel_);
-    lv_label_set_text(footer_, "HELP / ESC  Close   PRSC  Screenshot");
+    lv_label_set_text(footer_, "ESC Close   P PCAP   PRSC Screenshot");
     lv_label_set_long_mode(footer_, LV_LABEL_LONG_CLIP);
     auto* footer_font = assets_.load_standard_font(10);
     lv_obj_set_style_text_font(footer_, footer_font ? footer_font : &lv_font_montserrat_10, 0);
@@ -199,11 +221,14 @@ void HelpPopup::update_rows(model::AppPage page) {
     const bool adapters = page == model::AppPage::Adapters;
     const bool traffic = page == model::AppPage::Traffic;
     const bool wifi_scan = page == model::AppPage::WifiScan;
+    const bool raw_capture = wifi_scan && view_model_.raw_session();
     const bool diagnostics = page == model::AppPage::Diagnostics;
-    lv_label_set_text(page_badge_, traffic ? "ACTIVITY" : list ? "DEVICE" : radios ? "RADIO SETUP" : adapters ? "ADAPTERS" : wifi_scan ? "WIFI SCAN" : diagnostics ? "SYSTEM INFO" : "MENU");
+    const bool pcap = page == model::AppPage::PcapFiles;
+    const bool remote = page == model::AppPage::RemoteId;
+    lv_label_set_text(page_badge_, remote ? "REMOTE ID" : pcap ? "CAPTURES" : traffic ? "ACTIVITY" : list ? "DEVICE" : radios ? "RADIO SETUP" : adapters ? "ADAPTERS" : raw_capture ? "RAW CAPTURE" : wifi_scan ? "WIFI SCAN" : diagnostics ? "SYSTEM INFO" : "MENU");
     for (std::size_t i = 0; i < rows_.size(); ++i) {
         lv_obj_remove_flag(rows_[i].row, LV_OBJ_FLAG_HIDDEN);
-        const auto& row = traffic ? kTrafficRows[i] : list ? kDeviceRows[i] : radios ? kRadioRows[i] : adapters ? kAdapterRows[i] : wifi_scan ? kWifiScanRows[i] : diagnostics ? kDiagnosticsRows[i] : kDashboardRows[i];
+        const auto& row = remote ? kRemoteIdRows[i] : pcap ? kPcapRows[i] : traffic ? kTrafficRows[i] : list ? kDeviceRows[i] : radios ? kRadioRows[i] : adapters ? kAdapterRows[i] : raw_capture ? kRawCaptureRows[i] : wifi_scan ? kWifiScanRows[i] : diagnostics ? kDiagnosticsRows[i] : kDashboardRows[i];
         lv_label_set_text(rows_[i].key, row.key);
         lv_label_set_text(rows_[i].action, row.action);
         if (list && !*row.key) lv_obj_add_flag(rows_[i].row, LV_OBJ_FLAG_HIDDEN);

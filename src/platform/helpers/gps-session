@@ -39,6 +39,18 @@ class FixStatus:
         self.count = None
         self.count_time = 0
         self.groups = {}
+        self.position = None
+        self.position_time = 0
+
+    def set_position(self, latitude, longitude):
+        if -90 <= latitude <= 90 and -180 <= longitude <= 180 and (latitude or longitude):
+            self.position = (round(latitude * 10_000_000), round(longitude * 10_000_000))
+            self.position_time = time.monotonic()
+
+    def line(self, label):
+        if self.fixed and self.position and time.monotonic() - self.position_time < 10:
+            return f"{label}\t{self.position[0]}\t{self.position[1]}"
+        return label
 
     def update(self, fixed=None, count=None):
         if fixed is not None:
@@ -46,18 +58,31 @@ class FixStatus:
         if fixed is False:
             self.count = None
             self.groups.clear()
+            self.position = None
         elif isinstance(count, int) and 0 <= count <= 255:
             self.count = count
             self.count_time = time.monotonic()
         if not self.fixed:
             return "No fix"
         if self.count is not None and time.monotonic() - self.count_time < 10:
-            return f"{self.count} sat"
+            return self.line(f"{self.count} sat")
         now = time.monotonic()
         active = [ids for ids, stamp in self.groups.values() if now - stamp < 2.5]
         if active:
-            return f"{sum(map(len, active))} sat"
-        return "Fix"
+            return self.line(f"{sum(map(len, active))} sat")
+        return self.line("Fix")
+
+def nmea_coordinate(value, hemisphere, degrees):
+    if not value or hemisphere not in (b"N", b"S", b"E", b"W"):
+        return None
+    try:
+        text = value.decode("ascii")
+        if len(text) < degrees + 2:
+            return None
+        number = int(text[:degrees]) + float(text[degrees:]) / 60
+        return -number if hemisphere in (b"S", b"W") else number
+    except (UnicodeDecodeError, ValueError):
+        return None
 
 def fix(sentence, status):
     match = re.fullmatch(rb"\$([A-Z]{2}(GGA|RMC|GSA),[^*]*)\*([\da-fA-F]{2})", sentence.strip())
@@ -79,8 +104,18 @@ def fix(sentence, status):
             return status.update(fields[2] != b"1")
     if match[2] == b"RMC" and len(fields) >= 3:
         if fields[2] in (b"A", b"V"):
+            if fields[2] == b"A" and len(fields) >= 7:
+                lat = nmea_coordinate(fields[3], fields[4], 2)
+                lon = nmea_coordinate(fields[5], fields[6], 3)
+                if lat is not None and lon is not None:
+                    status.set_position(lat, lon)
             return status.update(fields[2] == b"A")
     if match[2] == b"GGA" and len(fields) >= 7 and fields[6].isdigit():
+        if int(fields[6]) and len(fields) >= 6:
+            lat = nmea_coordinate(fields[2], fields[3], 2)
+            lon = nmea_coordinate(fields[4], fields[5], 3)
+            if lat is not None and lon is not None:
+                status.set_position(lat, lon)
         count = int(fields[7]) if len(fields) > 7 and fields[7].isdigit() else None
         return status.update(bool(int(fields[6])), count)
 
@@ -169,6 +204,8 @@ def shared_status(port, path):
                 if msg.get("class") == "TPV":
                     mode = msg.get("mode")
                     if mode in (1, 2, 3):
+                        if mode >= 2 and isinstance(msg.get("lat"), (int, float)) and isinstance(msg.get("lon"), (int, float)):
+                            status.set_position(msg["lat"], msg["lon"])
                         report(status.update(mode >= 2))
                         deadline = time.monotonic() + 5
             if len(buf) > 65536:

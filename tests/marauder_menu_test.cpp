@@ -45,12 +45,26 @@ int main() {
     menu.next();
     if (menu.selected_index() != 0) return 3;
 
-    // WiFi > Networks > Access Points routes to the implemented managed scan.
+    // WiFi > Networks > Access Points routes to live monitor capture.
     if (menu.activate() != MarauderMenuAction::None || menu.depth() != 2) return 4;
     if (menu.activate() != MarauderMenuAction::None || menu.depth() != 3) return 5;
     if (menu.activate() != MarauderMenuAction::OpenWifiScan) return 6;
 
     if (menu.item_count() != 1) return 7;
+    menu.back();
+    menu.move(1, 0); // WiFi Activity.
+    if (menu.activate() != MarauderMenuAction::None) return 42;
+    menu.move(1, 0); // Raw capture.
+    if (menu.activate() != MarauderMenuAction::OpenRawCapture) return 43;
+    menu.move(-1, 0); // Pineapple scan.
+    menu.move(0, 1);
+    if (menu.activate() != MarauderMenuAction::OpenPineapple) return 45;
+    menu.move(1, 0);
+    menu.move(0, 1); // Remote ID.
+    if (menu.activate() != MarauderMenuAction::OpenRemoteId) return 44;
+    menu.back();
+    menu.move(-1, 0);
+    menu.activate();
 
     // Back restores the selection in each parent frame.
     if (!menu.back() || menu.depth() != 2 || menu.selected_index() != 0) return 9;
@@ -70,9 +84,9 @@ int main() {
     menu.activate();
     if (menu.columns() != 1 || menu.item_count() != 5) return 16;
     const std::vector<std::vector<MarauderMenuAction>> groups = {
-        {MarauderMenuAction::OpenRadioSetup, MarauderMenuAction::OpenAdapters},
+        {MarauderMenuAction::OpenRadioSetup, MarauderMenuAction::OpenAdapters, MarauderMenuAction::CycleTrafficSource},
         {MarauderMenuAction::Brightness, MarauderMenuAction::DimDelay, MarauderMenuAction::CycleBatteryDisplay},
-        {MarauderMenuAction::CycleStorage, MarauderMenuAction::Reserve, MarauderMenuAction::CycleCache},
+        {MarauderMenuAction::CycleStorage, MarauderMenuAction::OpenPcapFiles, MarauderMenuAction::Reserve, MarauderMenuAction::CycleCache},
         {MarauderMenuAction::UploadPolicy, MarauderMenuAction::WigleName, MarauderMenuAction::WigleToken, MarauderMenuAction::WdgKey}
     };
     for (const auto& group : groups) {

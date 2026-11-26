@@ -2,7 +2,7 @@
   "app_name": "Marauder",
   "package_name": "marauder",
   "bin_name": "marauder_cardputerzero",
-  "version": "0.6.24",
+  "version": "0.6.40",
   "description": "Marauder system and radio toolkit for Cardputer Zero",
   "store": {
     "summary": "System diagnostics and radio toolkit for Cardputer Zero",

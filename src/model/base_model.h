@@ -19,6 +19,8 @@ enum class AppPage {
     Diagnostics = 3,
     RadioSetup,
     Traffic,
+    PcapFiles,
+    RemoteId,
 };
 
 std::string saved_gps_id();
@@ -52,6 +54,8 @@ public:
     void toggle_page();
     const std::string& selected_adapter_id() const;
     bool set_selected_adapter_id(std::string stable_id);
+    bool traffic_monitor_source() const { return traffic_monitor_source_; }
+    bool cycle_traffic_source();
 
 private:
     unsigned brightness_{0}, dim_seconds_{0}, reserve_mib_{64};
@@ -61,6 +65,7 @@ private:
     BatteryDisplay battery_display_{BatteryDisplay::Both};
     AppPage current_page_{AppPage::Dashboard};
     std::string selected_adapter_id_;
+    bool traffic_monitor_source_{true};
 };
 
 } // namespace model

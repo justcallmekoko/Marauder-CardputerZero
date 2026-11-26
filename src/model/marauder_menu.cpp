@@ -32,9 +32,9 @@ const std::vector<Item>& items_for(Id menu) {
     };
     static const std::vector<Item> wifi_activity = {
         {"Traffic graph", Color::Green, Action::OpenTraffic, Id::Main, false, true, RadioRequirement::Selected},
-        {"Beacon frames", Color::Orange, Action::None, Id::Main, false, false, RadioRequirement::Monitor},
-        {"Probe Requests", Color::Cyan, Action::None, Id::Main, false, false, RadioRequirement::Monitor},
-        {"Deauth", Color::Red, Action::None, Id::Main, false, false, RadioRequirement::Monitor},
+        {"Raw capture", Color::Orange, Action::OpenRawCapture, Id::Main, false, true, RadioRequirement::Monitor},
+        {"Pineapple scan", Color::Yellow, Action::OpenPineapple, Id::Main, false, true, RadioRequirement::Monitor},
+        {"Remote ID", Color::Magenta, Action::OpenRemoteId, Id::Main, false, true, RadioRequirement::Monitor},
     };
     static const std::vector<Item> wifi_attacks = {
         {"Deauth", Color::Red, Action::None, Id::Main, false, false},
@@ -65,6 +65,7 @@ const std::vector<Item>& items_for(Id menu) {
     static const std::vector<Item> radios = {
         {"Radio setup", Color::Cyan, Action::OpenRadioSetup, Id::Main, false, true},
         {"WiFi adapter", Color::Green, Action::OpenAdapters, Id::Main, false, true},
+        {"Graph source", Color::Yellow, Action::CycleTrafficSource, Id::Main, false, true},
     };
     static const std::vector<Item> display = {
         {"Brightness", Color::Green, Action::Brightness, Id::Main, false, true},
@@ -80,6 +81,7 @@ const std::vector<Item>& items_for(Id menu) {
 
     static const std::vector<Item> files_memory = {
         {"Screenshots", Color::Blue, Action::CycleStorage, Id::Main, false, true},
+        {"Saved captures", Color::Red, Action::OpenPcapFiles, Id::Main, false, true},
         {"Keep free", Color::Blue, Action::Reserve, Id::Main, false, true},
         {"Image cache", Color::Purple, Action::CycleCache, Id::Main, false, true},
     };

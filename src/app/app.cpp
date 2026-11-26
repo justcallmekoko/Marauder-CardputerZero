@@ -148,6 +148,36 @@ private:
             if (!long_pressed) view_model_.credential_key(key);
             return true;
         }
+        if ((key == 'b' || key == 'B') && view_model_.current_page() == model::AppPage::WifiScan) {
+            if (!long_pressed && view_model_.scanning()) {
+                view_model_.toggle_list_builder();
+                toast_->show(view_model_.list_builder_active() ? "List builder on" : "List builder paused",
+                             view::widgets::ToastTone::Success, 2200);
+            }
+            return true;
+        }
+        if ((key == 't' || key == 'T') && view_model_.current_page() == model::AppPage::WifiScan &&
+            view_model_.raw_session() && (view_model_.wifi_view() == 7 || view_model_.wifi_view() == 9)) {
+            if (!long_pressed) view_model_.show_raw_filters();
+            return true;
+        }
+        if (key == 'p' || key == 'P') {
+            if (!long_pressed) {
+                const bool was_recording = view_model_.pcap_active();
+                if (!was_recording) {
+                    const auto warning = view_model_.collection_warning(model::RadioRequirement::Monitor);
+                    if (!warning.empty()) {
+                        show_confirmation(warning, "Enter Adapters", DialogAction::OpenAdapters);
+                        return true;
+                    }
+                }
+                const auto result = view_model_.toggle_pcap_capture();
+                if (was_recording) toast_->show(view_model_.pcap_message(), view::widgets::ToastTone::Success, 3200);
+                else if (view_model_.pcap_active()) toast_->show("PCAP recording started", view::widgets::ToastTone::Success, 3200);
+                else toast_->show(result, view::widgets::ToastTone::Error, 3200);
+            }
+            return true;
+        }
         if (key == platform::kKeyPrintScreen) {
             if (!long_pressed) {
                 const auto result = platform::screenshot::capture_active_screen(view_model_.screenshots_in_documents(), view_model_.reserve_mib());
@@ -191,7 +221,16 @@ private:
         }
 
         if (key == LV_KEY_ESC && !long_pressed) {
-            if (view_model_.current_page() == model::AppPage::WifiScan && view_model_.wifi_details_open()) {
+            if (view_model_.current_page() == model::AppPage::RemoteId && view_model_.remote_details()) {
+                view_model_.remote_back();
+                return true;
+            }
+            if (view_model_.current_page() == model::AppPage::PcapFiles && view_model_.pcap_details()) {
+                view_model_.toggle_pcap_details();
+                return true;
+            }
+            if (view_model_.current_page() == model::AppPage::WifiScan &&
+                (view_model_.wifi_details_open() || (view_model_.raw_session() && view_model_.wifi_view() == 0))) {
                 view_model_.wifi_back();
                 return true;
             }
@@ -220,7 +259,9 @@ private:
         if (view_model_.current_page() == model::AppPage::Dashboard) {
             if (key == LV_KEY_ENTER) {
                 const auto index = view_model_.marauder_menu_selected_index();
-                const auto warning = view_model_.collection_warning(view_model_.marauder_menu_item(index).radio);
+                const auto& item = view_model_.marauder_menu_item(index);
+                const auto warning = view_model_.collection_warning(
+                    item.action == model::MarauderMenuAction::OpenTraffic ? view_model_.traffic_requirement() : item.radio);
                 if (warning.empty()) view_model_.marauder_menu_activate();
                 else show_confirmation(warning, "Enter Adapters", DialogAction::OpenAdapters);
             }
@@ -237,6 +278,19 @@ private:
             if (action == NavigationAction::Next) { view_model_.next_system_info_page(); return true; }
             if (action == NavigationAction::Primary) { view_model_.refresh_diagnostics(); return true; }
             if (action == NavigationAction::Details) { view_model_.toggle_system_info_details(); return true; }
+        }
+
+        if (view_model_.current_page() == model::AppPage::PcapFiles) {
+            if (action == NavigationAction::Previous) { view_model_.move_pcap_file(-1); return true; }
+            if (action == NavigationAction::Next) { view_model_.move_pcap_file(1); return true; }
+            if (key == LV_KEY_ENTER) { view_model_.toggle_pcap_details(); return true; }
+            if (action == NavigationAction::Details) { view_model_.refresh_pcap_files(); return true; }
+        }
+
+        if (view_model_.current_page() == model::AppPage::RemoteId) {
+            if (action == NavigationAction::Previous) { view_model_.remote_move(-1); return true; }
+            if (action == NavigationAction::Next) { view_model_.remote_move(1); return true; }
+            if (action == NavigationAction::Primary) { view_model_.remote_open_details(); return true; }
         }
 
         if (view_model_.current_page() == model::AppPage::RadioSetup) {
@@ -272,18 +326,44 @@ private:
         if (view_model_.current_page() == model::AppPage::Traffic &&
             (action == NavigationAction::Back || action == NavigationAction::Primary) && key != LV_KEY_ENTER) {
             if (view_model_.traffic_can_tune()) view_model_.step_traffic_channel(action == NavigationAction::Back ? -1 : 1);
+            else if (view_model_.pcap_pinned_frequency())
+                toast_->show("Stop target PCAP to tune", view::widgets::ToastTone::Warning, 3200);
             else show_confirmation("Enable monitor mode to tune channels", "Enter Adapters", DialogAction::OpenAdapters);
             return true;
         }
         if (view_model_.current_page() == model::AppPage::WifiScan) {
+            const auto wifi_view = view_model_.wifi_view();
+            const bool raw_browsing = view_model_.raw_session() &&
+                (wifi_view == 0 || wifi_view == 7 || wifi_view == 8 || wifi_view == 9);
+            if (raw_browsing && (key == 'h' || key == 'H')) {
+                view_model_.toggle_raw_auto_hop(); return true;
+            }
+            if (raw_browsing && key != LV_KEY_ENTER &&
+                (action == NavigationAction::Back || action == NavigationAction::Primary)) {
+                view_model_.step_raw_channel(action == NavigationAction::Back ? -1 : 1);
+                return true;
+            }
             if (action == NavigationAction::Previous) { view_model_.previous_wifi_scan_page(); return true; }
             if (action == NavigationAction::Next) { view_model_.next_wifi_scan_page(); return true; }
+            if (action == NavigationAction::Primary && view_model_.pcap_action_selected()) {
+                const bool was_recording = view_model_.pcap_active();
+                const auto result = view_model_.toggle_selected_pcap_capture();
+                const bool recording = view_model_.pcap_active();
+                if ((!was_recording && recording) || (was_recording && !recording))
+                    toast_->show(recording ? "Target PCAP recording started" : view_model_.pcap_message(),
+                                 view::widgets::ToastTone::Success, 3200);
+                else toast_->show(result, view::widgets::ToastTone::Error, 3200);
+                return true;
+            }
             if (action == NavigationAction::Primary) { view_model_.toggle_wifi_scan_details(); return true; }
             if (action == NavigationAction::Details) {
+                if (view_model_.raw_session() && view_model_.wifi_view() == 7) {
+                    view_model_.show_station_list(); return true;
+                }
                 if (view_model_.wifi_view() == 1) view_model_.advance_wifi_info_tab();
-                else if (view_model_.wifi_view() == 0) {
+                else if (view_model_.wifi_view() == 0 || view_model_.wifi_view() == 11) {
                     const auto warning = view_model_.collection_warning(model::RadioRequirement::Monitor);
-                    if (warning.empty()) view_model_.start_wifi_scan();
+                    if (warning.empty()) view_model_.start_wifi_scan(true);
                     else show_confirmation(warning, "Enter Adapters", DialogAction::OpenAdapters);
                 }
                 return true;

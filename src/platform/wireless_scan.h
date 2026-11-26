@@ -35,6 +35,7 @@ struct WifiNetwork {
     bool has_rssi{};
     unsigned frames{};
     std::vector<Client> clients;
+    bool channel_advertised{false};
 };
 
 struct WifiScanResult {
