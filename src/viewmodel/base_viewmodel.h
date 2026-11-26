@@ -31,6 +31,7 @@
 #include <future>
 #include <chrono>
 #include <thread>
+#include <unordered_set>
 #include <vector>
 #include <deque>
 
@@ -39,6 +40,10 @@ namespace viewmodel {
 class BaseViewModel {
 public:
     enum class FoxTarget { None, AccessPoint, Station, Aircraft, Pineapple };
+    struct WardriveSighting {
+        bool bluetooth{};
+        std::string name, address;
+    };
     BaseViewModel();
     ~BaseViewModel();
 
@@ -113,6 +118,8 @@ public:
     bool gps_recording() const { return gps_log_.active(); }
     std::size_t gps_record_count() const { return gps_log_.count(); }
     std::size_t bluetooth_record_count() const { return gps_log_.bluetooth_count(); }
+    std::size_t bluetooth_observed_count() const { return bluetooth_seen_.size(); }
+    const std::deque<WardriveSighting>& wardrive_sightings() const { return wardrive_sightings_; }
     bool bluetooth_scanning() const { return bluetooth_session_.active(); }
     const std::string& gps_tool_message() const { return gps_tool_message_; }
     const std::string& gps_file_name() const { return gps_file_name_; }
@@ -277,6 +284,8 @@ private:
     uint32_t monitor_status_tick_{};
     platform::GpsSession gps_session_;
     platform::BluetoothSession bluetooth_session_;
+    std::unordered_set<std::string> bluetooth_seen_;
+    std::deque<WardriveSighting> wardrive_sightings_;
     std::string gps_id_, radio_session_;
     platform::gps::Log gps_log_;
     GpsTool gps_tool_{GpsTool::Info};
@@ -285,6 +294,7 @@ private:
     uint32_t gps_sample_tick_{};
     reactive::IntSubject gps_tool_generation_{0};
     void update_gps_tool();
+    void add_wardrive_sighting(bool bluetooth, const std::string& name, const std::string& address);
     void finish_radio_setting();
     void load_radios(std::string key, bool enabled);
     std::future<platform::RadioInventory> radio_job_;

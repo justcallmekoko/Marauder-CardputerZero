@@ -224,6 +224,8 @@ void BaseViewModel::show_pineapple_page() {
 }
 void BaseViewModel::show_gps_tool(GpsTool tool) {
     bluetooth_session_.stop();
+    bluetooth_seen_.clear();
+    wardrive_sightings_.clear();
     gps_log_.reset();
     stop_wifi_capture();
     gps_tool_ = tool;
@@ -286,8 +288,10 @@ void BaseViewModel::update_gps_tool() {
     if (model_.current_page() != model::AppPage::GpsTool) return;
     if (wardrive_session_ && gps_log_.active()) {
         std::string bluetooth_state;
-        const auto before = gps_log_.bluetooth_count();
+        const auto before = bluetooth_seen_.size();
         for (const auto& item : bluetooth_session_.poll(bluetooth_state)) {
+            if (bluetooth_seen_.insert(item.address_type + ":" + item.address).second)
+                add_wardrive_sighting(true, item.name, item.address);
             int32_t lat{}, lon{};
             if (gps_session_.position(lat, lon) &&
                 !gps_log_.bluetooth_device(item.address, item.name, item.rssi,
@@ -299,7 +303,7 @@ void BaseViewModel::update_gps_tool() {
         }
         if (!bluetooth_state.empty() && bluetooth_state != "Scanning")
             bluetooth_message_ = bluetooth_state;
-        if (gps_log_.bluetooth_count() != before)
+        if (bluetooth_seen_.size() != before)
             gps_tool_generation_.set(gps_tool_generation_.value() + 1);
     }
     const auto now = lv_tick_get();
@@ -322,6 +326,10 @@ void BaseViewModel::update_gps_tool() {
         else gps_tool_message_ = "Collection adapters unavailable";
     } else if (gps_log_.active()) gps_tool_message_ = "Recording; waiting for GPS fix";
     gps_tool_generation_.set(gps_tool_generation_.value() + 1);
+}
+void BaseViewModel::add_wardrive_sighting(bool bluetooth, const std::string& name, const std::string& address) {
+    if (wardrive_sightings_.size() == 16) wardrive_sightings_.pop_front();
+    wardrive_sightings_.push_back({bluetooth, name, address});
 }
 void BaseViewModel::remote_move(int direction) {
     if (remote_view_ == 2) {
@@ -1492,6 +1500,7 @@ void BaseViewModel::finish_wifi_scan_if_ready() {
             if (wifi_feed_offset_) wifi_feed_offset_ = std::min(wifi_feed_offset_ + 1, wifi_feed_frames_.size() - 1);
         }
     }
+    bool wardrive_feed_changed = false;
     for (const auto& frame : incoming) {
         auto ap = std::find_if(wifi_networks_.begin(), wifi_networks_.end(), [&](const auto& item) { return item.bssid == frame.bssid; });
         if (ap == wifi_networks_.end()) {
@@ -1502,10 +1511,22 @@ void BaseViewModel::finish_wifi_scan_if_ready() {
             item.vendor = platform::wireless::vendor_for_mac(frame.bssid);
             wifi_networks_.push_back(std::move(item));
             ap = std::prev(wifi_networks_.end());
+            if (wardrive_session_) {
+                add_wardrive_sighting(false, ap->ssid, ap->bssid);
+                wardrive_feed_changed = true;
+            }
         }
         ++ap->frames;
         if (frame.beacon) {
-            if (!frame.ssid.empty()) ap->ssid = frame.ssid;
+            if (!frame.ssid.empty()) {
+                if (wardrive_session_ && ap->ssid == "[hidden/unknown]") {
+                    for (auto& sighting : wardrive_sightings_)
+                        if (!sighting.bluetooth && sighting.address == ap->bssid)
+                            sighting.name = frame.ssid;
+                    wardrive_feed_changed = true;
+                }
+                ap->ssid = frame.ssid;
+            }
             ap->security = frame.security;
             ap->security_info = frame.security_info;
             if (frame.has_rssi) { ap->rssi = frame.rssi; ap->has_rssi = true; }
@@ -1541,6 +1562,8 @@ void BaseViewModel::finish_wifi_scan_if_ready() {
         if (frame.client_transmitted && frame.has_rssi) { client->rssi = frame.rssi; client->has_rssi = true; }
     }
     publish_wifi_scan();
+    if (wardrive_feed_changed)
+        gps_tool_generation_.set(gps_tool_generation_.value() + 1);
 }
 void BaseViewModel::finish_pineapple_observations(std::vector<platform::wireless::PineappleObservation>& incoming) {
     const auto now = lv_tick_get();
