@@ -40,9 +40,10 @@ void WifiScanScreen::build_content(lv_obj_t* content) {
         lv_label_set_long_mode(obj, LV_LABEL_LONG_CLIP);
         return obj;
     };
-    title_ = label(content, 8, 1, 152, 14);
-    builder_ = label(content, 158, 3, 45, 11);
-    count_ = label(content, 205, 3, 106, 11);
+    title_ = label(content, 8, 1, 158, 14);
+    channel_ = label(content, 124, 3, 46, 11);
+    builder_ = label(content, 171, 3, 38, 11);
+    count_ = label(content, 210, 3, 102, 11);
     lv_obj_set_style_text_align(count_, LV_TEXT_ALIGN_RIGHT, 0);
     message_ = label(content, 9, 23, 303, 12);
     lv_label_set_long_mode(message_, LV_LABEL_LONG_WRAP);
@@ -97,6 +98,11 @@ void WifiScanScreen::render() {
                                 vm.wifi_info_tab() == 2 ? "AP encryption" : "Access point info" :
                       "Access points");
     lv_obj_set_style_text_color(title_, colors.text, 0);
+    const bool show_channel = mode == 0 || raw_feed || station_list || filter_list;
+    lv_obj_set_width(title_, show_channel ? 112 : 158);
+    lv_label_set_text(channel_, show_channel ?
+        (vm.wifi_tuned_frequency() ? ("CH " + std::to_string(platform::wireless::channel_number(vm.wifi_tuned_frequency()))).c_str() : "CH --") : "");
+    lv_obj_set_style_text_color(channel_, colors.info, 0);
     lv_label_set_text(builder_, vm.scanning() ? (vm.list_builder_active() ? "BUILD" : "B OFF") : "");
     lv_obj_set_style_text_color(builder_, vm.list_builder_active() ? colors.success : colors.text_disabled, 0);
     const auto count = raw_feed ? std::to_string(vm.raw_displayed_count()) + "/" +
@@ -199,11 +205,12 @@ void WifiScanScreen::render() {
     std::string message;
     if (raw_feed) {
         const auto channel = platform::wireless::channel_number(static_cast<int>(vm.wifi_tuned_frequency()));
-        message = "CH " + std::to_string(channel) + "   " +
+        message = "CH " + std::to_string(channel) + (vm.raw_auto_hop() ? "   AUTO   " : "   MANUAL   ") +
             (vm.raw_filter_mask() ? "FILTERED" : "ALL TYPES") +
             (vm.raw_feed_offset() ? "   HISTORY" : "   LIVE");
         if (!vm.wifi_error().empty()) message = vm.wifi_error();
-        else if (frames.empty()) message = "CH " + std::to_string(channel) + "   Waiting for frames";
+        else if (frames.empty()) message = "CH " + std::to_string(channel) +
+            (vm.raw_auto_hop() ? "   AUTO" : "   MANUAL") + "   Waiting for frames";
     } else if (feed && cursor < items.size()) {
         const auto channel = items[cursor].channel;
         message = "CH " + std::to_string(channel) + "   " + vm.wifi_feed_target() +
@@ -257,13 +264,13 @@ void WifiScanScreen::render() {
     auto* message_font = assets().load_standard_font(feed || (mode == 1 && vm.wifi_info_tab()) ? 10 : 12);
     lv_obj_set_style_text_font(message_, message_font ? message_font : LV_FONT_DEFAULT, 0);
     lv_label_set_text(message_, message.c_str());
-    set_key_guide(raw_feed ? "F/X Scroll  T Filter  B Build  Enter APs  D STA" :
+    set_key_guide(raw_feed ? "F/X Feed Z/C CH H Hop B Build T Filter Enter AP" :
                   filter_list ? "F/X Browse  Enter Toggle  T/Esc Feed" :
-                  station_list ? "F/X Browse  Enter Open  B Build  Esc Feed" :
+                  station_list ? "F/X STA Z/C CH H Hop Enter Open Esc Feed" :
                   feed ? "F/X Scroll  Esc Operations" : operations ? "F/X Browse  Enter Open  Esc Back" :
                   mode == 3 ? "Esc Operations" : mode == 2 ? "F/X Browse  Enter Operations  Esc AP" :
                   mode == 1 ? "D Security  Esc Operations" :
-                  vm.raw_session() ? "F/X Browse  Enter Open  B Build  Esc Feed" :
+                  vm.raw_session() ? "F/X APs Z/C CH H Hop Enter Open D Restart" :
                   "F/X Browse  Enter Info  D Restart  Esc Back");
 }
 }

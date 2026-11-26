@@ -60,6 +60,13 @@ constexpr std::array<HelpRow, 5> kWifiScanRows = {{
     {"D", "Restart / AP security pages"},
     {"HELP", "Context help"},
 }};
+constexpr std::array<HelpRow, 5> kRawCaptureRows = {{
+    {"Z / C", "Previous / next supported channel"},
+    {"H", "Toggle automatic channel hopping"},
+    {"B", "Build AP and station lists"},
+    {"T", "Frame-type filters"},
+    {"ENTER", "Show observed access points"},
+}};
 constexpr std::array<HelpRow, 5> kRemoteIdRows = {{
     {"F / X", "Select aircraft or detail page"},
     {"ENTER", "Open aircraft information"},
@@ -214,13 +221,14 @@ void HelpPopup::update_rows(model::AppPage page) {
     const bool adapters = page == model::AppPage::Adapters;
     const bool traffic = page == model::AppPage::Traffic;
     const bool wifi_scan = page == model::AppPage::WifiScan;
+    const bool raw_capture = wifi_scan && view_model_.raw_session();
     const bool diagnostics = page == model::AppPage::Diagnostics;
     const bool pcap = page == model::AppPage::PcapFiles;
     const bool remote = page == model::AppPage::RemoteId;
-    lv_label_set_text(page_badge_, remote ? "REMOTE ID" : pcap ? "CAPTURES" : traffic ? "ACTIVITY" : list ? "DEVICE" : radios ? "RADIO SETUP" : adapters ? "ADAPTERS" : wifi_scan ? "WIFI SCAN" : diagnostics ? "SYSTEM INFO" : "MENU");
+    lv_label_set_text(page_badge_, remote ? "REMOTE ID" : pcap ? "CAPTURES" : traffic ? "ACTIVITY" : list ? "DEVICE" : radios ? "RADIO SETUP" : adapters ? "ADAPTERS" : raw_capture ? "RAW CAPTURE" : wifi_scan ? "WIFI SCAN" : diagnostics ? "SYSTEM INFO" : "MENU");
     for (std::size_t i = 0; i < rows_.size(); ++i) {
         lv_obj_remove_flag(rows_[i].row, LV_OBJ_FLAG_HIDDEN);
-        const auto& row = remote ? kRemoteIdRows[i] : pcap ? kPcapRows[i] : traffic ? kTrafficRows[i] : list ? kDeviceRows[i] : radios ? kRadioRows[i] : adapters ? kAdapterRows[i] : wifi_scan ? kWifiScanRows[i] : diagnostics ? kDiagnosticsRows[i] : kDashboardRows[i];
+        const auto& row = remote ? kRemoteIdRows[i] : pcap ? kPcapRows[i] : traffic ? kTrafficRows[i] : list ? kDeviceRows[i] : radios ? kRadioRows[i] : adapters ? kAdapterRows[i] : raw_capture ? kRawCaptureRows[i] : wifi_scan ? kWifiScanRows[i] : diagnostics ? kDiagnosticsRows[i] : kDashboardRows[i];
         lv_label_set_text(rows_[i].key, row.key);
         lv_label_set_text(rows_[i].action, row.action);
         if (list && !*row.key) lv_obj_add_flag(rows_[i].row, LV_OBJ_FLAG_HIDDEN);

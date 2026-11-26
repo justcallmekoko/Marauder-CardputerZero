@@ -332,6 +332,17 @@ private:
             return true;
         }
         if (view_model_.current_page() == model::AppPage::WifiScan) {
+            const auto wifi_view = view_model_.wifi_view();
+            const bool raw_browsing = view_model_.raw_session() &&
+                (wifi_view == 0 || wifi_view == 7 || wifi_view == 8 || wifi_view == 9);
+            if (raw_browsing && (key == 'h' || key == 'H')) {
+                view_model_.toggle_raw_auto_hop(); return true;
+            }
+            if (raw_browsing && key != LV_KEY_ENTER &&
+                (action == NavigationAction::Back || action == NavigationAction::Primary)) {
+                view_model_.step_raw_channel(action == NavigationAction::Back ? -1 : 1);
+                return true;
+            }
             if (action == NavigationAction::Previous) { view_model_.previous_wifi_scan_page(); return true; }
             if (action == NavigationAction::Next) { view_model_.next_wifi_scan_page(); return true; }
             if (action == NavigationAction::Primary && view_model_.pcap_action_selected()) {
@@ -352,7 +363,7 @@ private:
                 if (view_model_.wifi_view() == 1) view_model_.advance_wifi_info_tab();
                 else if (view_model_.wifi_view() == 0) {
                     const auto warning = view_model_.collection_warning(model::RadioRequirement::Monitor);
-                    if (warning.empty()) view_model_.start_wifi_scan();
+                    if (warning.empty()) view_model_.start_wifi_scan(true);
                     else show_confirmation(warning, "Enter Adapters", DialogAction::OpenAdapters);
                 }
                 return true;

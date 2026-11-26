@@ -175,6 +175,7 @@ void BaseViewModel::show_wifi_scan_page() {
 void BaseViewModel::show_raw_capture_page() {
     raw_session_ = true;
     remote_session_ = false;
+    raw_auto_hop_ = false;
     wifi_view_ = 7;
     wifi_scan_details_expanded_ = true;
     model_.set_current_page(model::AppPage::WifiScan);
@@ -649,6 +650,7 @@ void BaseViewModel::select_highlighted_adapter() {
     adapter_error_.clear();
     if (changed) {
         wifi_networks_.clear();
+        station_refs_.clear();
         wifi_scan_interface_.clear();
         wifi_scan_error_.clear();
         wifi_scan_detail_index_ = 0;
@@ -665,7 +667,7 @@ void BaseViewModel::toggle_adapter_details() {
     publish_adapter_detail();
 }
 
-void BaseViewModel::start_wifi_scan() {
+void BaseViewModel::start_wifi_scan(bool clear_results) {
     stop_wifi_capture();
     if (remote_session_) {
         remote_store_.clear();
@@ -681,6 +683,7 @@ void BaseViewModel::start_wifi_scan() {
         publish_wifi_scan();
         return;
     }
+    const bool same_interface = wifi_scan_interface_ == selected->interface_name;
     wifi_scan_interface_ = selected->interface_name;
     wifi_frequencies_ = selected->frequencies;
     std::stable_sort(wifi_frequencies_.begin(), wifi_frequencies_.end(), [](unsigned a, unsigned b) {
@@ -695,8 +698,12 @@ void BaseViewModel::start_wifi_scan() {
         publish_wifi_scan();
         return;
     }
-    wifi_networks_.clear();
-    station_refs_.clear();
+    // A new capture session must not discard APs and clients built on this adapter.
+    // D/Restart explicitly starts a fresh inventory; changing adapters does too.
+    if (clear_results || !same_interface) {
+        wifi_networks_.clear();
+        station_refs_.clear();
+    }
     wifi_scan_detail_index_ = 0;
     wifi_client_index_ = 0;
     station_cursor_ = 0;
@@ -717,6 +724,7 @@ void BaseViewModel::start_wifi_scan() {
     wifi_capture_stop_ = false;
     wifi_capture_failed_ = false;
     wifi_hop_index_ = 0;
+    raw_channel_index_ = 0;
     wifi_tuned_frequency_ = 0;
     wifi_tune_failed_frequency_ = 0;
     wifi_hop_tick_ = 0;
@@ -796,7 +804,10 @@ void BaseViewModel::advance_wifi_channel() {
     }
     const auto& recording = pcap_capture_.filter();
     const bool pinned = pcap_capture_.active() && recording.scope != platform::pcap::Scope::All;
-    const bool hopping = remote_session_ || wifi_view_ == 0 || wifi_view_ == 7 || wifi_view_ == 8 || wifi_view_ == 9;
+    const bool raw_browsing = raw_session_ && (wifi_view_ == 0 || wifi_view_ == 7 ||
+                                                 wifi_view_ == 8 || wifi_view_ == 9);
+    const bool hopping = remote_session_ || (!raw_session_ && wifi_view_ == 0) ||
+                         (raw_browsing && raw_auto_hop_);
     if (!pinned && wifi_hop_tick_ && lv_tick_elaps(wifi_hop_tick_) < 650 && hopping) return;
     unsigned requested{};
     if (pinned) {
@@ -804,6 +815,8 @@ void BaseViewModel::advance_wifi_channel() {
     } else if (hopping) {
         wifi_hop_index_ = wifi_hop_tick_ ? (wifi_hop_index_ + 1) % wifi_frequencies_.size() : 0;
         requested = wifi_frequencies_[wifi_hop_index_];
+    } else if (raw_browsing) {
+        requested = wifi_frequencies_[raw_channel_index_];
     } else if (wifi_scan_detail_index_ < wifi_networks_.size()) {
         requested = wifi_networks_[wifi_scan_detail_index_].frequency_mhz;
     }
@@ -931,6 +944,38 @@ void BaseViewModel::toggle_list_builder() {
         std::lock_guard<std::mutex> lock(wifi_scan_mutex_);
         incoming_frames_.clear();
     }
+    publish_wifi_scan();
+}
+void BaseViewModel::toggle_raw_auto_hop() {
+    if (!raw_session_ || !wifi_scan_running_) return;
+    if (pcap_pinned_frequency()) {
+        wifi_scan_error_ = "Stop target PCAP to change channel";
+        publish_wifi_scan();
+        return;
+    }
+    raw_auto_hop_ = !raw_auto_hop_;
+    if (raw_auto_hop_) wifi_hop_tick_ = lv_tick_get();
+    else {
+        const auto found = std::find(wifi_frequencies_.begin(), wifi_frequencies_.end(), wifi_tuned_frequency_);
+        if (found != wifi_frequencies_.end()) raw_channel_index_ = static_cast<std::size_t>(found - wifi_frequencies_.begin());
+    }
+    wifi_scan_error_.clear();
+    publish_wifi_scan();
+}
+void BaseViewModel::step_raw_channel(int direction) {
+    if (!raw_session_ || !wifi_scan_running_ || wifi_frequencies_.empty() || !direction) return;
+    if (pcap_pinned_frequency()) {
+        wifi_scan_error_ = "Stop target PCAP to change channel";
+        publish_wifi_scan();
+        return;
+    }
+    raw_auto_hop_ = false;
+    const auto count = wifi_frequencies_.size();
+    raw_channel_index_ = direction < 0 ? (raw_channel_index_ + count - 1) % count :
+                                         (raw_channel_index_ + 1) % count;
+    wifi_tune_failed_frequency_ = 0;
+    wifi_scan_error_.clear();
+    advance_wifi_channel();
     publish_wifi_scan();
 }
 void BaseViewModel::show_station_list() {

@@ -168,12 +168,15 @@ public:
     uint64_t raw_feed_count() const { return raw_frames_seen_; }
     bool list_builder_active() const { return wifi_list_builder_; }
     bool raw_session() const { return raw_session_; }
+    bool raw_auto_hop() const { return raw_auto_hop_; }
     const auto& station_refs() const { return station_refs_; }
     size_t station_cursor() const { return station_cursor_; }
     uint32_t raw_filter_mask() const { return raw_filter_mask_; }
     size_t raw_filter_cursor() const { return raw_filter_cursor_; }
     uint64_t raw_displayed_count() const { return raw_displayed_count_; }
     void toggle_list_builder();
+    void toggle_raw_auto_hop();
+    void step_raw_channel(int direction);
     void show_station_list();
     void show_raw_filters();
     const auto& wifi_feed_target() const { return wifi_feed_target_; }
@@ -182,7 +185,7 @@ public:
     void wifi_back();
     void advance_wifi_info_tab();
     bool system_details_open() const { return system_info_.details_expanded(); }
-    void start_wifi_scan();
+    void start_wifi_scan(bool clear_results = false);
     void previous_wifi_scan_page();
     void next_wifi_scan_page();
     void toggle_wifi_scan_details();
@@ -275,6 +278,8 @@ private:
     std::atomic<uint64_t> raw_frames_seen_{0};
     std::atomic<bool> wifi_list_builder_{true};
     bool raw_session_{};
+    bool raw_auto_hop_{};
+    std::size_t raw_channel_index_{};
     bool remote_session_{};
     std::array<RemoteIdRecord, 32> remote_storage_{};
     RemoteIdStore remote_store_{remote_storage_.data(), remote_storage_.size()};
