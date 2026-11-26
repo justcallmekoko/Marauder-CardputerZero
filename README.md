@@ -68,7 +68,7 @@ Open **WiFi → General → Adapter Setup** to choose the WiFi interface used by
 
 Under **WiFi > Networks > Access Points**, the raw-frame inventory scrolls as APs arrive. Enter opens AP operations: Information, Observed clients, and Traffic filter. Each observed client has Information and Traffic filter operations. A traffic filter pins the selected AP's channel and shows matching MAC-header frames live with frame type, sender, receiver, RSSI when present, channel, and a cumulative frame count. The AP's ESSID replaces its BSSID in individual frame rows when known; hidden or unresolved names retain the MAC address. F/X scrolls older frames and back to the live tail. The feed retains at most 128 recent frame summaries, not payload bytes. In Adapters, M switches the selected idle adapter into monitor mode. M again or exiting the app releases it. **WiFi > Activity > Traffic graph** plots the selected adapter’s received and transmitted packets per second over the last 30 samples. Under **Device > Radios and GPS > Graph source**, choose Monitor (default; requires monitor mode and tunes to a supported channel) or Adapter (interface counters without monitor mode). In Monitor mode, Z/C tunes the radio to another enabled channel; driver-reported busy airtime appears alongside packet rate when available. Choosing an adapter with a live Wi-Fi connection, a hosted hotspot, or an unknown connection state prompts for confirmation. Adapter details show monitor capability and current monitor status.
 
-Monitor switching requires one-time administrator enrollment for the local operator. The approved sudo command is only `/usr/lib/marauder/monitor-session`. For example, a sudoers entry for the account `operator` is `operator ALL=(root) NOPASSWD: /usr/lib/marauder/monitor-session`. Install the package before enrolling the user. The helper accepts a wireless interface name and restores its mode when the app closes its session.
+The package installs a restricted sudo rule for local users in the `sudo` group. It permits only `/usr/lib/marauder/monitor-session` without a password, so monitor switching needs no separate enrollment. The helper accepts a wireless interface name, checks that the adapter is idle, and restores its mode when the app closes its session. Package removal removes the rule.
 
 The bottom strip shows the current screen’s shortcuts. System Info is canonically located at **Device > System Info** and exposes Summary, System, Interfaces, USB/Peripherals, and Tools pages. On Adapters and System Info, `D` toggles details/summary. On System Info, `F`/`X` changes page, `C`/`Enter` refreshes, and `Z`/`Esc` returns to Device with its selection retained.
 
@@ -114,7 +114,7 @@ cmake --build --preset linux-x86-64-dbg
 cmake --workflow --preset cp0-cross-package
 ```
 
-The expected artifact is `dist/Marauder_0.6.43_rev1_arm64.deb`. Packaging and deployment remain separate actions.
+The expected artifact is `dist/Marauder_0.6.44_rev1_arm64.deb`. Debian dependencies install the runtime tools needed by the WiFi, Bluetooth, GPS, and monitor helpers. Packaging and deployment remain separate actions.
 
 ## Safety and scope
 

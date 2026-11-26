@@ -1,0 +1,14 @@
+#!/bin/sh
+set -eu
+
+if [ "${1:-}" = configure ]; then
+    source=/usr/share/marauder_cardputerzero/marauder-monitor.sudoers
+    target=/etc/sudoers.d/marauder-monitor
+    if [ -e "$target" ] && ! grep -Fqx '# Managed by the marauder package; removed on package removal.' "$target"; then
+        echo "Refusing to replace an unrelated sudo rule: $target" >&2
+        exit 1
+    fi
+    /usr/sbin/visudo -cf "$source" >/dev/null
+    install -o root -g root -m 0440 "$source" "$target"
+    /usr/sbin/visudo -cf "$target" >/dev/null
+fi

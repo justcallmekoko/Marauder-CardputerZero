@@ -1,0 +1,2 @@
+# Managed by the marauder package; removed on package removal.
+%sudo ALL=(root) NOPASSWD: /usr/lib/marauder/monitor-session

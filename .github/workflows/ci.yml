@@ -76,6 +76,16 @@ jobs:
           test "$(dpkg-deb -f "$package" Architecture)" = arm64
           cmake -DPACKAGE_FILE="$package" \
             -P .agents/skills/cardputerzero-package-release/scripts/validate_app_builder.cmake
+          dpkg-deb -x "$package" "$RUNNER_TEMP/marauder-payload"
+          dpkg-deb -e "$package" "$RUNNER_TEMP/marauder-control"
+          test -x "$RUNNER_TEMP/marauder-control/postinst"
+          test -x "$RUNNER_TEMP/marauder-control/postrm"
+          test -f "$RUNNER_TEMP/marauder-payload/usr/share/APPLaunch/share/images/marauder-icon-v2.png"
+          grep -Fqx 'Icon=share/images/marauder-icon-v2.png' "$RUNNER_TEMP/marauder-payload/usr/share/APPLaunch/applications/marauder_cardputerzero.desktop"
+          visudo -cf "$RUNNER_TEMP/marauder-payload/usr/share/marauder_cardputerzero/marauder-monitor.sudoers"
+          for dep in sudo iproute2 iw network-manager bluez gpsd python3 systemd; do
+            dpkg-deb -f "$package" Depends | tr ',' '\n' | grep -Eq "^[[:space:]]*${dep}([[:space:]]|$)"
+          done
           dpkg-deb -f "$package"
           dpkg-deb -c "$package"
           sha256sum "$package" > "$package.sha256"
