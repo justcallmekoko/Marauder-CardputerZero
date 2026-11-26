@@ -287,6 +287,11 @@ private:
             if (action == NavigationAction::Details) { view_model_.refresh_pcap_files(); return true; }
         }
 
+        if (view_model_.current_page() == model::AppPage::GpsTool) {
+            if (key == LV_KEY_ENTER) view_model_.toggle_gps_recording();
+            return true;
+        }
+
         if (view_model_.current_page() == model::AppPage::RemoteId) {
             if (action == NavigationAction::Previous) { view_model_.remote_move(-1); return true; }
             if (action == NavigationAction::Next) { view_model_.remote_move(1); return true; }

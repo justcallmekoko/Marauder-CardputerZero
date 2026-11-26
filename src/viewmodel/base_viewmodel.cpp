@@ -133,6 +133,7 @@ BaseViewModel::BaseViewModel()
 }
 
 BaseViewModel::~BaseViewModel() {
+    gps_log_.stop();
     pcap_capture_.stop();
     if (changed_light_) set_light(original_light_);
     if (wifi_scan_timer_) {
@@ -158,7 +159,13 @@ lv_subject_t* BaseViewModel::wifi_scan_subject() { return wifi_scan_subject_.nat
 lv_subject_t* BaseViewModel::quit_requested_subject() { return quit_requested_subject_.native(); }
 bool BaseViewModel::is_dark_mode() const { return model_.dark_mode(); }
 model::AppPage BaseViewModel::current_page() const { return model_.current_page(); }
-void BaseViewModel::show_dashboard_page() { stop_wifi_capture(); model_.set_current_page(model::AppPage::Dashboard); publish_navigation(); }
+void BaseViewModel::show_dashboard_page() {
+    gps_log_.stop();
+    wardrive_session_ = false;
+    stop_wifi_capture();
+    model_.set_current_page(model::AppPage::Dashboard);
+    publish_navigation();
+}
 void BaseViewModel::show_diagnostics_page() {
     stop_wifi_capture();
     refresh_diagnostics();
@@ -166,6 +173,8 @@ void BaseViewModel::show_diagnostics_page() {
     publish_navigation();
 }
 void BaseViewModel::show_adapters_page() {
+    gps_log_.stop();
+    wardrive_session_ = false;
     stop_wifi_capture();
     refresh_adapters();
     model_.set_current_page(model::AppPage::Adapters);
@@ -209,6 +218,74 @@ void BaseViewModel::show_pineapple_page() {
     model_.set_current_page(model::AppPage::WifiScan);
     publish_navigation();
     if (!wifi_scan_running_) start_wifi_scan();
+}
+void BaseViewModel::show_gps_tool(GpsTool tool) {
+    gps_log_.stop();
+    stop_wifi_capture();
+    gps_tool_ = tool;
+    wardrive_session_ = tool == GpsTool::Wardrive;
+    gps_tool_message_ = gps_id_.empty() ? "Enable a GPS receiver in Device > Radio setup" :
+                        tool == GpsTool::Info ? "Live receiver information" : "Enter to start recording";
+    gps_file_name_.clear();
+    gps_sample_tick_ = 0;
+    if (wardrive_session_) {
+        raw_session_ = false;
+        remote_session_ = false;
+        pineapple_session_ = false;
+        start_wifi_scan(true);
+        if (!wifi_scan_error_.empty()) gps_tool_message_ = wifi_scan_error_;
+    }
+    model_.set_current_page(model::AppPage::GpsTool);
+    publish_navigation();
+    gps_tool_generation_.set(gps_tool_generation_.value() + 1);
+}
+std::string BaseViewModel::gps_receiver_name() const {
+    for (const auto& radio : radio_list_.devices)
+        if (radio.kind == "GPS" && radio.id == gps_id_)
+            return radio.name + (radio.product.empty() ? "" : " / " + radio.product);
+    return gps_id_.empty() ? "No receiver" : "Selected receiver";
+}
+void BaseViewModel::toggle_gps_recording() {
+    if (gps_tool_ == GpsTool::Info) return;
+    if (gps_log_.active()) {
+        const auto count = gps_log_.count();
+        gps_log_.stop();
+        gps_tool_message_ = "Saved " + std::to_string(count) + " records";
+    } else if (gps_id_.empty()) {
+        gps_tool_message_ = "Enable a GPS receiver in Device > Radio setup";
+    } else if (gps_tool_ == GpsTool::Wardrive && !wifi_scan_running_) {
+        gps_tool_message_ = wifi_scan_error_.empty() ? "Monitor capture unavailable" : wifi_scan_error_;
+    } else if (gps_tool_ == GpsTool::Wardrive && !wifi_scan_error_.empty()) {
+        gps_tool_message_ = wifi_scan_error_;
+    } else {
+        std::string error;
+        if (gps_log_.start(gps_tool_ == GpsTool::Track ? platform::gps::LogKind::Track :
+                           platform::gps::LogKind::Wardrive, model_.reserve_mib(), error)) {
+            gps_file_name_ = gps_log_.path().filename().string();
+            gps_tool_message_ = "Recording; waiting for GPS fix";
+            gps_sample_tick_ = 0;
+        } else gps_tool_message_ = error;
+    }
+    gps_tool_generation_.set(gps_tool_generation_.value() + 1);
+}
+void BaseViewModel::update_gps_tool() {
+    if (model_.current_page() != model::AppPage::GpsTool) return;
+    const auto now = lv_tick_get();
+    if (gps_sample_tick_ && lv_tick_elaps(gps_sample_tick_) < 1000) return;
+    gps_sample_tick_ = now;
+    int32_t lat{}, lon{};
+    const bool fix = gps_session_.position(lat, lon);
+    if (gps_log_.active() && fix) {
+        bool written = true;
+        if (gps_tool_ == GpsTool::Track) {
+            if (gps_log_.count() == 0 || lat != gps_last_lat_ || lon != gps_last_lon_)
+                written = gps_log_.position(lat, lon);
+        }
+        gps_last_lat_ = lat;
+        gps_last_lon_ = lon;
+        gps_tool_message_ = written ? "Recording precise GPS coordinates" : "GPS file write failed";
+    } else if (gps_log_.active()) gps_tool_message_ = "Recording; waiting for GPS fix";
+    gps_tool_generation_.set(gps_tool_generation_.value() + 1);
 }
 void BaseViewModel::remote_move(int direction) {
     if (remote_view_ == 2) {
@@ -476,6 +553,9 @@ void BaseViewModel::marauder_menu_activate() {
         case model::MarauderMenuAction::OpenRemoteId:
             show_remote_id_page();
             break;
+        case Action::OpenGpsInfo: show_gps_tool(GpsTool::Info); break;
+        case Action::OpenWardrive: show_gps_tool(GpsTool::Wardrive); break;
+        case Action::OpenGpsTrack: show_gps_tool(GpsTool::Track); break;
         case model::MarauderMenuAction::OpenPineapple:
             show_pineapple_page();
             break;
@@ -933,7 +1013,7 @@ void BaseViewModel::advance_wifi_channel() {
     const bool pinned = pcap_capture_.active() && recording.scope != platform::pcap::Scope::All;
     const bool raw_browsing = raw_session_ && (wifi_view_ == 0 || wifi_view_ == 7 ||
                                                  wifi_view_ == 8 || wifi_view_ == 9);
-    const bool hopping = (remote_session_ && remote_view_ != 3) ||
+    const bool hopping = wardrive_session_ || (remote_session_ && remote_view_ != 3) ||
                          (!raw_session_ && !pineapple_session_ && wifi_view_ == 0) ||
                          (pineapple_session_ && wifi_view_ == 11) ||
                          (raw_browsing && raw_auto_hop_);
@@ -1325,6 +1405,7 @@ void BaseViewModel::wifi_scan_timer_cb(lv_timer_t* timer) {
         self->advance_wifi_channel();
         self->finish_radio_setting();
         self->update_gps_status();
+        self->update_gps_tool();
     }
 }
 
@@ -1403,6 +1484,13 @@ void BaseViewModel::finish_wifi_scan_if_ready() {
             ap->frequency_mhz = frame.frequency_mhz;
         }
         ap->channel = platform::wireless::channel_number(ap->frequency_mhz);
+        if (wardrive_session_ && gps_log_.active() && frame.beacon) {
+            int32_t lat{}, lon{};
+            if (gps_session_.position(lat, lon) &&
+                !gps_log_.access_point(ap->bssid, ap->ssid, ap->channel,
+                                       ap->has_rssi ? ap->rssi : 0, ap->security, lat, lon))
+                gps_tool_message_ = "GPS file write failed";
+        }
         if (frame.client.empty()) continue;
         auto client = std::find_if(ap->clients.begin(), ap->clients.end(), [&](const auto& item) { return item.mac == frame.client; });
         if (client == ap->clients.end()) {

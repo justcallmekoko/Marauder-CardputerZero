@@ -54,6 +54,8 @@ The menu text uses the classic 5×7 glyphs from the Cardputer firmware. Under **
 
 **Device → Radios and GPS → Radio setup** lists WiFi, Bluetooth and GPS devices. Browse with F/X, toggle the highlighted adapter with Enter, and refresh after connecting hardware with D. Marauder remembers confirmed WiFi and Bluetooth choices per adapter and reapplies them on launch or refresh. On exit, it releases GPS and restores the original radio block and Bluetooth power settings for connected adapters it changed. The WiFi picker remembers the selected hardware identity and only selects it when detected. It remembers the enabled GPS receiver and resumes reading it on launch. Disable GPS to forget the selection. Select a USB or Cap/Grove port to read it. Marauder listens through gpsd when it already manages that port. Otherwise it checks serial data for checksum-valid NMEA. Disable GPS or exit to release the reader, restore serial settings, and return connector power to its initial state.
 
+**GPS → GPS Info** shows the selected receiver, live fix and satellite status, and coordinates. **GPS → Track** records changed positions while a fix is available. **GPS → Wardrive** listens for beacon or probe-response APs through the selected monitor adapter, hops supported channels, and records each AP once at the location where it was observed with a valid GPS fix. Press Enter to start or stop either log; Esc stops and saves it. Files are CSV in `~/Documents/Marauder/gps`, with a UTC timestamp and precise coordinates. The display censor setting masks on-screen coordinates and filenames but does not alter saved GPS files. Wardrive does not upload observations.
+
 **Device → Accounts and uploads** stores a WiGLE API name and token and a WDGWars API key in separate owner-only files under the app configuration directory. Type a replacement and press Enter to save, or Esc to cancel. Del followed by Enter removes a saved field.
 
 Display and power offers System, 25%, 50%, 75%, and 100% brightness. Idle dimming defaults to Never. The first key wakes the screen and exiting restores the entry brightness.
@@ -112,7 +114,7 @@ cmake --build --preset linux-x86-64-dbg
 cmake --workflow --preset cp0-cross-package
 ```
 
-The expected artifact is `dist/Marauder_0.6.41_rev1_arm64.deb`. Packaging and deployment remain separate actions.
+The expected artifact is `dist/Marauder_0.6.42_rev1_arm64.deb`. Packaging and deployment remain separate actions.
 
 ## Safety and scope
 

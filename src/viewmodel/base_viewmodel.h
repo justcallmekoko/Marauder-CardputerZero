@@ -22,6 +22,7 @@
 #include "pineapple_wifi.h"
 #include "remote_id_wifi.h"
 #include "pcap_capture.h"
+#include "gps_log.h"
 
 #include <atomic>
 #include <array>
@@ -105,6 +106,17 @@ public:
     void show_raw_capture_page();
     void show_remote_id_page();
     void show_pineapple_page();
+    enum class GpsTool { Info, Wardrive, Track };
+    void show_gps_tool(GpsTool tool);
+    void toggle_gps_recording();
+    GpsTool gps_tool() const { return gps_tool_; }
+    bool gps_recording() const { return gps_log_.active(); }
+    std::size_t gps_record_count() const { return gps_log_.count(); }
+    const std::string& gps_tool_message() const { return gps_tool_message_; }
+    const std::string& gps_file_name() const { return gps_file_name_; }
+    const std::string& gps_receiver_id() const { return gps_id_; }
+    std::string gps_receiver_name() const;
+    lv_subject_t* gps_tool_subject() { return gps_tool_generation_.native(); }
     const auto& pineapple_items() const { return pineapple_items_; }
     std::size_t pineapple_cursor() const { return pineapple_cursor_; }
     std::size_t pineapple_action_cursor() const { return pineapple_action_cursor_; }
@@ -263,6 +275,14 @@ private:
     uint32_t monitor_status_tick_{};
     platform::GpsSession gps_session_;
     std::string gps_id_, radio_session_;
+    platform::gps::Log gps_log_;
+    GpsTool gps_tool_{GpsTool::Info};
+    bool wardrive_session_{};
+    std::string gps_tool_message_, gps_file_name_;
+    int32_t gps_last_lat_{}, gps_last_lon_{};
+    uint32_t gps_sample_tick_{};
+    reactive::IntSubject gps_tool_generation_{0};
+    void update_gps_tool();
     void finish_radio_setting();
     void load_radios(std::string key, bool enabled);
     std::future<platform::RadioInventory> radio_job_;

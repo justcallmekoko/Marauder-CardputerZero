@@ -51,9 +51,9 @@ const std::vector<Item>& items_for(Id menu) {
         {"General", Color::LightGrey, Action::None, Id::Main, false, false},
     };
     static const std::vector<Item> gps = {
-        {"GPS Info", Color::Red, Action::None, Id::Main, false, false},
-        {"Wardrive", Color::Green, Action::None, Id::Main, false, false},
-        {"Track", Color::Orange, Action::None, Id::Main, false, false},
+        {"GPS Info", Color::Red, Action::OpenGpsInfo, Id::Main, false, true},
+        {"Wardrive", Color::Green, Action::OpenWardrive, Id::Main, false, true, RadioRequirement::Monitor},
+        {"Track", Color::Orange, Action::OpenGpsTrack, Id::Main, false, true},
     };
     static const std::vector<Item> device = {
         {"Radios and GPS", Color::Cyan, Action::None, Id::Radios, true, true},

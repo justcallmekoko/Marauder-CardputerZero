@@ -21,6 +21,7 @@ enum class AppPage {
     Traffic,
     PcapFiles,
     RemoteId,
+    GpsTool,
 };
 
 std::string saved_gps_id();
