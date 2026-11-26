@@ -6,7 +6,7 @@
 
 cmake_minimum_required(VERSION 3.31)
 
-project(marauder_cardputerzero VERSION 0.6.37 LANGUAGES C CXX)
+project(marauder_cardputerzero VERSION 0.6.38 LANGUAGES C CXX)
 
 include(CTest)
 find_package(Threads REQUIRED)
@@ -624,6 +624,9 @@ target_link_libraries(${PROJECT_NAME}
 )
 
 if(BUILD_TESTING AND USE_DESKTOP)
+    add_executable(fox_hunt_test tests/fox_hunt_test.cpp src/model/fox_hunt.cpp)
+    target_include_directories(fox_hunt_test PRIVATE src/model)
+    add_test(NAME fox_hunt_test COMMAND fox_hunt_test)
     add_executable(pcap_capture_test tests/pcap_capture_test.cpp src/platform/pcap_capture.cpp
         src/platform/raw_wifi.cpp src/platform/wifi_security.cpp src/platform/remote_id_wifi.cpp
         src/platform/RemoteIdDecoder.cpp src/platform/RemoteIdModel.cpp)

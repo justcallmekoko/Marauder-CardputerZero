@@ -116,6 +116,7 @@ void RemoteIdScreen::build_content(lv_obj_t* content) {
     detail_ = label(content, 8, 18, 304, 11);
     lv_label_set_long_mode(detail_, LV_LABEL_LONG_WRAP);
     lv_obj_add_flag(detail_, LV_OBJ_FLAG_HIDDEN);
+    fox_panel_ = std::make_unique<view::widgets::FoxHuntPanel>(content, assets());
     reactive::observe_obj(content, view_model().inventory_subject(), [](lv_observer_t* observer, lv_subject_t*) {
         static_cast<RemoteIdScreen*>(lv_observer_get_user_data(observer))->render();
     }, this);
@@ -126,15 +127,64 @@ void RemoteIdScreen::render() {
     const auto colors = view::palette(vm.is_dark_mode());
     const auto total = vm.remote_count();
     const auto cursor = vm.remote_cursor();
-    const bool details = vm.remote_details() && cursor < total;
+    const auto mode = vm.remote_view();
+    const bool details = mode == 2 && cursor < total;
+    const bool operations = mode == 1 && cursor < total;
+    const bool fox = mode == 3 && cursor < total;
     int32_t origin_lat{}, origin_lon{};
     const bool have_gps = vm.remote_position(origin_lat, origin_lon);
     static constexpr const char* tabs[] = {"Aircraft / ID", "Aircraft / Position", "Aircraft / Operator"};
-    lv_label_set_text(title_, details ? tabs[vm.remote_detail_tab()] : "Remote ID map");
-    const auto count = std::to_string(total) + " seen  CH " +
+    lv_label_set_text(title_, fox ? "Fox hunt" : operations ? "Aircraft operations" :
+                      details ? tabs[vm.remote_detail_tab()] : "Remote ID map");
+    const auto count = fox ? std::to_string(vm.fox_hunt().frames()) + " frames" :
+        std::to_string(total) + " seen  CH " +
         std::to_string(platform::wireless::channel_number(vm.wifi_tuned_frequency()));
     lv_label_set_text(count_, count.c_str());
     lv_obj_set_style_text_color(count_, colors.success, 0);
+    fox_panel_->show(fox);
+    if (fox) {
+        lv_obj_add_flag(map_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(empty_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(detail_, LV_OBJ_FLAG_HIDDEN);
+        for (auto& row : rows_) lv_obj_add_flag(row.box, LV_OBJ_FLAG_HIDDEN);
+        fox_panel_->render(vm.fox_hunt(), vm.fox_label(), vm.fox_vendor(),
+                           lv_color_hex(0xD1A8BE), vm.is_dark_mode(),
+                           vm.wifi_tuned_frequency() == vm.fox_hunt().frequency_mhz());
+        set_key_guide("Esc Operations  P PCAP");
+        return;
+    }
+    if (operations) {
+        lv_obj_add_flag(map_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(detail_, LV_OBJ_FLAG_HIDDEN);
+        for (std::size_t i = 0; i < rows_.size(); ++i) {
+            auto& row = rows_[i];
+            if (i >= 2) { lv_obj_add_flag(row.box, LV_OBJ_FLAG_HIDDEN); continue; }
+            lv_obj_remove_flag(row.box, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_pos(row.box, 8, 22 + static_cast<int>(i) * 42);
+            lv_obj_set_size(row.box, 304, 38);
+            lv_obj_set_style_bg_color(row.box, i == vm.remote_operation_cursor() ? colors.button : colors.surface, 0);
+            lv_obj_set_style_border_color(row.box, i == vm.remote_operation_cursor() ? colors.warning : colors.border, 0);
+            lv_obj_set_width(row.name, 290);
+            lv_obj_set_width(row.meta, 290);
+            lv_obj_set_y(row.name, 5);
+            lv_obj_set_y(row.meta, 21);
+            lv_label_set_text(row.name, i ? "Fox hunt" : "Information");
+            lv_label_set_text(row.meta, i ? "Live signal on the aircraft channel" : "Identity, position, operator");
+            lv_obj_set_style_text_color(row.name, colors.text, 0);
+            lv_obj_set_style_text_color(row.meta, colors.text_disabled, 0);
+        }
+        lv_obj_set_pos(empty_, 8, 106);
+        lv_obj_set_width(empty_, 304);
+        lv_label_set_text(empty_, vm.remote_message().c_str());
+        if (vm.remote_message().empty()) lv_obj_add_flag(empty_, LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_remove_flag(empty_, LV_OBJ_FLAG_HIDDEN);
+        set_key_guide("F/X Browse  Enter Open  Esc Map");
+        return;
+    }
+    lv_obj_set_pos(empty_, 126, 56);
+    lv_obj_set_width(empty_, 176);
+    lv_label_set_text(empty_, "Listening for aircraft...");
+    lv_obj_set_pos(detail_, 8, 18);
     if (details) lv_obj_add_flag(map_, LV_OBJ_FLAG_HIDDEN);
     else lv_obj_remove_flag(map_, LV_OBJ_FLAG_HIDDEN);
     if (details || total) lv_obj_add_flag(empty_, LV_OBJ_FLAG_HIDDEN);
@@ -176,7 +226,7 @@ void RemoteIdScreen::render() {
                 (aircraft->transportMask & static_cast<uint8_t>(RemoteIdTransport::WifiNan) ? "NAN" : "Beacon");
         }
         lv_label_set_text(detail_, text.c_str());
-        set_key_guide("F/X Details  Esc Map");
+        set_key_guide("F/X Details  Esc Actions");
         return;
     }
     lv_obj_add_flag(detail_, LV_OBJ_FLAG_HIDDEN);
@@ -228,6 +278,12 @@ void RemoteIdScreen::render() {
         const auto index = first_ + i;
         if (index >= total) { lv_obj_add_flag(row.box, LV_OBJ_FLAG_HIDDEN); continue; }
         lv_obj_remove_flag(row.box, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_pos(row.box, 114, 18 + static_cast<int>(i) * 26);
+        lv_obj_set_size(row.box, 201, 24);
+        lv_obj_set_width(row.name, 188);
+        lv_obj_set_width(row.meta, 188);
+        lv_obj_set_y(row.name, 1);
+        lv_obj_set_y(row.meta, 13);
         const auto* aircraft = vm.remote_record(index);
         const bool selected = index == cursor;
         lv_obj_set_style_bg_color(row.box, selected ? colors.button : colors.surface, 0);
@@ -246,6 +302,6 @@ void RemoteIdScreen::render() {
         lv_label_set_text(row.meta, meta.c_str());
         lv_obj_set_style_text_color(row.meta, colors.text_disabled, 0);
     }
-    set_key_guide("F/X Select  Enter Info  Esc Back");
+    set_key_guide("F/X Select  Enter Actions  Esc Back");
 }
 }

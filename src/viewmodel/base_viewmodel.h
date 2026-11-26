@@ -6,6 +6,7 @@
 #pragma once
 
 #include "base_model.h"
+#include "fox_hunt.h"
 #include "marauder_menu.h"
 #include "system_info_model.h"
 #include "system_diagnostics.h"
@@ -34,6 +35,7 @@ namespace viewmodel {
 
 class BaseViewModel {
 public:
+    enum class FoxTarget { None, AccessPoint, Station, Aircraft };
     BaseViewModel();
     ~BaseViewModel();
 
@@ -83,12 +85,19 @@ public:
     std::size_t remote_count() const { return remote_store_.size(); }
     const RemoteIdRecord* remote_record(std::size_t index) const { return remote_store_.at(index); }
     std::size_t remote_cursor() const { return remote_cursor_; }
-    bool remote_details() const { return remote_details_; }
+    bool remote_details() const { return remote_view_ != 0; }
+    int remote_view() const { return remote_view_; }
+    std::size_t remote_operation_cursor() const { return remote_operation_cursor_; }
+    const std::string& remote_message() const { return remote_message_; }
     unsigned remote_detail_tab() const { return remote_detail_tab_; }
     bool remote_position(int32_t& lat_e7, int32_t& lon_e7) const { return gps_session_.position(lat_e7, lon_e7); }
     void remote_move(int direction);
     void remote_open_details();
     void remote_back();
+    const model::FoxHunt& fox_hunt() const { return fox_hunt_; }
+    FoxTarget fox_target() const { return fox_target_; }
+    const std::string& fox_label() const { return fox_label_; }
+    const std::string& fox_vendor() const { return fox_vendor_; }
     const auto& wifi_items() const { return wifi_networks_; }
     size_t wifi_cursor() const { return wifi_scan_detail_index_; }
     const auto& wifi_error() const { return wifi_scan_error_; }
@@ -206,6 +215,8 @@ private:
     void publish_remote();
     void finish_remote_observations(std::vector<platform::remote_id::Packet>& incoming);
     void finish_wifi_scan_if_ready();
+    bool begin_wifi_fox_hunt(bool station);
+    void begin_remote_fox_hunt();
     void stop_wifi_capture();
     std::string start_pcap_capture(platform::pcap::Filter filter);
     void advance_wifi_channel();
@@ -289,8 +300,14 @@ private:
     std::array<RemoteIdRecord, 32> remote_storage_{};
     RemoteIdStore remote_store_{remote_storage_.data(), remote_storage_.size()};
     std::size_t remote_cursor_{};
-    bool remote_details_{};
+    int remote_view_{}; // 0 map, 1 operations, 2 information, 3 fox hunt
+    std::size_t remote_operation_cursor_{};
+    std::string remote_message_;
     unsigned remote_detail_tab_{};
+    model::FoxHunt fox_hunt_;
+    FoxTarget fox_target_{FoxTarget::None};
+    std::string fox_label_, fox_vendor_;
+    uint32_t fox_ui_tick_{};
     bool station_from_global_{};
     std::vector<std::pair<size_t, size_t>> station_refs_;
     size_t station_cursor_{};

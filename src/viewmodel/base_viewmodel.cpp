@@ -60,6 +60,12 @@ std::pair<std::string,std::string> active_wifi_profile() {
 }
 
 int page_to_int(model::AppPage page) { return static_cast<int>(page); }
+std::string mac_text(const uint8_t mac[6]) {
+    char text[18];
+    std::snprintf(text, sizeof(text), "%02X:%02X:%02X:%02X:%02X:%02X",
+                  mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    return text;
+}
 void merge_remote_record(RemoteIdRecord& target, const RemoteIdRecord& source) {
     if (source.hasUasId && remoteIdShouldReplaceBasicId(target.idType, target.hasUasId, source.idType)) {
         std::memcpy(target.uasId, source.uasId, sizeof(target.uasId));
@@ -185,22 +191,62 @@ void BaseViewModel::show_raw_capture_page() {
 void BaseViewModel::show_remote_id_page() {
     remote_session_ = true;
     raw_session_ = false;
+    remote_view_ = 0;
+    remote_message_.clear();
     model_.set_current_page(model::AppPage::RemoteId);
     publish_navigation();
     if (!wifi_scan_running_) start_wifi_scan();
 }
 void BaseViewModel::remote_move(int direction) {
-    if (remote_details_) {
+    if (remote_view_ == 2) {
         if (direction < 0) remote_detail_tab_ = (remote_detail_tab_ + 2) % 3;
         else if (direction > 0) remote_detail_tab_ = (remote_detail_tab_ + 1) % 3;
-    } else if (direction < 0 && remote_cursor_) --remote_cursor_;
-    else if (direction > 0 && remote_cursor_ + 1 < remote_store_.size()) ++remote_cursor_;
+    } else if (remote_view_ == 1) {
+        if (direction < 0) remote_operation_cursor_ = 0;
+        else if (direction > 0) remote_operation_cursor_ = 1;
+    } else if (remote_view_ == 0) {
+        if (direction < 0 && remote_cursor_) --remote_cursor_;
+        else if (direction > 0 && remote_cursor_ + 1 < remote_store_.size()) ++remote_cursor_;
+    }
     publish_remote();
 }
 void BaseViewModel::remote_open_details() {
-    if (remote_cursor_ < remote_store_.size()) { remote_details_ = true; remote_detail_tab_ = 0; publish_remote(); }
+    if (remote_cursor_ >= remote_store_.size()) return;
+    if (remote_view_ == 0) { remote_view_ = 1; remote_operation_cursor_ = 0; }
+    else if (remote_view_ == 1) {
+        if (remote_operation_cursor_ == 0) { remote_view_ = 2; remote_detail_tab_ = 0; }
+        else begin_remote_fox_hunt();
+    }
+    publish_remote();
 }
-void BaseViewModel::remote_back() { remote_details_ = false; publish_remote(); }
+void BaseViewModel::remote_back() {
+    if (remote_view_ == 3) { fox_hunt_.reset(); fox_target_ = FoxTarget::None; wifi_hop_tick_ = 0; }
+    remote_view_ = remote_view_ == 1 ? 0 : 1;
+    remote_message_.clear();
+    publish_remote();
+}
+void BaseViewModel::begin_remote_fox_hunt() {
+    const auto* aircraft = remote_store_.at(remote_cursor_);
+    if (!aircraft) return;
+    if (!wifi_scan_running_) { remote_message_ = "Monitor capture unavailable"; return; }
+    const auto found = std::find_if(wifi_frequencies_.begin(), wifi_frequencies_.end(), [&](unsigned mhz) {
+        return platform::wireless::channel_number(static_cast<int>(mhz)) == aircraft->lastWifiChannel;
+    });
+    if (found == wifi_frequencies_.end()) { remote_message_ = "Aircraft channel unavailable"; return; }
+    if (pcap_pinned_frequency() && pcap_pinned_frequency() != *found) {
+        remote_message_ = "Stop target PCAP to change channel"; return;
+    }
+    fox_hunt_.begin(mac_text(aircraft->mac), *found);
+    fox_target_ = FoxTarget::Aircraft;
+    fox_label_ = aircraft->hasUasId ? aircraft->uasId : "Remote ID aircraft";
+    fox_vendor_ = "Wi-Fi Remote ID";
+    remote_view_ = 3;
+    remote_message_.clear();
+    wifi_hop_tick_ = 0;
+    wifi_tune_failed_frequency_ = 0;
+    fox_ui_tick_ = lv_tick_get();
+    advance_wifi_channel();
+}
 void BaseViewModel::show_pcap_files_page() {
     stop_wifi_capture();
     refresh_pcap_files();
@@ -700,7 +746,7 @@ void BaseViewModel::toggle_adapter_details() {
 
 void BaseViewModel::start_wifi_scan(bool clear_results) {
     stop_wifi_capture();
-    if (remote_session_) { remote_details_ = false; remote_detail_tab_ = 0; }
+    if (remote_session_) { remote_view_ = 0; remote_detail_tab_ = 0; }
     const auto selected = std::find_if(adapters_.begin(), adapters_.end(), [&](const auto& adapter) {
         return adapter.stable_id == model_.selected_adapter_id();
     });
@@ -822,6 +868,8 @@ void BaseViewModel::stop_wifi_capture() {
         remote.swap(incoming_remote_);
     }
     if (!remote.empty()) finish_remote_observations(remote);
+    fox_hunt_.reset();
+    fox_target_ = FoxTarget::None;
 }
 
 void BaseViewModel::advance_wifi_channel() {
@@ -841,7 +889,7 @@ void BaseViewModel::advance_wifi_channel() {
     const bool pinned = pcap_capture_.active() && recording.scope != platform::pcap::Scope::All;
     const bool raw_browsing = raw_session_ && (wifi_view_ == 0 || wifi_view_ == 7 ||
                                                  wifi_view_ == 8 || wifi_view_ == 9);
-    const bool hopping = remote_session_ || (!raw_session_ && wifi_view_ == 0) ||
+    const bool hopping = (remote_session_ && remote_view_ != 3) || (!raw_session_ && wifi_view_ == 0) ||
                          (raw_browsing && raw_auto_hop_);
     if (!pinned && wifi_hop_tick_ && lv_tick_elaps(wifi_hop_tick_) < 650 && hopping) return;
     unsigned requested{};
@@ -850,6 +898,8 @@ void BaseViewModel::advance_wifi_channel() {
     } else if (hopping) {
         wifi_hop_index_ = wifi_hop_tick_ ? (wifi_hop_index_ + 1) % wifi_frequencies_.size() : 0;
         requested = wifi_frequencies_[wifi_hop_index_];
+    } else if (remote_session_ && remote_view_ == 3) {
+        requested = fox_hunt_.frequency_mhz();
     } else if (raw_browsing) {
         requested = wifi_frequencies_[raw_channel_index_];
     } else if (wifi_scan_detail_index_ < wifi_networks_.size()) {
@@ -865,6 +915,7 @@ void BaseViewModel::advance_wifi_channel() {
 }
 
 void BaseViewModel::previous_wifi_scan_page() {
+    if (wifi_view_ == 10) return;
     if (wifi_view_ == 9) { if (raw_filter_cursor_) --raw_filter_cursor_; publish_wifi_scan(); return; }
     if (wifi_view_ == 8) { if (station_cursor_) --station_cursor_; publish_wifi_scan(); return; }
     if (wifi_view_ == 7) { if (raw_feed_offset_ + 1 < raw_feed_frames_.size()) ++raw_feed_offset_; publish_wifi_scan(); return; }
@@ -876,12 +927,13 @@ void BaseViewModel::previous_wifi_scan_page() {
 }
 
 void BaseViewModel::next_wifi_scan_page() {
+    if (wifi_view_ == 10) return;
     if (wifi_view_ == 9) { if (raw_filter_cursor_ < static_cast<size_t>(platform::wireless::FrameKind::Count)) ++raw_filter_cursor_; publish_wifi_scan(); return; }
     if (wifi_view_ == 8) { if (station_cursor_ + 1 < station_refs_.size()) ++station_cursor_; publish_wifi_scan(); return; }
     if (wifi_view_ == 7) { if (raw_feed_offset_) --raw_feed_offset_; publish_wifi_scan(); return; }
     if (wifi_view_ == 6) { if (wifi_feed_offset_) --wifi_feed_offset_; publish_wifi_scan(); return; }
     if (wifi_view_ == 4 || wifi_view_ == 5) {
-        if (wifi_operation_index_ + 1 < (wifi_view_ == 4 ? 4u : 3u)) ++wifi_operation_index_;
+        if (wifi_operation_index_ + 1 < (wifi_view_ == 4 ? 5u : 4u)) ++wifi_operation_index_;
         publish_wifi_scan(); return;
     }
     auto& index = wifi_view_ == 2 || wifi_view_ == 3 ? wifi_client_index_ : wifi_scan_detail_index_;
@@ -900,6 +952,7 @@ void BaseViewModel::toggle_wifi_scan_details() {
         publish_wifi_scan(); return;
     }
     if (wifi_view_ == 7) { wifi_view_ = 0; wifi_scan_details_expanded_ = true; publish_wifi_scan(); return; }
+    if (wifi_view_ == 10) return;
     if (wifi_view_ == 8) {
         if (station_cursor_ >= station_refs_.size()) return;
         wifi_scan_detail_index_ = station_refs_[station_cursor_].first;
@@ -930,6 +983,7 @@ void BaseViewModel::toggle_wifi_scan_details() {
             wifi_feed_station_ = false; wifi_feed_frames_.clear(); wifi_feed_count_ = 0; wifi_feed_offset_ = 0;
             wifi_view_ = 6;
         }
+        else if (wifi_operation_index_ == 4) begin_wifi_fox_hunt(false);
     } else if (wifi_view_ == 2 && !wifi_networks_[wifi_scan_detail_index_].clients.empty()) {
         station_from_global_ = false;
         wifi_view_ = 5; wifi_operation_index_ = 0;
@@ -952,6 +1006,7 @@ void BaseViewModel::toggle_wifi_scan_details() {
             wifi_feed_station_ = true; wifi_feed_frames_.clear(); wifi_feed_count_ = 0; wifi_feed_offset_ = 0;
             wifi_view_ = 6;
         }
+        else if (wifi_operation_index_ == 3) begin_wifi_fox_hunt(true);
     }
     wifi_hop_tick_ = 0;
     wifi_tune_failed_frequency_ = 0;
@@ -961,6 +1016,13 @@ void BaseViewModel::toggle_wifi_scan_details() {
 
 void BaseViewModel::wifi_back() {
     if (wifi_view_ == 7) { show_dashboard_page(); return; }
+    if (wifi_view_ == 10) {
+        fox_hunt_.reset(); fox_target_ = FoxTarget::None;
+        wifi_view_ = wifi_feed_station_ ? 5 : 4;
+        wifi_scan_details_expanded_ = true;
+        publish_wifi_scan();
+        return;
+    }
     if (wifi_view_ == 9 || wifi_view_ == 8 || (raw_session_ && wifi_view_ == 0)) wifi_view_ = 7;
     else
     if (wifi_view_ == 6) wifi_view_ = wifi_feed_station_ ? 5 : 4;
@@ -971,6 +1033,34 @@ void BaseViewModel::wifi_back() {
     if (wifi_view_ == 0) wifi_info_tab_ = 0;
     wifi_scan_details_expanded_ = wifi_view_ != 0;
     publish_wifi_scan();
+}
+bool BaseViewModel::begin_wifi_fox_hunt(bool station) {
+    if (wifi_scan_detail_index_ >= wifi_networks_.size()) return false;
+    if (!wifi_scan_running_) { wifi_scan_error_ = "Monitor capture unavailable"; return false; }
+    const auto& ap = wifi_networks_[wifi_scan_detail_index_];
+    if (station && wifi_client_index_ >= ap.clients.size()) return false;
+    const auto mhz = static_cast<unsigned>(ap.frequency_mhz);
+    if (!mhz || std::find(wifi_frequencies_.begin(), wifi_frequencies_.end(), mhz) == wifi_frequencies_.end()) {
+        wifi_scan_error_ = "AP channel not available";
+        return false;
+    }
+    if (pcap_pinned_frequency() && pcap_pinned_frequency() != mhz) {
+        wifi_scan_error_ = "Stop target PCAP to change channel";
+        return false;
+    }
+    const auto& client = station ? ap.clients[wifi_client_index_] : platform::wireless::WifiNetwork::Client{};
+    fox_hunt_.begin(station ? client.mac : ap.bssid, mhz);
+    fox_target_ = station ? FoxTarget::Station : FoxTarget::AccessPoint;
+    fox_label_ = station ? client.mac : ap.ssid;
+    fox_vendor_ = station ? client.vendor : ap.vendor;
+    wifi_feed_station_ = station;
+    wifi_view_ = 10;
+    wifi_scan_error_.clear();
+    wifi_hop_tick_ = 0;
+    wifi_tune_failed_frequency_ = 0;
+    fox_ui_tick_ = lv_tick_get();
+    advance_wifi_channel();
+    return true;
 }
 void BaseViewModel::toggle_list_builder() {
     if (!wifi_scan_running_) return;
@@ -1131,9 +1221,18 @@ void BaseViewModel::finish_wifi_scan_if_ready() {
         summaries.swap(incoming_summaries_);
         remote.swap(incoming_remote_);
     }
+    const auto now = lv_tick_get();
+    if ((fox_target_ == FoxTarget::AccessPoint || fox_target_ == FoxTarget::Station) &&
+        wifi_tuned_frequency_ == fox_hunt_.frequency_mhz()) {
+        for (const auto& frame : summaries)
+            fox_hunt_.observe(frame.sender, static_cast<unsigned>(frame.frequency_mhz),
+                              frame.rssi, frame.has_rssi, now);
+    }
     if (raw_session_ || remote_session_) finish_remote_observations(remote);
-    if (remote_session_) return;
-    if (incoming.empty() && summaries.empty()) return;
+    const bool fox_refresh = fox_hunt_.active() && lv_tick_elaps(fox_ui_tick_) >= 500;
+    if (fox_refresh) fox_ui_tick_ = now;
+    if (remote_session_) { if (fox_refresh) publish_remote(); return; }
+    if (incoming.empty() && summaries.empty()) { if (fox_refresh) publish_wifi_scan(); return; }
     if (raw_session_) {
         for (const auto& frame : summaries) {
             if (raw_filter_mask_ && !(raw_filter_mask_ & platform::wireless::frame_kind_bit(frame.kind))) continue;
@@ -1200,6 +1299,9 @@ void BaseViewModel::finish_remote_observations(std::vector<platform::remote_id::
     bool changed = false;
     for (const auto& packet : incoming) {
         const auto& decoded = packet.record;
+        if (fox_target_ == FoxTarget::Aircraft && wifi_tuned_frequency_ == fox_hunt_.frequency_mhz())
+            fox_hunt_.observe(mac_text(decoded.mac), static_cast<unsigned>(packet.frequency_mhz),
+                              packet.rssi, packet.has_rssi, now);
         auto* record = remote_store_.findByMac(decoded.mac);
         if (!record && decoded.hasUasId) record = remote_store_.findByUasId(decoded.uasId);
         if (!record) record = &remote_store_.observe(decoded.mac, packet.transport,

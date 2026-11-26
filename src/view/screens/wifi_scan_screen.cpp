@@ -64,6 +64,7 @@ void WifiScanScreen::build_content(lv_obj_t* content) {
         row.detail = label(row.box, 7, 13, 296, 9);
         lv_obj_add_flag(row.detail, LV_OBJ_FLAG_HIDDEN);
     }
+    fox_panel_ = std::make_unique<view::widgets::FoxHuntPanel>(content, assets());
     reactive::observe_obj(content, view_model().inventory_subject(), [](lv_observer_t* o, lv_subject_t*) {
         static_cast<WifiScanScreen*>(lv_observer_get_user_data(o))->render();
     }, this);
@@ -78,19 +79,20 @@ void WifiScanScreen::render() {
     const auto* clients = cursor < items.size() ? &items[cursor].clients : nullptr;
     const bool client_list = mode == 2 && clients;
     const bool operations = mode == 4 || mode == 5;
+    const bool fox = mode == 10;
     const bool raw_feed = mode == 7;
     const bool feed = mode == 6 || raw_feed;
     const bool station_list = mode == 8;
     const bool filter_list = mode == 9;
     const auto selected = filter_list ? vm.raw_filter_cursor() : station_list ? vm.station_cursor() :
         operations ? vm.wifi_operation_cursor() : client_list || mode == 3 ? vm.wifi_client_cursor() : cursor;
-    const auto total = operations ? (mode == 4 ? size_t{4} : size_t{3}) :
+    const auto total = operations ? (mode == 4 ? size_t{5} : size_t{4}) :
         filter_list ? static_cast<size_t>(platform::wireless::FrameKind::Count) + 1 :
         station_list ? vm.station_refs().size() :
         (client_list || mode == 3) && clients ? clients->size() : items.size();
     const auto colors = view::palette(vm.is_dark_mode());
     auto accent = colors.success;
-    lv_label_set_text(title_, raw_feed ? "Raw frames" : filter_list ? "Frame filters" : station_list ? "Stations" :
+    lv_label_set_text(title_, fox ? "Fox hunt" : raw_feed ? "Raw frames" : filter_list ? "Frame filters" : station_list ? "Stations" :
                       feed ? (vm.wifi_feed_station() ? "Station traffic" : "AP traffic") :
                       mode == 5 ? "Station operations" : mode == 4 ? "AP operations" :
                       mode == 3 ? "Client info" : client_list ? "Observed clients" :
@@ -98,14 +100,15 @@ void WifiScanScreen::render() {
                                 vm.wifi_info_tab() == 2 ? "AP encryption" : "Access point info" :
                       "Access points");
     lv_obj_set_style_text_color(title_, colors.text, 0);
-    const bool show_channel = mode == 0 || raw_feed || station_list || filter_list;
+    const bool show_channel = mode == 0 || raw_feed || station_list || filter_list || fox;
     lv_obj_set_width(title_, show_channel ? 112 : 158);
     lv_label_set_text(channel_, show_channel ?
         (vm.wifi_tuned_frequency() ? ("CH " + std::to_string(platform::wireless::channel_number(vm.wifi_tuned_frequency()))).c_str() : "CH --") : "");
     lv_obj_set_style_text_color(channel_, colors.info, 0);
-    lv_label_set_text(builder_, vm.scanning() ? (vm.list_builder_active() ? "BUILD" : "B OFF") : "");
+    lv_label_set_text(builder_, vm.scanning() && !fox ? (vm.list_builder_active() ? "BUILD" : "B OFF") : "");
     lv_obj_set_style_text_color(builder_, vm.list_builder_active() ? colors.success : colors.text_disabled, 0);
-    const auto count = raw_feed ? std::to_string(vm.raw_displayed_count()) + "/" +
+    const auto count = fox ? std::to_string(vm.fox_hunt().frames()) + " frames" :
+        raw_feed ? std::to_string(vm.raw_displayed_count()) + "/" +
                                     std::to_string(vm.raw_feed_count()) :
         mode == 6 ? std::to_string(vm.wifi_feed_count()) + " frames" :
         !vm.wifi_error().empty() ? "Needs attention" :
@@ -113,6 +116,17 @@ void WifiScanScreen::render() {
         std::to_string(selected + 1) + " / " + std::to_string(total);
     lv_label_set_text(count_, count.c_str());
     lv_obj_set_style_text_color(count_, accent, 0);
+    fox_panel_->show(fox);
+    if (fox) {
+        for (auto& row : rows_) lv_obj_add_flag(row.box, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(message_, LV_OBJ_FLAG_HIDDEN);
+        const auto signal_color = vm.fox_target() == viewmodel::BaseViewModel::FoxTarget::Station ? colors.info : colors.success;
+        fox_panel_->render(vm.fox_hunt(), vm.fox_label(), vm.fox_vendor(), signal_color,
+                           vm.is_dark_mode(), vm.wifi_tuned_frequency() == vm.fox_hunt().frequency_mhz());
+        set_key_guide("Esc Operations  P PCAP");
+        return;
+    }
+    lv_obj_remove_flag(message_, LV_OBJ_FLAG_HIDDEN);
     if (mode != last_mode_) { first_ = 0; last_mode_ = mode; }
     if (!feed) {
         if (selected < first_) first_ = selected;
@@ -163,6 +177,7 @@ void WifiScanScreen::render() {
         lv_obj_set_y(row.name, 3);
         lv_obj_set_y(row.metric, 4);
         const bool record = operations && index == (mode == 4 ? 3u : 2u);
+        const bool hunt_action = operations && index == (mode == 4 ? 4u : 3u);
         const auto scope = mode == 4 ? platform::pcap::Scope::AccessPoint : platform::pcap::Scope::Station;
         const std::string target = mode == 4 ? items[cursor].bssid :
             clients && vm.wifi_client_cursor() < clients->size() ? (*clients)[vm.wifi_client_cursor()].mac : "";
@@ -182,7 +197,7 @@ void WifiScanScreen::render() {
         }
         const std::string name = filter_list ? (index ? platform::wireless::frame_kind_label(kind) : "All frames") :
             station_list ? station_client.mac : operations ?
-            (record ? recording_target ? (mode == 4 ? "Stop AP recording" : "Stop station recording") :
+            (hunt_action ? "Fox hunt" : record ? recording_target ? (mode == 4 ? "Stop AP recording" : "Stop station recording") :
                                        (mode == 4 ? "Record this AP" : "Record this station") :
              mode == 4 ? (index == 0 ? "Information" : index == 1 ? "Observed clients" : "Traffic filter") :
                          (index == 0 ? "Information" : "Traffic filter")) :
@@ -193,7 +208,7 @@ void WifiScanScreen::render() {
                                               (vm.raw_filter_mask() ? "OFF" : "ON")) :
             station_list ? std::to_string(station_client.frames) + " fr  " +
                 (station_client.has_rssi ? std::to_string(station_client.rssi) + "dBm" : "RSSI ?") :
-            operations ? (record ? recording_target ? "REC" : vm.pcap_active() ? "BUSY" : "START" :
+            operations ? (hunt_action ? "SIGNAL" : record ? recording_target ? "REC" : vm.pcap_active() ? "BUSY" : "START" :
                                            name == "Traffic filter" ? "LIVE" : "VIEW") : client_list ?
             std::to_string((*clients)[index].frames) + " fr  " +
                 ((*clients)[index].has_rssi ? std::to_string((*clients)[index].rssi) + "dBm" : "RSSI ?") :

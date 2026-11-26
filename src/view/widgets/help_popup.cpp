@@ -56,7 +56,7 @@ constexpr std::array<HelpRow, 5> kAdapterRows = {{
 constexpr std::array<HelpRow, 5> kWifiScanRows = {{
     {"Z / ESC", "Back to originating menu"},
     {"F / X", "Previous / next result"},
-    {"C / ENTER", "Open operations / selection"},
+    {"C / ENTER", "Open AP, station, or Fox hunt"},
     {"D", "Restart / AP security pages"},
     {"HELP", "Context help"},
 }};
@@ -68,9 +68,9 @@ constexpr std::array<HelpRow, 5> kRawCaptureRows = {{
     {"ENTER", "Show observed access points"},
 }};
 constexpr std::array<HelpRow, 5> kRemoteIdRows = {{
-    {"F / X", "Select aircraft or detail page"},
-    {"ENTER", "Open aircraft information"},
-    {"ESC", "Map / back to Activity"},
+    {"F / X", "Select aircraft, action, or tab"},
+    {"ENTER", "Open aircraft actions"},
+    {"ESC", "Back to actions or map"},
     {"P", "Start / stop PCAP"},
     {"HELP", "Close help"},
 }};
