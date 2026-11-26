@@ -279,7 +279,6 @@ private:
     GpsTool gps_tool_{GpsTool::Info};
     bool wardrive_session_{};
     std::string gps_tool_message_, gps_file_name_;
-    int32_t gps_last_lat_{}, gps_last_lon_{};
     uint32_t gps_sample_tick_{};
     reactive::IntSubject gps_tool_generation_{0};
     void update_gps_tool();

@@ -57,6 +57,9 @@ bool Log::start(LogKind kind, unsigned reserve_mib, std::string& error) {
     if (ec || std::filesystem::exists(path_)) { error = "Cannot name GPS file"; return false; }
     file_.open(path_, std::ios::out | std::ios::trunc);
     if (!file_) { error = "Cannot open GPS file"; return false; }
+    std::filesystem::permissions(path_, std::filesystem::perms::owner_read |
+        std::filesystem::perms::owner_write, std::filesystem::perm_options::replace, ec);
+    if (ec) { stop(); std::filesystem::remove(path_); error = "Cannot protect GPS file"; return false; }
     file_ << (kind == LogKind::Track ? "utc,latitude,longitude\n" :
              "utc,bssid,ssid,channel,rssi_dbm,security,latitude,longitude\n");
     file_.flush();
@@ -90,7 +93,9 @@ bool Log::access_point(const std::string& bssid, const std::string& ssid,
     if (!active() || kind_ != LogKind::Wardrive || bssid.empty()) return false;
     if (!seen_.insert(bssid).second) return true;
     file_ << timestamp("%Y-%m-%dT%H:%M:%SZ") << ',' << quote(bssid) << ',' << quote(ssid)
-          << ',' << channel << ',' << rssi << ',' << quote(security) << ',';
+          << ',' << channel << ',';
+    if (rssi > -128) file_ << rssi;
+    file_ << ',' << quote(security) << ',';
     return write_position(latitude_e7, longitude_e7);
 }
 void Log::stop() {

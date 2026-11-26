@@ -277,12 +277,7 @@ void BaseViewModel::update_gps_tool() {
     const bool fix = gps_session_.position(lat, lon);
     if (gps_log_.active() && fix) {
         bool written = true;
-        if (gps_tool_ == GpsTool::Track) {
-            if (gps_log_.count() == 0 || lat != gps_last_lat_ || lon != gps_last_lon_)
-                written = gps_log_.position(lat, lon);
-        }
-        gps_last_lat_ = lat;
-        gps_last_lon_ = lon;
+        if (gps_tool_ == GpsTool::Track) written = gps_log_.position(lat, lon);
         gps_tool_message_ = written ? "Recording precise GPS coordinates" : "GPS file write failed";
     } else if (gps_log_.active()) gps_tool_message_ = "Recording; waiting for GPS fix";
     gps_tool_generation_.set(gps_tool_generation_.value() + 1);
@@ -1488,7 +1483,7 @@ void BaseViewModel::finish_wifi_scan_if_ready() {
             int32_t lat{}, lon{};
             if (gps_session_.position(lat, lon) &&
                 !gps_log_.access_point(ap->bssid, ap->ssid, ap->channel,
-                                       ap->has_rssi ? ap->rssi : 0, ap->security, lat, lon))
+                                       ap->has_rssi ? ap->rssi : -128, ap->security, lat, lon))
                 gps_tool_message_ = "GPS file write failed";
         }
         if (frame.client.empty()) continue;
