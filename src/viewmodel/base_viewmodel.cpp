@@ -1203,6 +1203,15 @@ void BaseViewModel::wifi_scan_timer_cb(lv_timer_t* timer) {
         if (self->wifi_capture_failed_.exchange(false)) {
             self->stop_wifi_capture();
             self->wifi_scan_error_ = "Monitor capture stopped";
+            if (self->wifi_view_ == 10) {
+                self->wifi_view_ = self->wifi_feed_station_ ? 5 : 4;
+                self->wifi_scan_details_expanded_ = true;
+            }
+            if (self->remote_view_ == 3) {
+                self->remote_view_ = 1;
+                self->remote_message_ = "Monitor capture stopped";
+                self->publish_remote();
+            }
             self->publish_wifi_scan();
         }
         self->advance_wifi_channel();
