@@ -133,6 +133,7 @@ BaseViewModel::BaseViewModel()
 }
 
 BaseViewModel::~BaseViewModel() {
+    bluetooth_session_.stop();
     gps_log_.stop();
     pcap_capture_.stop();
     if (changed_light_) set_light(original_light_);
@@ -160,6 +161,7 @@ lv_subject_t* BaseViewModel::quit_requested_subject() { return quit_requested_su
 bool BaseViewModel::is_dark_mode() const { return model_.dark_mode(); }
 model::AppPage BaseViewModel::current_page() const { return model_.current_page(); }
 void BaseViewModel::show_dashboard_page() {
+    bluetooth_session_.stop();
     gps_log_.stop();
     wardrive_session_ = false;
     stop_wifi_capture();
@@ -173,6 +175,7 @@ void BaseViewModel::show_diagnostics_page() {
     publish_navigation();
 }
 void BaseViewModel::show_adapters_page() {
+    bluetooth_session_.stop();
     gps_log_.stop();
     wardrive_session_ = false;
     stop_wifi_capture();
@@ -220,6 +223,7 @@ void BaseViewModel::show_pineapple_page() {
     if (!wifi_scan_running_) start_wifi_scan();
 }
 void BaseViewModel::show_gps_tool(GpsTool tool) {
+    bluetooth_session_.stop();
     gps_log_.reset();
     stop_wifi_capture();
     gps_tool_ = tool;
@@ -227,6 +231,7 @@ void BaseViewModel::show_gps_tool(GpsTool tool) {
     gps_tool_message_ = gps_id_.empty() ? "Enable a GPS receiver in Device > Radio setup" :
                         tool == GpsTool::Info ? "Live receiver information" : "Enter to start recording";
     gps_file_name_.clear();
+    bluetooth_message_.clear();
     gps_sample_tick_ = 0;
     if (wardrive_session_) {
         raw_session_ = false;
@@ -247,16 +252,19 @@ std::string BaseViewModel::gps_receiver_name() const {
 }
 void BaseViewModel::toggle_gps_recording() {
     if (gps_tool_ == GpsTool::Info) return;
+    const auto bluetooth_radio = std::find_if(radio_list_.devices.begin(), radio_list_.devices.end(),
+        [](const auto& item) { return item.kind == "Bluetooth" && item.state == "On"; });
+    const bool bluetooth_available = bluetooth_radio != radio_list_.devices.end();
     if (gps_log_.active()) {
+        bluetooth_session_.stop();
+        bluetooth_message_.clear();
         const auto count = gps_log_.count();
         gps_log_.stop();
         gps_tool_message_ = "Saved " + std::to_string(count) + " records";
     } else if (gps_id_.empty()) {
         gps_tool_message_ = "Enable a GPS receiver in Device > Radio setup";
-    } else if (gps_tool_ == GpsTool::Wardrive && !wifi_scan_running_) {
+    } else if (gps_tool_ == GpsTool::Wardrive && !wifi_scan_running_ && !bluetooth_available) {
         gps_tool_message_ = wifi_scan_error_.empty() ? "Monitor capture unavailable" : wifi_scan_error_;
-    } else if (gps_tool_ == GpsTool::Wardrive && !wifi_scan_error_.empty()) {
-        gps_tool_message_ = wifi_scan_error_;
     } else {
         std::string error;
         if (gps_log_.start(gps_tool_ == GpsTool::Track ? platform::gps::LogKind::Track :
@@ -264,12 +272,36 @@ void BaseViewModel::toggle_gps_recording() {
             gps_file_name_ = gps_log_.path().filename().string();
             gps_tool_message_ = "Recording; waiting for GPS fix";
             gps_sample_tick_ = 0;
+            if (gps_tool_ == GpsTool::Wardrive) {
+                bluetooth_message_ = "Enable Bluetooth in Device";
+                if (bluetooth_available)
+                    bluetooth_message_ = bluetooth_session_.start(bluetooth_radio->name) ?
+                        "" : "Bluetooth scan unavailable";
+            }
         } else gps_tool_message_ = error;
     }
     gps_tool_generation_.set(gps_tool_generation_.value() + 1);
 }
 void BaseViewModel::update_gps_tool() {
     if (model_.current_page() != model::AppPage::GpsTool) return;
+    if (wardrive_session_ && gps_log_.active()) {
+        std::string bluetooth_state;
+        const auto before = gps_log_.bluetooth_count();
+        for (const auto& item : bluetooth_session_.poll(bluetooth_state)) {
+            int32_t lat{}, lon{};
+            if (gps_session_.position(lat, lon) &&
+                !gps_log_.bluetooth_device(item.address, item.name, item.rssi,
+                                            item.address_type, lat, lon)) {
+                bluetooth_session_.stop();
+                gps_tool_message_ = "GPS file write failed";
+                break;
+            }
+        }
+        if (!bluetooth_state.empty() && bluetooth_state != "Scanning")
+            bluetooth_message_ = bluetooth_state;
+        if (gps_log_.bluetooth_count() != before)
+            gps_tool_generation_.set(gps_tool_generation_.value() + 1);
+    }
     const auto now = lv_tick_get();
     if (gps_sample_tick_ && lv_tick_elaps(gps_sample_tick_) < 1000) return;
     gps_sample_tick_ = now;
@@ -278,7 +310,16 @@ void BaseViewModel::update_gps_tool() {
     if (gps_log_.active() && fix) {
         bool written = true;
         if (gps_tool_ == GpsTool::Track) written = gps_log_.position(lat, lon);
-        gps_tool_message_ = written ? "Recording precise GPS coordinates" : "GPS file write failed";
+        if (!written) gps_tool_message_ = "GPS file write failed";
+        else if (gps_tool_ == GpsTool::Track)
+            gps_tool_message_ = "Recording precise GPS coordinates";
+        else if (wifi_scan_running_ && bluetooth_session_.active())
+            gps_tool_message_ = "Recording WiFi + Bluetooth";
+        else if (wifi_scan_running_)
+            gps_tool_message_ = "WiFi only: " + bluetooth_message_;
+        else if (bluetooth_session_.active())
+            gps_tool_message_ = "Recording Bluetooth; WiFi unavailable";
+        else gps_tool_message_ = "Collection adapters unavailable";
     } else if (gps_log_.active()) gps_tool_message_ = "Recording; waiting for GPS fix";
     gps_tool_generation_.set(gps_tool_generation_.value() + 1);
 }
@@ -1496,6 +1537,7 @@ void BaseViewModel::finish_wifi_scan_if_ready() {
                                       static_cast<size_t>(client - ap->clients.begin()));
         }
         ++client->frames;
+        client->handshake.observe(frame.eapol, frame.client_transmitted);
         if (frame.client_transmitted && frame.has_rssi) { client->rssi = frame.rssi; client->has_rssi = true; }
     }
     publish_wifi_scan();

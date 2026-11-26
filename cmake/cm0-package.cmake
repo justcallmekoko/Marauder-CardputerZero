@@ -30,7 +30,7 @@ if(APP_INSTALL_SYSTEMD_SERVICE)
     )
 endif()
 
-install(PROGRAMS src/platform/helpers/radio-inventory src/platform/helpers/gps-session src/platform/helpers/monitor-session DESTINATION lib/marauder)
+install(PROGRAMS src/platform/helpers/radio-inventory src/platform/helpers/gps-session src/platform/helpers/monitor-session src/platform/helpers/bluetooth-session DESTINATION lib/marauder)
 
 install(TARGETS ${PROJECT_NAME}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
@@ -97,7 +97,7 @@ set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "${APP_DEBIAN_ARCHITECTURE}")
 set(CPACK_DEBIAN_PACKAGE_MAINTAINER "${APP_MAINTAINER}")
 set(CPACK_DEBIAN_PACKAGE_SECTION "utils")
 set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
-set(APP_DEBIAN_DEPENDS "libc6, libstdc++6, libgcc-s1, libfreetype6, libpng16-16t64, libjpeg62-turbo, zlib1g, iw, iproute2, network-manager, python3 (>= 3.12), bluez, gpsd, sudo, systemd")
+set(APP_DEBIAN_DEPENDS "libc6, libstdc++6, libgcc-s1, libfreetype6, libpng16-16t64, libjpeg62-turbo, zlib1g, iw, iproute2, network-manager, python3 (>= 3.12), python3-dbus, python3-gi, bluez, gpsd, sudo, systemd")
 if(FMT_INCLUDE_DIR AND FMT_LIBRARY)
     string(APPEND APP_DEBIAN_DEPENDS ", libfmt10")
 endif()

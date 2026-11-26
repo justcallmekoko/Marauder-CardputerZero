@@ -47,6 +47,24 @@ private:
     bool position_valid_{};
     std::chrono::steady_clock::time_point position_time_{};
 };
+struct BluetoothObservation {
+    std::string address, name, address_type;
+    int rssi{-128};
+};
+class BluetoothSession {
+public:
+    BluetoothSession() = default;
+    BluetoothSession(const BluetoothSession&) = delete;
+    BluetoothSession& operator=(const BluetoothSession&) = delete;
+    ~BluetoothSession();
+    bool start(const std::string& adapter);
+    void stop();
+    std::vector<BluetoothObservation> poll(std::string& status);
+    bool active() const { return socket_ >= 0; }
+private:
+    int socket_{-1}, child_{-1};
+    std::string pending_;
+};
 std::string begin_radio_session();
 void end_radio_session(const std::string& directory);
 RadioInventory read_radios(std::string id, bool enable, const std::string& directory);

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "radio_power.h"
 #include "wireless_adapters.h"
+#include <algorithm>
+#include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <sstream>
@@ -9,6 +11,7 @@
 #include <cerrno>
 #include <cstring>
 #include <spawn.h>
+#include <signal.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -207,6 +210,100 @@ bool GpsSession::position(int32_t& latitude_e7, int32_t& longitude_e7) const {
     latitude_e7 = latitude_e7_;
     longitude_e7 = longitude_e7_;
     return true;
+}
+
+BluetoothSession::~BluetoothSession() { stop(); }
+void BluetoothSession::stop() {
+#if defined(__linux__) && !USE_DESKTOP
+    if (socket_ >= 0) {
+        shutdown(socket_, SHUT_WR);
+        if (child_ > 0) {
+            int status{};
+            bool exited = false;
+            for (int attempt = 0; attempt < 20; ++attempt) {
+                const auto result = waitpid(child_, &status, WNOHANG);
+                if (result == child_ || (result < 0 && errno == ECHILD)) { exited = true; break; }
+                if (result < 0 && errno != EINTR) break;
+                usleep(100000);
+            }
+            if (!exited) {
+                kill(child_, SIGTERM);
+                while (waitpid(child_, &status, 0) < 0 && errno == EINTR) {}
+            }
+        }
+        close(socket_);
+    }
+#endif
+    child_ = socket_ = -1;
+    pending_.clear();
+}
+bool BluetoothSession::start(const std::string& adapter) {
+    stop();
+    if (adapter.size() < 4 || adapter.size() > 6 || adapter.compare(0, 3, "hci") != 0 ||
+        !std::all_of(adapter.begin() + 3, adapter.end(),
+                     [](unsigned char c) { return c >= '0' && c <= '9'; }))
+        return false;
+#if defined(__linux__) && !USE_DESKTOP
+    int ends[2];
+    if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, ends) != 0) return false;
+    posix_spawn_file_actions_t actions;
+    int err = posix_spawn_file_actions_init(&actions);
+    if (!err) {
+        err = posix_spawn_file_actions_adddup2(&actions, ends[1], STDIN_FILENO);
+        if (!err) err = posix_spawn_file_actions_adddup2(&actions, ends[1], STDOUT_FILENO);
+        char program[] = "/usr/lib/marauder/bluetooth-session";
+        char* args[] = {program, const_cast<char*>(adapter.c_str()), nullptr};
+        if (!err) err = posix_spawn(&child_, program, &actions, nullptr, args, environ);
+        posix_spawn_file_actions_destroy(&actions);
+    }
+    close(ends[1]);
+    if (!err) { socket_ = ends[0]; return true; }
+    close(ends[0]);
+#endif
+    return false;
+}
+std::vector<BluetoothObservation> BluetoothSession::poll(std::string& status) {
+    std::vector<BluetoothObservation> found;
+#if defined(__linux__) && !USE_DESKTOP
+    if (socket_ < 0) return found;
+    char buffer[1024];
+    for (int reads = 0; reads < 8; ++reads) {
+        const auto count = recv(socket_, buffer, sizeof(buffer), MSG_DONTWAIT);
+        if (count < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) break;
+        if (count < 0 && errno == EINTR) continue;
+        if (count <= 0) {
+            if (status.empty()) status = "Bluetooth scan ended";
+            stop();
+            break;
+        }
+        pending_.append(buffer, static_cast<size_t>(count));
+        if (pending_.size() > 8192) { status = "Bluetooth scan overflow"; stop(); break; }
+        std::size_t end;
+        while ((end = pending_.find('\n')) != std::string::npos) {
+            const auto line = pending_.substr(0, end);
+            pending_.erase(0, end + 1);
+            if (line.compare(0, 7, "status\t") == 0) { status = line.substr(7); continue; }
+            if (line.compare(0, 7, "device\t") != 0) continue;
+            const auto a = line.find('\t', 7);
+            if (a == std::string::npos) continue;
+            const auto b = line.find('\t', a + 1);
+            if (b == std::string::npos) continue;
+            const auto c = line.find('\t', b + 1);
+            if (c == std::string::npos) continue;
+            BluetoothObservation item{line.substr(7, a - 7), line.substr(a + 1, b - a - 1),
+                                      line.substr(c + 1)};
+            try { item.rssi = std::stoi(line.substr(b + 1, c - b - 1)); }
+            catch (const std::exception&) { continue; }
+            if (item.address.size() != 17 || item.rssi < -127 || item.rssi > 20) continue;
+            bool valid = true;
+            for (std::size_t i = 0; i < item.address.size(); ++i)
+                valid &= i % 3 == 2 ? item.address[i] == ':' :
+                    std::isxdigit(static_cast<unsigned char>(item.address[i])) != 0;
+            if (valid) found.push_back(std::move(item));
+        }
+    }
+#endif
+    return found;
 }
 
 std::string begin_radio_session() {

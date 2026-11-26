@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #pragma once
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -15,6 +16,20 @@ const char* frame_kind_label(FrameKind kind);
 uint32_t frame_kind_bit(FrameKind kind);
 bool monitor_header(const uint8_t* bytes, std::size_t size, std::size_t& header,
                     int& frequency, int& rssi, bool& has_rssi);
+struct EapolEvidence {
+    unsigned message{};
+    uint64_t replay{};
+    std::array<uint8_t, 32> nonce{};
+    bool pmkid{};
+};
+struct HandshakeState {
+    void observe(const EapolEvidence& evidence, bool client_transmitted);
+    unsigned stage{};
+    uint64_t first_replay{};
+    std::array<uint8_t, 32> anonce{};
+    bool complete{};
+    bool pmkid_seen{};
+};
 struct FrameObservation {
     std::string bssid;
     std::string client;
@@ -27,6 +42,7 @@ struct FrameObservation {
     bool has_rssi{};
     bool client_transmitted{};
     bool beacon{};
+    EapolEvidence eapol;
 };
 
 struct FrameSummary {

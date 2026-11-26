@@ -64,7 +64,9 @@ void GpsToolScreen::render() {
     const bool track = vm.gps_tool() == viewmodel::BaseViewModel::GpsTool::Track;
     const bool record = vm.gps_recording();
     lv_label_set_text(heading_, wardrive ? "GPS / Wardrive" : track ? "GPS / Track" : "GPS / Receiver");
-    lv_label_set_text(state_, record ? "REC" : wardrive || track ? "IDLE" : "LIVE");
+    lv_label_set_text(state_, record ? wardrive ?
+        (vm.bluetooth_scanning() ? "REC Wi+BT" : "REC Wi") : "REC" :
+        wardrive || track ? "IDLE" : "LIVE");
     const std::string fix = lv_subject_get_string(vm.gps_status_subject());
     const std::string top = vm.gps_receiver_id().empty() ? "No receiver selected" : "GPS  " + fix;
     lv_label_set_text(status_, top.c_str());
@@ -76,9 +78,10 @@ void GpsToolScreen::render() {
     lv_label_set_text(position_, position.c_str());
     std::string detail;
     if (wardrive) {
-        detail = std::to_string(vm.wifi_items().size()) + " APs seen   " +
-                 std::to_string(vm.gps_record_count()) + " saved   CH " +
-                 std::to_string(platform::wireless::channel_number(vm.wifi_tuned_frequency()));
+        detail = "AP " + std::to_string(vm.scanning() ? vm.wifi_items().size() : 0) + "  BT " +
+                 std::to_string(vm.bluetooth_record_count()) + "  Saved " +
+                 std::to_string(vm.gps_record_count()) + "  CH " +
+                 (vm.scanning() ? std::to_string(platform::wireless::channel_number(vm.wifi_tuned_frequency())) : "--");
     } else if (track) detail = std::to_string(vm.gps_record_count()) + " positions saved";
     else detail = vm.gps_receiver_id().empty() ? "Device > Radios and GPS > Radio setup" :
                   vm.gps_receiver_name();

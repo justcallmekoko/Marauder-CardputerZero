@@ -42,6 +42,9 @@ jobs:
       - name: Run desktop tests
         run: ctest --test-dir build/linux-x86-64 -C Debug --output-on-failure
 
+      - name: Check Bluetooth discovery helper
+        run: python3 -m py_compile src/platform/helpers/bluetooth-session
+
       - name: Validate store manifest
         run: cmake -P .agents/skills/cardputerzero-package-release/scripts/validate_app_builder.cmake
 
@@ -80,10 +83,11 @@ jobs:
           dpkg-deb -e "$package" "$RUNNER_TEMP/marauder-control"
           test -x "$RUNNER_TEMP/marauder-control/postinst"
           test -x "$RUNNER_TEMP/marauder-control/postrm"
+          test -x "$RUNNER_TEMP/marauder-payload/usr/lib/marauder/bluetooth-session"
           test -f "$RUNNER_TEMP/marauder-payload/usr/share/APPLaunch/share/images/marauder-icon-v2.png"
           grep -Fqx 'Icon=share/images/marauder-icon-v2.png' "$RUNNER_TEMP/marauder-payload/usr/share/APPLaunch/applications/marauder_cardputerzero.desktop"
           visudo -cf "$RUNNER_TEMP/marauder-payload/usr/share/marauder_cardputerzero/marauder-monitor.sudoers"
-          for dep in sudo iproute2 iw network-manager bluez gpsd python3 systemd; do
+          for dep in sudo iproute2 iw network-manager bluez gpsd python3 python3-dbus python3-gi systemd; do
             dpkg-deb -f "$package" Depends | tr ',' '\n' | grep -Eq "^[[:space:]]*${dep}([[:space:]]|$)"
           done
           dpkg-deb -f "$package"

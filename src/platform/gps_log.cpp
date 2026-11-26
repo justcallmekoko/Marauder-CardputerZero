@@ -48,6 +48,7 @@ bool Log::start(LogKind kind, unsigned reserve_mib, std::string& error) {
         { error = "Storage reserve reached"; return false; }
     kind_ = kind;
     count_ = 0;
+    bluetooth_count_ = 0;
     reserve_mib_ = reserve_mib;
     const auto stem = std::string(kind == LogKind::Track ? "track_" : "wardrive_") +
                       timestamp("%Y%m%d_%H%M%S");
@@ -61,7 +62,7 @@ bool Log::start(LogKind kind, unsigned reserve_mib, std::string& error) {
         std::filesystem::perms::owner_write, std::filesystem::perm_options::replace, ec);
     if (ec) { stop(); std::filesystem::remove(path_); error = "Cannot protect GPS file"; return false; }
     file_ << (kind == LogKind::Track ? "utc,latitude,longitude\n" :
-             "utc,bssid,ssid,channel,rssi_dbm,security,latitude,longitude\n");
+             "utc,radio,address,name,channel,rssi_dbm,security,address_type,latitude,longitude\n");
     file_.flush();
     if (!file_) { stop(); error = "Cannot write GPS file"; return false; }
     error.clear();
@@ -91,12 +92,25 @@ bool Log::access_point(const std::string& bssid, const std::string& ssid,
                        int channel, int rssi, const std::string& security,
                        int32_t latitude_e7, int32_t longitude_e7) {
     if (!active() || kind_ != LogKind::Wardrive || bssid.empty()) return false;
-    if (!seen_.insert(bssid).second) return true;
-    file_ << timestamp("%Y-%m-%dT%H:%M:%SZ") << ',' << quote(bssid) << ',' << quote(ssid)
+    if (!seen_.insert("wifi:" + bssid).second) return true;
+    file_ << timestamp("%Y-%m-%dT%H:%M:%SZ") << ",WiFi," << quote(bssid) << ',' << quote(ssid)
           << ',' << channel << ',';
     if (rssi > -128) file_ << rssi;
-    file_ << ',' << quote(security) << ',';
+    file_ << ',' << quote(security) << ",,";
     return write_position(latitude_e7, longitude_e7);
+}
+bool Log::bluetooth_device(const std::string& address, const std::string& name,
+                           int rssi, const std::string& address_type,
+                           int32_t latitude_e7, int32_t longitude_e7) {
+    if (!active() || kind_ != LogKind::Wardrive || address.empty()) return false;
+    if (!seen_.insert("bt:" + address_type + ":" + address).second) return true;
+    file_ << timestamp("%Y-%m-%dT%H:%M:%SZ") << ",Bluetooth," << quote(address) << ','
+          << quote(name) << ",,";
+    if (rssi > -128) file_ << rssi;
+    file_ << ",," << quote(address_type) << ',';
+    if (!write_position(latitude_e7, longitude_e7)) return false;
+    ++bluetooth_count_;
+    return true;
 }
 void Log::stop() {
     if (file_.is_open()) file_.close();
@@ -105,6 +119,7 @@ void Log::stop() {
 void Log::reset() {
     stop();
     count_ = 0;
+    bluetooth_count_ = 0;
     path_.clear();
 }
 }

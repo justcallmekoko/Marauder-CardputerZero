@@ -315,6 +315,15 @@ void WifiScanScreen::render() {
             message += "\n" + (item.security.empty() ? "Security unknown" : item.security) +
                 "   " + std::to_string(item.frames) + " frames";
             message += "\n" + std::to_string(item.clients.size()) + " observed clients";
+            unsigned complete{}, pmkid{}, progress{};
+            for (const auto& client : item.clients) {
+                complete += client.handshake.complete;
+                pmkid += client.handshake.pmkid_seen;
+                progress = std::max(progress, client.handshake.stage);
+            }
+            message += "\n4-way  " + (complete ? std::to_string(complete) + " observed" :
+                progress ? std::to_string(progress) + "/4 observed" : "Not observed");
+            message += "\nPMKID  " + (pmkid ? std::to_string(pmkid) + " observed" : "Not observed");
         }
     } else if (station_list && vm.station_refs().empty()) {
         message = vm.list_builder_active() ? "Waiting for associated station frames" : "Press B to build station list";
@@ -327,7 +336,7 @@ void WifiScanScreen::render() {
             "No access points found";
     }
     lv_obj_set_style_text_color(message_, colors.text, 0);
-    auto* message_font = assets().load_standard_font(feed || pine_info || (mode == 1 && vm.wifi_info_tab()) ? 10 : 12);
+    auto* message_font = assets().load_standard_font(feed || pine_info || mode == 1 ? 10 : 12);
     lv_obj_set_style_text_font(message_, message_font ? message_font : LV_FONT_DEFAULT, 0);
     lv_label_set_text(message_, message.c_str());
     set_key_guide(pine_list ? "F/X Browse  Enter Actions  D Restart  Esc Back" :

@@ -84,6 +84,9 @@ int main() {
     eapol.resize(13 + 24 + 8 + 99 + 22, 0);
     const auto key = 13 + 24 + 8;
     eapol[key + 1] = 3; // EAPOL-Key.
+    eapol[key + 3] = 117; // Descriptor body plus 22 bytes of key data.
+    eapol[key + 4] = 2; // RSN key descriptor.
+    eapol[key + 6] = 0x08; // Pairwise key.
     eapol[key + 98] = 22; // Key data length.
     eapol[key + 99] = 221; eapol[key + 100] = 20;
     eapol[key + 102] = 0x0F; eapol[key + 103] = 0xAC; eapol[key + 104] = 4;
@@ -95,6 +98,62 @@ int main() {
     eapol[14] |= 0x40; // Protected data must not be inspected as clear EAPOL.
     assert(parse_frame_summary(eapol.data(), eapol.size(), summary));
     assert(summary.kind == FrameKind::Data);
+    auto key_frame = [&](unsigned info, bool from_ap, unsigned replay) {
+        auto frame = eapol;
+        frame.resize(13 + 24 + 8 + 99);
+        frame[13] = 0x08;
+        frame[14] = from_ap ? 0x02 : 0x01;
+        for (int i = 0; i < 6; ++i) {
+            frame[13 + 4 + i] = from_ap ? client[i] : ap[i];
+            frame[13 + 10 + i] = from_ap ? ap[i] : client[i];
+            frame[13 + 16 + i] = from_ap ? ap[i] : client[i];
+        }
+        frame[key + 3] = 95;
+        frame[key + 5] = static_cast<uint8_t>(info >> 8);
+        frame[key + 6] = static_cast<uint8_t>(info);
+        frame[key + 16] = static_cast<uint8_t>(replay);
+        frame[key + 98] = 0;
+        for (int i = 0; i < 32; ++i) frame[key + 17 + i] = static_cast<uint8_t>(i + 1);
+        return frame;
+    };
+    platform::wireless::HandshakeState handshake;
+    for (const auto message : {1u, 2u, 3u, 4u}) {
+        const auto frame = key_frame(message == 1 ? 0x0088 : message == 2 ? 0x0108 :
+                                     message == 3 ? 0x03C8 : 0x0308,
+                                     message == 1 || message == 3, message <= 2 ? 5 : 6);
+        assert(parse_monitor_frame(frame.data(), frame.size(), observed));
+        assert(observed.client == "22:33:44:55:66:77" && observed.eapol.message == message);
+        assert(parse_frame_summary(frame.data(), frame.size(), summary));
+        assert(summary.type == "EAPOL M" + std::to_string(message));
+        handshake.observe(observed.eapol, observed.client_transmitted);
+        assert(handshake.stage == message);
+        assert(handshake.complete == (message == 4));
+    }
+    platform::wireless::HandshakeState mismatched;
+    for (const auto message : {1u, 2u, 3u}) {
+        const auto frame = key_frame(message == 1 ? 0x0088 : message == 2 ? 0x0108 : 0x03C8,
+                                     message == 1 || message == 3, message <= 2 ? 5 : 6);
+        assert(parse_monitor_frame(frame.data(), frame.size(), observed));
+        mismatched.observe(observed.eapol, observed.client_transmitted);
+    }
+    const auto wrong_fourth = key_frame(0x0308, false, 7);
+    assert(parse_monitor_frame(wrong_fourth.data(), wrong_fourth.size(), observed));
+    mismatched.observe(observed.eapol, observed.client_transmitted);
+    assert(!mismatched.complete && mismatched.stage == 3);
+    auto pmkid_frame = key_frame(0x0088, true, 9);
+    pmkid_frame.resize(13 + 24 + 8 + 99 + 22, 0);
+    pmkid_frame[key + 3] = 117;
+    pmkid_frame[key + 98] = 22;
+    pmkid_frame[key + 99] = 221;
+    pmkid_frame[key + 100] = 20;
+    pmkid_frame[key + 102] = 0x0F;
+    pmkid_frame[key + 103] = 0xAC;
+    pmkid_frame[key + 104] = 4;
+    assert(parse_monitor_frame(pmkid_frame.data(), pmkid_frame.size(), observed));
+    assert(observed.eapol.message == 1 && observed.eapol.pmkid);
+    platform::wireless::HandshakeState pmkid_state;
+    pmkid_state.observe(observed.eapol, observed.client_transmitted);
+    assert(pmkid_state.pmkid_seen && !pmkid_state.complete);
     assert(!parse_monitor_frame(beacon.data(), 7, observed));
     beacon[2] = 0xff;
     assert(!parse_monitor_frame(beacon.data(), beacon.size(), observed));

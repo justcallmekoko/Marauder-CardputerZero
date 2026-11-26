@@ -112,6 +112,8 @@ public:
     GpsTool gps_tool() const { return gps_tool_; }
     bool gps_recording() const { return gps_log_.active(); }
     std::size_t gps_record_count() const { return gps_log_.count(); }
+    std::size_t bluetooth_record_count() const { return gps_log_.bluetooth_count(); }
+    bool bluetooth_scanning() const { return bluetooth_session_.active(); }
     const std::string& gps_tool_message() const { return gps_tool_message_; }
     const std::string& gps_file_name() const { return gps_file_name_; }
     const std::string& gps_receiver_id() const { return gps_id_; }
@@ -274,11 +276,12 @@ private:
     uint32_t monitor_started_tick_{};
     uint32_t monitor_status_tick_{};
     platform::GpsSession gps_session_;
+    platform::BluetoothSession bluetooth_session_;
     std::string gps_id_, radio_session_;
     platform::gps::Log gps_log_;
     GpsTool gps_tool_{GpsTool::Info};
     bool wardrive_session_{};
-    std::string gps_tool_message_, gps_file_name_;
+    std::string gps_tool_message_, gps_file_name_, bluetooth_message_;
     uint32_t gps_sample_tick_{};
     reactive::IntSubject gps_tool_generation_{0};
     void update_gps_tool();
