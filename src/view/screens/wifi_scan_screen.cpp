@@ -58,7 +58,7 @@ void WifiScanScreen::render() {
     const bool operations = mode == 4 || mode == 5;
     const bool feed = mode == 6;
     const auto selected = operations ? vm.wifi_operation_cursor() : client_list || mode == 3 ? vm.wifi_client_cursor() : cursor;
-    const auto total = operations ? (mode == 4 ? size_t{3} : size_t{2}) :
+    const auto total = operations ? (mode == 4 ? size_t{4} : size_t{3}) :
         (client_list || mode == 3) && clients ? clients->size() : items.size();
     const auto colors = view::palette(vm.is_dark_mode());
     auto accent = colors.success;
@@ -115,19 +115,27 @@ void WifiScanScreen::render() {
         lv_obj_add_flag(row.detail, LV_OBJ_FLAG_HIDDEN);
         lv_obj_set_y(row.name, 3);
         lv_obj_set_y(row.metric, 4);
+        const bool record = operations && index == (mode == 4 ? 3u : 2u);
+        const auto scope = mode == 4 ? platform::pcap::Scope::AccessPoint : platform::pcap::Scope::Station;
+        const std::string target = mode == 4 ? items[cursor].bssid :
+            clients && vm.wifi_client_cursor() < clients->size() ? (*clients)[vm.wifi_client_cursor()].mac : "";
+        const bool recording_target = record && vm.pcap_recording_target(scope, target);
         const std::string name = operations ?
-            (mode == 4 ? (index == 0 ? "Information" : index == 1 ? "Observed clients" : "Traffic filter") :
+            (record ? recording_target ? (mode == 4 ? "Stop AP recording" : "Stop station recording") :
+                                       (mode == 4 ? "Record this AP" : "Record this station") :
+             mode == 4 ? (index == 0 ? "Information" : index == 1 ? "Observed clients" : "Traffic filter") :
                          (index == 0 ? "Information" : "Traffic filter")) :
             client_list ? (*clients)[index].mac : items[index].ssid;
         lv_label_set_text(row.name, name.c_str());
         lv_obj_set_style_text_color(row.name, colors.text, 0);
-        const auto metric = operations ? (name == "Traffic filter" ? "LIVE" : "VIEW") : client_list ?
+        const auto metric = operations ? (record ? recording_target ? "REC" : vm.pcap_active() ? "BUSY" : "START" :
+                                           name == "Traffic filter" ? "LIVE" : "VIEW") : client_list ?
             std::to_string((*clients)[index].frames) + " fr  " +
                 ((*clients)[index].has_rssi ? std::to_string((*clients)[index].rssi) + "dBm" : "RSSI ?") :
             "CH " + std::to_string(items[index].channel) + "  " +
                 (items[index].has_rssi ? std::to_string(items[index].rssi) + "dBm" : "RSSI ?");
         lv_label_set_text(row.metric, metric.c_str());
-        lv_obj_set_style_text_color(row.metric, index == selected ? accent : colors.text_disabled, 0);
+        lv_obj_set_style_text_color(row.metric, recording_target ? colors.error : index == selected ? accent : colors.text_disabled, 0);
     }
     std::string message;
     if (feed && cursor < items.size()) {

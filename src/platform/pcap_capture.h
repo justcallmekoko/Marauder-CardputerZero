@@ -18,6 +18,15 @@ struct FileInfo {
     std::string modified;
 };
 
+enum class Scope { All, AccessPoint, Station };
+struct Filter {
+    Scope scope{Scope::All};
+    std::string mac;
+    int frequency_mhz{};
+};
+
+bool matches_packet(const uint8_t* data, std::size_t length, const Filter& filter);
+
 std::filesystem::path directory();
 std::vector<FileInfo> list_files();
 
@@ -38,17 +47,19 @@ public:
     Capture(const Capture&) = delete;
     Capture& operator=(const Capture&) = delete;
     Capture() = default;
-    std::string start(int socket, unsigned reserve_mib);
+    std::string start(int socket, unsigned reserve_mib, Filter filter = {});
     std::string stop();
     bool active() const { return active_; }
     std::uint64_t frames() const { return frames_; }
     const std::string& path() const { return path_; }
+    const Filter& filter() const { return filter_; }
     std::string take_error();
 private:
     std::atomic<bool> stop_{false}, active_{false}, failed_{false};
     std::atomic<std::uint64_t> frames_{0};
     std::thread thread_;
     std::string path_, error_;
+    Filter filter_;
 };
 
 } // namespace platform::pcap

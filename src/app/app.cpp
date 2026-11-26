@@ -302,12 +302,24 @@ private:
         if (view_model_.current_page() == model::AppPage::Traffic &&
             (action == NavigationAction::Back || action == NavigationAction::Primary) && key != LV_KEY_ENTER) {
             if (view_model_.traffic_can_tune()) view_model_.step_traffic_channel(action == NavigationAction::Back ? -1 : 1);
+            else if (view_model_.pcap_pinned_frequency())
+                toast_->show("Stop target PCAP to tune", view::widgets::ToastTone::Warning, 3200);
             else show_confirmation("Enable monitor mode to tune channels", "Enter Adapters", DialogAction::OpenAdapters);
             return true;
         }
         if (view_model_.current_page() == model::AppPage::WifiScan) {
             if (action == NavigationAction::Previous) { view_model_.previous_wifi_scan_page(); return true; }
             if (action == NavigationAction::Next) { view_model_.next_wifi_scan_page(); return true; }
+            if (action == NavigationAction::Primary && view_model_.pcap_action_selected()) {
+                const bool was_recording = view_model_.pcap_active();
+                const auto result = view_model_.toggle_selected_pcap_capture();
+                const bool recording = view_model_.pcap_active();
+                if ((!was_recording && recording) || (was_recording && !recording))
+                    toast_->show(recording ? "Target PCAP recording started" : view_model_.pcap_message(),
+                                 view::widgets::ToastTone::Success, 3200);
+                else toast_->show(result, view::widgets::ToastTone::Error, 3200);
+                return true;
+            }
             if (action == NavigationAction::Primary) { view_model_.toggle_wifi_scan_details(); return true; }
             if (action == NavigationAction::Details) {
                 if (view_model_.wifi_view() == 1) view_model_.advance_wifi_info_tab();

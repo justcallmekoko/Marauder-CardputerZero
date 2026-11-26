@@ -165,19 +165,58 @@ std::string BaseViewModel::toggle_pcap_capture() {
         pcap_status_.set("P");
         pcap_message_ = "Saved " + std::to_string(pcap_capture_.frames()) + " frames";
         refresh_pcap_files();
+        if (model_.current_page() == model::AppPage::WifiScan) publish_wifi_scan();
         return pcap_message_ + " to " + path;
     }
+    return start_pcap_capture({});
+}
+
+std::string BaseViewModel::start_pcap_capture(platform::pcap::Filter filter) {
     const auto warning = collection_warning(model::RadioRequirement::Monitor);
     if (!warning.empty()) return warning;
     if (monitor_job_.valid()) return "Radio mode is changing";
     const int socket = monitor_session_.capture_socket();
     if (socket < 0) return "Monitor capture unavailable";
-    const auto error = pcap_capture_.start(socket, model_.reserve_mib());
+    const auto error = pcap_capture_.start(socket, model_.reserve_mib(), std::move(filter));
     if (!error.empty()) return error;
-    pcap_status_.set("REC");
+    const auto scope = pcap_capture_.filter().scope;
+    pcap_status_.set(scope == platform::pcap::Scope::AccessPoint ? "REC AP" :
+                     scope == platform::pcap::Scope::Station ? "REC STA" : "REC ALL");
     pcap_message_ = "Recording to " + pcap_capture_.path();
     refresh_pcap_files();
+    if (model_.current_page() == model::AppPage::WifiScan) publish_wifi_scan();
     return pcap_message_;
+}
+
+std::string BaseViewModel::toggle_selected_pcap_capture() {
+    if (!pcap_action_selected() || wifi_scan_detail_index_ >= wifi_networks_.size())
+        return "Select an AP or station first";
+    const auto& ap = wifi_networks_[wifi_scan_detail_index_];
+    const bool station = wifi_view_ == 5;
+    if (station && wifi_client_index_ >= ap.clients.size()) return "Select a station first";
+    const auto scope = station ? platform::pcap::Scope::Station : platform::pcap::Scope::AccessPoint;
+    const auto& mac = station ? ap.clients[wifi_client_index_].mac : ap.bssid;
+    if (pcap_capture_.active()) {
+        if (pcap_recording_target(scope, mac)) {
+            const auto result = toggle_pcap_capture();
+            publish_wifi_scan();
+            return result;
+        }
+        return "Stop the current PCAP first";
+    }
+    const int mhz = ap.frequency_mhz;
+    if (!mhz || std::find(wifi_frequencies_.begin(), wifi_frequencies_.end(), static_cast<unsigned>(mhz)) == wifi_frequencies_.end())
+        return "AP channel not available";
+    if (wifi_hop_job_.valid()) { wifi_hop_job_.wait(); wifi_hop_job_.get(); }
+    const auto tuned = monitor_session_.tune(static_cast<unsigned>(mhz));
+    if (tuned != "OK") return tuned;
+    wifi_tuned_frequency_ = static_cast<unsigned>(mhz);
+    wifi_tune_failed_frequency_ = 0;
+    wifi_hop_tick_ = lv_tick_get();
+    const auto result = start_pcap_capture({scope, mac, mhz});
+    if (pcap_capture_.active()) wifi_scan_error_.clear();
+    publish_wifi_scan();
+    return result;
 }
 void BaseViewModel::toggle_page() { stop_wifi_capture(); model_.toggle_page(); publish_navigation(); }
 const char* BaseViewModel::marauder_menu_title() const { return marauder_menu_.title(); }
@@ -648,20 +687,23 @@ void BaseViewModel::advance_wifi_channel() {
         else { wifi_tune_failed_frequency_ = wifi_frequencies_[wifi_hop_index_]; wifi_scan_error_ = "Channel tune failed"; }
         publish_wifi_scan();
     }
-    if (wifi_hop_tick_ && lv_tick_elaps(wifi_hop_tick_) < 650 && wifi_view_ == 0) return;
+    const auto& recording = pcap_capture_.filter();
+    const bool pinned = pcap_capture_.active() && recording.scope != platform::pcap::Scope::All;
+    if (!pinned && wifi_hop_tick_ && lv_tick_elaps(wifi_hop_tick_) < 650 && wifi_view_ == 0) return;
     unsigned requested{};
-    if (wifi_view_ == 0) {
+    if (pinned) {
+        requested = static_cast<unsigned>(recording.frequency_mhz);
+    } else if (wifi_view_ == 0) {
         wifi_hop_index_ = wifi_hop_tick_ ? (wifi_hop_index_ + 1) % wifi_frequencies_.size() : 0;
         requested = wifi_frequencies_[wifi_hop_index_];
     } else if (wifi_scan_detail_index_ < wifi_networks_.size()) {
         requested = wifi_networks_[wifi_scan_detail_index_].frequency_mhz;
-        const auto found = std::find(wifi_frequencies_.begin(), wifi_frequencies_.end(), requested);
-        if (found == wifi_frequencies_.end()) return;
-        wifi_hop_index_ = static_cast<size_t>(found - wifi_frequencies_.begin());
-        if (requested == wifi_tuned_frequency_) return;
-        if (requested == wifi_tune_failed_frequency_) return;
     }
     if (!requested) return;
+    const auto found = std::find(wifi_frequencies_.begin(), wifi_frequencies_.end(), requested);
+    if (found == wifi_frequencies_.end()) return;
+    wifi_hop_index_ = static_cast<size_t>(found - wifi_frequencies_.begin());
+    if (requested == wifi_tuned_frequency_ || requested == wifi_tune_failed_frequency_) return;
     wifi_hop_tick_ = lv_tick_get();
     wifi_hop_job_ = std::async(std::launch::async, [this, requested] { return monitor_session_.tune(requested); });
 }
@@ -677,7 +719,7 @@ void BaseViewModel::previous_wifi_scan_page() {
 void BaseViewModel::next_wifi_scan_page() {
     if (wifi_view_ == 6) { if (wifi_feed_offset_) --wifi_feed_offset_; publish_wifi_scan(); return; }
     if (wifi_view_ == 4 || wifi_view_ == 5) {
-        if (wifi_operation_index_ + 1 < (wifi_view_ == 4 ? 3u : 2u)) ++wifi_operation_index_;
+        if (wifi_operation_index_ + 1 < (wifi_view_ == 4 ? 4u : 3u)) ++wifi_operation_index_;
         publish_wifi_scan(); return;
     }
     auto& index = wifi_view_ == 2 || wifi_view_ == 3 ? wifi_client_index_ : wifi_scan_detail_index_;
@@ -693,8 +735,13 @@ void BaseViewModel::toggle_wifi_scan_details() {
     else if (wifi_view_ == 4) {
         if (wifi_operation_index_ == 0) { wifi_view_ = 1; wifi_info_tab_ = 0; }
         else if (wifi_operation_index_ == 1) { wifi_view_ = 2; wifi_client_index_ = 0; }
-        else {
+        else if (wifi_operation_index_ == 2) {
             const auto mhz = wifi_networks_[wifi_scan_detail_index_].frequency_mhz;
+            if (pcap_capture_.active() && pcap_capture_.filter().scope != platform::pcap::Scope::All &&
+                pcap_capture_.filter().frequency_mhz != mhz) {
+                wifi_scan_error_ = "Stop target PCAP to change channel";
+                publish_wifi_scan(); return;
+            }
             if (!mhz || std::find(wifi_frequencies_.begin(), wifi_frequencies_.end(), static_cast<unsigned>(mhz)) == wifi_frequencies_.end()) {
                 wifi_scan_error_ = "AP channel not available";
                 publish_wifi_scan();
@@ -709,8 +756,13 @@ void BaseViewModel::toggle_wifi_scan_details() {
         wifi_view_ = 5; wifi_operation_index_ = 0;
     } else if (wifi_view_ == 5) {
         if (wifi_operation_index_ == 0) wifi_view_ = 3;
-        else {
+        else if (wifi_operation_index_ == 1) {
             const auto mhz = wifi_networks_[wifi_scan_detail_index_].frequency_mhz;
+            if (pcap_capture_.active() && pcap_capture_.filter().scope != platform::pcap::Scope::All &&
+                pcap_capture_.filter().frequency_mhz != mhz) {
+                wifi_scan_error_ = "Stop target PCAP to change channel";
+                publish_wifi_scan(); return;
+            }
             if (!mhz || std::find(wifi_frequencies_.begin(), wifi_frequencies_.end(), static_cast<unsigned>(mhz)) == wifi_frequencies_.end()) {
                 wifi_scan_error_ = "AP channel not available";
                 publish_wifi_scan();

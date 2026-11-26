@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "pcap_capture.h"
+#include "raw_wifi.h"
 
 #include <algorithm>
 #include <array>
@@ -41,6 +42,13 @@ std::filesystem::path directory() {
     const char* home = std::getenv("HOME");
     return (home && *home ? std::filesystem::path(home) : std::filesystem::temp_directory_path()) /
            "Documents" / "Marauder" / "pcap";
+}
+
+bool matches_packet(const uint8_t* data, std::size_t length, const Filter& filter) {
+    if (filter.scope == Scope::All) return true;
+    platform::wireless::FrameSummary frame;
+    return platform::wireless::parse_frame_summary(data, length, frame) &&
+           platform::wireless::frame_matches_target(frame, filter.mac, filter.frequency_mhz);
 }
 
 std::vector<FileInfo> list_files() {
@@ -92,9 +100,11 @@ bool Writer::flush() { file_.flush(); return file_.good(); }
 
 Capture::~Capture() { stop(); }
 
-std::string Capture::start(int socket, unsigned reserve_mib) {
+std::string Capture::start(int socket, unsigned reserve_mib, Filter filter) {
 #if defined(__linux__) && !USE_DESKTOP
     if (active_) { close(socket); return "Capture already active"; }
+    if (filter.scope != Scope::All && (filter.mac.empty() || filter.frequency_mhz <= 0))
+        { close(socket); return "Invalid capture target"; }
     if (thread_.joinable()) thread_.join();
     std::error_code error;
     const auto root = directory();
@@ -106,7 +116,12 @@ std::string Capture::start(int socket, unsigned reserve_mib) {
     const auto now = std::chrono::system_clock::now();
     const auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count() % 1000;
     std::ostringstream name;
-    name << "capture_" << local_stamp(std::chrono::system_clock::to_time_t(now), "%Y%m%d_%H%M%S")
+    const std::string prefix = filter.scope == Scope::AccessPoint ? "ap_" :
+                               filter.scope == Scope::Station ? "station_" : "capture_";
+    std::string identity = filter.mac;
+    identity.erase(std::remove(identity.begin(), identity.end(), ':'), identity.end());
+    name << prefix << (filter.scope == Scope::All ? "" : identity + "_")
+         << local_stamp(std::chrono::system_clock::to_time_t(now), "%Y%m%d_%H%M%S")
          << '_' << std::setw(3) << std::setfill('0') << millis << ".pcap";
     auto file = root / name.str();
     for (unsigned suffix = 1; std::filesystem::exists(file, error) && suffix <= 99; ++suffix)
@@ -115,13 +130,14 @@ std::string Capture::start(int socket, unsigned reserve_mib) {
     Writer writer;
     if (!writer.open(file)) { close(socket); return "Cannot open PCAP file"; }
     path_ = file.string();
+    filter_ = std::move(filter);
     frames_ = 0;
     failed_ = false;
     error_.clear();
     stop_ = false;
     active_ = true;
     try {
-        thread_ = std::thread([this, socket, reserve_mib, writer = std::move(writer), root]() mutable {
+        thread_ = std::thread([this, socket, reserve_mib, writer = std::move(writer), root, filter = filter_]() mutable {
             std::array<uint8_t, 65535> buffer{};
             unsigned check = 0;
             while (!stop_) {
@@ -133,6 +149,7 @@ std::string Capture::start(int socket, unsigned reserve_mib) {
                 if (!(ready.revents & POLLIN)) continue;
                 const auto count = read(socket, buffer.data(), buffer.size());
                 if (count <= 0) { error_ = "PCAP read failed"; break; }
+                if (!matches_packet(buffer.data(), static_cast<std::size_t>(count), filter)) continue;
                 const auto stamp = std::chrono::duration_cast<std::chrono::microseconds>(
                     std::chrono::system_clock::now().time_since_epoch()).count();
                 if (!writer.append(buffer.data(), static_cast<std::size_t>(count), static_cast<std::uint64_t>(stamp)))

@@ -15,6 +15,7 @@ Native C++17/LVGL 9.5 port of ESP32 Marauder for the ARM64 Linux-based Cardputer
 - Read-only kernel capability probing for monitor-mode support; injection remains unverified until an explicit hardware test
 - Live C++ radiotap and 802.11 frame parsing on the selected monitor-mode adapter, with scrolling AP and observed-client lists, RSSI, frame counts, and offline vendor lookup
 - Press `P` on any menu to start or stop raw monitor-mode PCAP recording. The status bar shows `REC` while recording. Captures are saved under `~/Documents/Marauder/pcap`; Device → Storage and memory → Saved captures lists filenames, dates, and sizes. Recording stops at the configured free-space reserve and on app exit.
+- AP and station operation menus offer explicit target recording. These PCAPs retain only frames whose sender or receiver matches the selected device on its AP channel; the channel and target remain fixed until recording stops. `P` continues to start an all-frame recording, or stops whichever recording is active. The status bar distinguishes `REC ALL`, `REC AP`, and `REC STA`.
 - Direct menu navigation with the printed `Z`/`X`/`C`/`F` arrow cluster, `Enter` for the primary action, and `D` for details on supported screens
 - APPLaunch icon uses the white JCMK LLC mark on a black background
 - Read-only inventory of:
@@ -103,7 +104,7 @@ cmake --build --preset linux-x86-64-dbg
 cmake --workflow --preset cp0-cross-package
 ```
 
-The expected artifact is `dist/Marauder_0.6.29_rev1_arm64.deb`. Packaging and deployment remain separate actions.
+The expected artifact is `dist/Marauder_0.6.30_rev1_arm64.deb`. Packaging and deployment remain separate actions.
 
 ## Safety and scope
 

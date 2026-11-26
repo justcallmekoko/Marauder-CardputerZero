@@ -138,7 +138,7 @@ void TitleBar::build() {
         lv_obj_set_style_text_color(label, ink, 0);
     }, nullptr);
     pcap_label_ = lv_label_create(status);
-    configure_label(pcap_label_, view_model_.dark_mode_subject(), small ? small : &lv_font_montserrat_10, 35);
+    configure_label(pcap_label_, view_model_.dark_mode_subject(), small ? small : &lv_font_montserrat_10, 48);
     lv_obj_set_style_bg_opa(pcap_label_, LV_OPA_20, 0);
     lv_obj_set_style_radius(pcap_label_, 3, 0);
     reactive::observe_obj(pcap_label_, view_model_.pcap_status_subject(), [](lv_observer_t* observer, lv_subject_t* subject) {

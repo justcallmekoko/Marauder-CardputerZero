@@ -24,7 +24,9 @@ void TrafficScreen::build_content(lv_obj_t* content) {
             channels_ = adapter.frequencies;
         }
     }
-    if (view_model().traffic_monitor_source() && view_model().traffic_can_tune() && !channels_.empty())
+    if (view_model().traffic_monitor_source() && view_model().pcap_pinned_frequency())
+        requested_ = frequency_ = view_model().pcap_pinned_frequency();
+    else if (view_model().traffic_monitor_source() && view_model().traffic_can_tune() && !channels_.empty())
         requested_ = channels_.front();
     auto* title = title_ = lv_label_create(content);
     view_model().take_traffic_step();
@@ -103,7 +105,9 @@ void TrafficScreen::sample() {
         });
         return;
     }
-    set_key_guide(!view_model().traffic_monitor_source() || channels_.empty() ? "Adapter packets/s    Esc Back" : "Z/C Tune channel    Esc Back");
+    set_key_guide(view_model().pcap_pinned_frequency() ? "Target PCAP holds channel  Esc Back" :
+                  !view_model().traffic_monitor_source() || channels_.empty() ? "Adapter packets/s    Esc Back" :
+                  "Z/C Tune channel    Esc Back");
     if (lv_tick_elaps(sample_tick_) < 1000) return;
     sample_tick_ = lv_tick_get();
     if (frequency_) {

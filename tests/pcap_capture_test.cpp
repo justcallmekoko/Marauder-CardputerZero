@@ -24,5 +24,33 @@ int main() {
         std::cerr << "PCAP header or packet record invalid\n";
         return 2;
     }
+    std::vector<uint8_t> beacon{0, 0, 13, 0, 0x28, 0, 0, 0, 0x6c, 0x09, 0, 0, 0xd0};
+    beacon.resize(13 + 24);
+    beacon[13] = 0x80;
+    const uint8_t ap[6]{0x10, 0x20, 0x30, 0x40, 0x50, 0x60};
+    const uint8_t station[6]{0x22, 0x33, 0x44, 0x55, 0x66, 0x77};
+    for (int i = 0; i < 6; ++i) {
+        beacon[13 + 4 + i] = 0xff;
+        beacon[13 + 10 + i] = ap[i];
+        beacon[13 + 16 + i] = ap[i];
+    }
+    const platform::pcap::Filter ap_filter{platform::pcap::Scope::AccessPoint, "10:20:30:40:50:60", 2412};
+    const platform::pcap::Filter station_filter{platform::pcap::Scope::Station, "22:33:44:55:66:77", 2412};
+    if (!platform::pcap::matches_packet(beacon.data(), beacon.size(), ap_filter) ||
+        platform::pcap::matches_packet(beacon.data(), beacon.size(), station_filter) ||
+        platform::pcap::matches_packet(beacon.data(), 4, ap_filter)) return 3;
+    beacon[13] = 0x08;
+    beacon[14] = 0x01;
+    for (int i = 0; i < 6; ++i) {
+        beacon[13 + 4 + i] = ap[i];
+        beacon[13 + 10 + i] = station[i];
+    }
+    if (!platform::pcap::matches_packet(beacon.data(), beacon.size(), ap_filter) ||
+        !platform::pcap::matches_packet(beacon.data(), beacon.size(), station_filter) ||
+        platform::pcap::matches_packet(beacon.data(), beacon.size(),
+                                      {platform::pcap::Scope::AccessPoint, "AA:BB:CC:DD:EE:FF", 2412}) ||
+        platform::pcap::matches_packet(beacon.data(), beacon.size(),
+                                      {platform::pcap::Scope::AccessPoint, "10:20:30:40:50:60", 2437}) ||
+        !platform::pcap::matches_packet(beacon.data(), 4, {})) return 4;
     return 0;
 }

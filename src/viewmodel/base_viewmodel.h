@@ -51,6 +51,15 @@ public:
     lv_subject_t* pcap_status_subject() { return pcap_status_.native(); }
     bool pcap_active() const { return pcap_capture_.active(); }
     std::string toggle_pcap_capture();
+    std::string toggle_selected_pcap_capture();
+    bool pcap_action_selected() const {
+        return (wifi_view_ == 4 && wifi_operation_index_ == 3) ||
+               (wifi_view_ == 5 && wifi_operation_index_ == 2);
+    }
+    bool pcap_recording_target(platform::pcap::Scope scope, const std::string& mac) const {
+        const auto& filter = pcap_capture_.filter();
+        return pcap_capture_.active() && filter.scope == scope && filter.mac == mac;
+    }
     void show_pcap_files_page();
     void refresh_pcap_files();
     void move_pcap_file(int direction);
@@ -76,7 +85,13 @@ public:
     }
     bool traffic_monitor_source() const { return model_.traffic_monitor_source(); }
     bool traffic_can_tune() const {
-        return !monitor_job_.valid() && !monitor_owner_.empty() && monitor_owner_ == model_.selected_adapter_id();
+        return !pcap_pinned_frequency() && !monitor_job_.valid() && !monitor_owner_.empty() &&
+               monitor_owner_ == model_.selected_adapter_id();
+    }
+    unsigned pcap_pinned_frequency() const {
+        const auto& filter = pcap_capture_.filter();
+        return pcap_capture_.active() && filter.scope != platform::pcap::Scope::All ?
+            static_cast<unsigned>(filter.frequency_mhz) : 0;
     }
     std::string tune_traffic_channel(unsigned mhz) { return monitor_session_.tune(mhz); }
     int take_traffic_step() { int step = traffic_step_; traffic_step_ = 0; return step; }
@@ -160,6 +175,7 @@ private:
     void publish_wifi_scan();
     void finish_wifi_scan_if_ready();
     void stop_wifi_capture();
+    std::string start_pcap_capture(platform::pcap::Filter filter);
     void advance_wifi_channel();
     static void wifi_scan_timer_cb(lv_timer_t* timer);
 
