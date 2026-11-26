@@ -17,6 +17,7 @@ public:
                       int channel, int rssi, const std::string& security,
                       int32_t latitude_e7, int32_t longitude_e7);
     void stop();
+    void reset();
     bool active() const { return file_.is_open(); }
     std::size_t count() const { return count_; }
     const std::filesystem::path& path() const { return path_; }

@@ -220,7 +220,7 @@ void BaseViewModel::show_pineapple_page() {
     if (!wifi_scan_running_) start_wifi_scan();
 }
 void BaseViewModel::show_gps_tool(GpsTool tool) {
-    gps_log_.stop();
+    gps_log_.reset();
     stop_wifi_capture();
     gps_tool_ = tool;
     wardrive_session_ = tool == GpsTool::Wardrive;

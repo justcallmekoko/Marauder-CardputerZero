@@ -102,4 +102,9 @@ void Log::stop() {
     if (file_.is_open()) file_.close();
     seen_.clear();
 }
+void Log::reset() {
+    stop();
+    count_ = 0;
+    path_.clear();
+}
 }

@@ -25,6 +25,9 @@ int main() {
     assert(log.access_point("AA:BB:CC:DD:EE:FF", "Test", 6, -60, "WPA2", 407123456, -740123456));
     assert(log.count() == 1);
     log.stop();
+    assert(log.count() == 1);
+    log.reset();
+    assert(log.count() == 0);
     std::ifstream file(wardrive);
     const std::string text((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
     assert(text.find("\"Test,\"\"AP\"\"\",6,-52,\"WPA2\",40.7123456,-74.0123456") != std::string::npos);
