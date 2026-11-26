@@ -102,7 +102,7 @@ void WifiScanScreen::render() {
         (client_list || mode == 3) && clients ? clients->size() : items.size();
     const auto colors = view::palette(vm.is_dark_mode());
     auto accent = colors.success;
-    lv_label_set_text(title_, fox ? "Fox hunt" : pine_list ? "Pineapple scan" : pine_ops ? "Device actions" :
+    lv_label_set_text(title_, fox ? "Fox hunt" : pine_list ? "Pineapples" : pine_ops ? "Device actions" :
                       pine_info ? "Candidate info" : pine_feed ? "Device traffic" :
                       raw_feed ? "Raw frames" : filter_list ? "Frame filters" : station_list ? "Stations" :
                       feed ? (vm.wifi_feed_station() ? "Station traffic" : "AP traffic") :
@@ -213,7 +213,8 @@ void WifiScanScreen::render() {
             lv_label_set_text(row.detail, association.c_str());
             lv_obj_set_style_text_color(row.detail, colors.text_disabled, 0);
         }
-        const std::string name = pine_list ? pineapples[index].ssid :
+        const std::string name = pine_list ? (pineapples[index].ssid == "[hidden/unknown]" ?
+            pineapples[index].mac : pineapples[index].ssid) :
             pine_ops ? (index == 0 ? "Information" : index == 1 ? "Traffic filter" :
                          index == 2 ? "Fox hunt" : recording_target ? "Stop device recording" : "Record this device") :
             filter_list ? (index ? platform::wireless::frame_kind_label(kind) : "All frames") :
