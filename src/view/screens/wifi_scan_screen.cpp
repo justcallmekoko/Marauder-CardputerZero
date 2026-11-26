@@ -138,8 +138,14 @@ void WifiScanScreen::render() {
             lv_label_set_text(row.name, frame.type.c_str());
             const auto signal = frame.has_rssi ? std::to_string(frame.rssi) + " dBm" : "";
             lv_label_set_text(row.metric, signal.c_str());
-            const std::string route = (frame.sender.empty() ? "?" : frame.sender) + std::string(" > ") +
-                (frame.receiver.empty() ? "?" : frame.receiver);
+            const auto display_address = [&](const std::string& mac) -> std::string {
+                if (mac.empty()) return "?";
+                if (!raw_feed && cursor < items.size() && mac == items[cursor].bssid &&
+                    !items[cursor].ssid.empty() && items[cursor].ssid != "[hidden/unknown]")
+                    return items[cursor].ssid;
+                return mac;
+            };
+            const std::string route = display_address(frame.sender) + " > " + display_address(frame.receiver);
             lv_label_set_text(row.detail, route.c_str());
             lv_obj_set_style_text_color(row.detail, colors.text_disabled, 0);
             lv_obj_set_style_text_color(row.name, frame_color(frame.kind), 0);
