@@ -455,6 +455,14 @@ void BaseViewModel::marauder_menu_activate() {
         model_.cycle_battery_display();
         battery_display_subject_.set(static_cast<int>(model_.battery_display()));
     }
+    if (action == Action::CycleCensor) {
+        if (!model_.toggle_censor()) resource_error_ = "Could not save censor setting";
+        else {
+            publish_adapter_detail();
+            inventory_generation_.set(inventory_generation_.value() + 1);
+            pcap_files_generation_.set(pcap_files_generation_.value() + 1);
+        }
+    }
     if (action == Action::CycleTrafficSource && !model_.cycle_traffic_source())
         resource_error_ = "Could not save graph source";
     marauder_menu_generation_subject_.set(marauder_menu_generation_subject_.value() + 1);
@@ -517,8 +525,9 @@ std::string BaseViewModel::setting_value(model::MarauderMenuAction action) const
     if (action == Action::DimDelay) return model_.dim_seconds() ? std::to_string(model_.dim_seconds()) + " sec" : "Never";
     if (action == Action::Reserve) return model_.reserve_mib() ? std::to_string(model_.reserve_mib()) + " MiB" : "Off";
     if (action == Action::CycleTrafficSource) return model_.traffic_monitor_source() ? "Monitor" : "Adapter";
-    if (action == Action::UploadPolicy) return !pending_uuid_.empty() ? pending_network_ :
+    if (action == Action::UploadPolicy) return !pending_uuid_.empty() ? screen_name(pending_network_) :
         model_.trusted_profile().empty() ? "Manual" : "Trusted WiFi";
+    if (action == Action::CycleCensor) return model_.censor_enabled() ? "On" : "Off";
     model::Credential field;
     if (credential_action(action, field)) return model::credential_saved(field) ? "Saved" : "Not set";
     if (action == model::MarauderMenuAction::CycleBatteryDisplay) return model::battery_display_name(model_.battery_display());
@@ -1505,13 +1514,13 @@ void BaseViewModel::publish_adapter_detail() {
         if (!adapter.vendor_id.empty()) out << "USB " << adapter.vendor_id << ':' << adapter.product_id << '\n';
         out << "Driver " << (adapter.driver.empty() ? "unknown" : adapter.driver)
             << "  PHY " << (adapter.phy_name.empty() ? "unknown" : adapter.phy_name) << '\n'
-            << "MAC " << (adapter.mac_address.empty() ? "unknown" : adapter.mac_address) << '\n'
+            << "MAC " << (adapter.mac_address.empty() ? "unknown" : screen_mac(adapter.mac_address)) << '\n'
             << "F/X ITEM C/ENTER SELECT\n"
             << "Z/ESC BACK D MORE";
     } else {
         out << "ADAPTER " << (highlighted_adapter_ + 1) << '/' << adapters_.size() << "  DETAILS\n"
             << adapter.interface_name << "  ifindex " << (adapter.ifindex.empty() ? "?" : adapter.ifindex) << '\n'
-            << "ID " << format::clip_for_display(adapter.stable_id, 30) << '\n'
+            << "ID " << (censor_enabled() ? "censored" : format::clip_for_display(adapter.stable_id, 30)) << '\n'
             << "MAC " << (adapter.permanent_mac ? "PERMANENT" : "ASSIGNED") << '\n'
             << "Monitor now " << adapter.monitor_status << "   Capability " << platform::wireless::capability_label(adapter.monitor_mode) << '\n'
             << "Injection " << platform::wireless::capability_label(adapter.injection) << '\n'

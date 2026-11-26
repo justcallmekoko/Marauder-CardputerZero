@@ -35,6 +35,8 @@ public:
     BaseModel();
     BatteryDisplay battery_display() const { return battery_display_; }
     void cycle_battery_display();
+    bool censor_enabled() const { return censor_enabled_; }
+    bool toggle_censor();
     bool screenshots_in_documents() const { return documents_; }
     unsigned cache_kib() const { return cache_kib_; }
     unsigned brightness() const { return brightness_; }
@@ -63,6 +65,7 @@ private:
     bool documents_{false};
     unsigned cache_kib_{0};
     BatteryDisplay battery_display_{BatteryDisplay::Both};
+    bool censor_enabled_{};
     AppPage current_page_{AppPage::Dashboard};
     std::string selected_adapter_id_;
     bool traffic_monitor_source_{true};

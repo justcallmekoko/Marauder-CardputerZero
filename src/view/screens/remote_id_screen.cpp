@@ -147,9 +147,10 @@ void RemoteIdScreen::render() {
         lv_obj_add_flag(empty_, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(detail_, LV_OBJ_FLAG_HIDDEN);
         for (auto& row : rows_) lv_obj_add_flag(row.box, LV_OBJ_FLAG_HIDDEN);
-        fox_panel_->render(vm.fox_hunt(), vm.fox_label(), vm.fox_vendor(),
+        fox_panel_->render(vm.fox_hunt(), vm.fox_label() == "Remote ID aircraft" ? vm.fox_label() :
+                           vm.screen_identifier(vm.fox_label()), vm.fox_vendor(),
                            lv_color_hex(0xD1A8BE), vm.is_dark_mode(),
-                           vm.wifi_tuned_frequency() == vm.fox_hunt().frequency_mhz());
+                           vm.wifi_tuned_frequency() == vm.fox_hunt().frequency_mhz(), vm.censor_enabled());
         set_key_guide("Esc Operations  P PCAP");
         return;
     }
@@ -195,8 +196,8 @@ void RemoteIdScreen::render() {
         const auto* aircraft = vm.remote_record(cursor);
         std::string text;
         if (vm.remote_detail_tab() == 0) {
-            text = std::string("UAS  ") + (aircraft->hasUasId ? aircraft->uasId : "Unknown") +
-                "\nMAC  " + mac_text(aircraft->mac) +
+            text = std::string("UAS  ") + (aircraft->hasUasId ? vm.screen_name(aircraft->uasId) : "Unknown") +
+                "\nMAC  " + vm.screen_mac(mac_text(aircraft->mac)) +
                 "\nType  " + aircraft_type(aircraft->uaType) +
                 "\nState  " + flight_state(aircraft->operationalStatus) +
                 "\nFrames  " + std::to_string(aircraft->packetCount) +
@@ -204,7 +205,8 @@ void RemoteIdScreen::render() {
                 "\nWi-Fi CH  " + std::to_string(aircraft->lastWifiChannel);
         } else if (vm.remote_detail_tab() == 1) {
             text = std::string("Aircraft  ") + (aircraft->hasLocation ?
-                position_text(aircraft->latitudeE7) + ", " + position_text(aircraft->longitudeE7) : "No position broadcast") +
+                vm.screen_coordinate(position_text(aircraft->latitudeE7)) + ", " +
+                vm.screen_coordinate(position_text(aircraft->longitudeE7)) : "No position broadcast") +
                 "\nGeo alt  " + (aircraft->altitudeGeoValid ? std::to_string(static_cast<int>(aircraft->altitudeGeoM)) + " m" : "Unknown") +
                 "\nSpeed  " + (aircraft->horizontalSpeedValid ? std::to_string(static_cast<int>(aircraft->horizontalSpeedMps)) + " m/s" : "Unknown") +
                 "\nHeading  " + (aircraft->directionValid ? std::to_string(aircraft->directionDeg) + " deg" : "Unknown");
@@ -217,10 +219,11 @@ void RemoteIdScreen::render() {
                         aircraft->latitudeE7, aircraft->longitudeE7))) + " deg";
             } else text += "\nFrom you  GPS fix needed";
         } else {
-            text = std::string("Operator ID  ") + (aircraft->hasOperatorId ? aircraft->operatorId : "Not broadcast") +
+            text = std::string("Operator ID  ") + (aircraft->hasOperatorId ? vm.screen_name(aircraft->operatorId) : "Not broadcast") +
                 "\nOperator position  " + (aircraft->hasOperatorLocation ?
-                    position_text(aircraft->operatorLatitudeE7) + ", " + position_text(aircraft->operatorLongitudeE7) : "Not broadcast") +
-                "\nDescription  " + (aircraft->hasDescription ? aircraft->description : "Not broadcast") +
+                    vm.screen_coordinate(position_text(aircraft->operatorLatitudeE7)) + ", " +
+                    vm.screen_coordinate(position_text(aircraft->operatorLongitudeE7)) : "Not broadcast") +
+                "\nDescription  " + (aircraft->hasDescription ? vm.screen_name(aircraft->description) : "Not broadcast") +
                 "\nAuthentication  " + (aircraft->hasAuthentication ? "Observed" : "Not observed") +
                 std::string("\nTransport  Wi-Fi ") +
                 (aircraft->transportMask & static_cast<uint8_t>(RemoteIdTransport::WifiNan) ? "NAN" : "Beacon");
@@ -288,7 +291,9 @@ void RemoteIdScreen::render() {
         const bool selected = index == cursor;
         lv_obj_set_style_bg_color(row.box, selected ? colors.button : colors.surface, 0);
         lv_obj_set_style_border_color(row.box, selected ? colors.warning : colors.border, 0);
-        lv_label_set_text(row.name, aircraft->hasUasId ? aircraft->uasId : mac_text(aircraft->mac).c_str());
+        const auto identity = aircraft->hasUasId ? vm.screen_name(aircraft->uasId) :
+            vm.screen_mac(mac_text(aircraft->mac));
+        lv_label_set_text(row.name, identity.c_str());
         lv_obj_set_style_text_color(row.name, aircraft->isLost ? colors.text_disabled : colors.text, 0);
         std::string meta = aircraft->isLost ? "LOST  " : "LIVE  ";
         meta += "CH " + std::to_string(aircraft->lastWifiChannel) + "  " +

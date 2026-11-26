@@ -6,6 +6,7 @@
 #pragma once
 
 #include "base_model.h"
+#include "censor_text.h"
 #include "fox_hunt.h"
 #include "marauder_menu.h"
 #include "system_info_model.h"
@@ -77,6 +78,25 @@ public:
     lv_subject_t* pcap_files_subject() { return pcap_files_generation_.native(); }
 
     bool is_dark_mode() const;
+    bool censor_enabled() const { return model_.censor_enabled(); }
+    std::string screen_name(const std::string& value) const {
+        return censor_enabled() ? model::censor::name(value) : value;
+    }
+    std::string screen_mac(const std::string& value) const {
+        return censor_enabled() ? model::censor::mac(value) : value;
+    }
+    std::string screen_identifier(const std::string& value) const {
+        return censor_enabled() ? model::censor::identifier(value) : value;
+    }
+    std::string screen_coordinate(const std::string& value) const {
+        return censor_enabled() ? model::censor::coordinate(value) : value;
+    }
+    std::string screen_capture_name(const std::string& value) const {
+        return censor_enabled() ? model::censor::capture_name(value) : value;
+    }
+    std::string screen_text(const std::string& value) const {
+        return censor_enabled() ? model::censor::macs_in_text(value) : value;
+    }
     model::AppPage current_page() const;
     void show_dashboard_page();
     void show_diagnostics_page();
