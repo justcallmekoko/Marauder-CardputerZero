@@ -157,6 +157,16 @@ void WifiScanScreen::render() {
         const auto& station = station_list ? vm.station_refs()[index] : std::pair<size_t, size_t>{0, 0};
         const auto station_client = station_list ? items[station.first].clients[station.second] :
             platform::wireless::WifiNetwork::Client{};
+        if (station_list) {
+            lv_obj_remove_flag(row.detail, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_y(row.name, 0);
+            lv_obj_set_y(row.metric, 1);
+            lv_obj_set_y(row.detail, 12);
+            const auto association = "AP " + items[station.first].ssid +
+                "  CH " + std::to_string(items[station.first].channel);
+            lv_label_set_text(row.detail, association.c_str());
+            lv_obj_set_style_text_color(row.detail, colors.text_disabled, 0);
+        }
         const std::string name = filter_list ? (index ? platform::wireless::frame_kind_label(kind) : "All frames") :
             station_list ? station_client.mac : operations ?
             (record ? recording_target ? (mode == 4 ? "Stop AP recording" : "Stop station recording") :
@@ -246,6 +256,7 @@ void WifiScanScreen::render() {
                   feed ? "F/X Scroll  Esc Operations" : operations ? "F/X Browse  Enter Open  Esc Back" :
                   mode == 3 ? "Esc Operations" : mode == 2 ? "F/X Browse  Enter Operations  Esc AP" :
                   mode == 1 ? "D Security  Esc Operations" :
+                  vm.raw_session() ? "F/X Browse  Enter Open  B Build  Esc Feed" :
                   "F/X Browse  Enter Info  D Restart  Esc Back");
 }
 }
