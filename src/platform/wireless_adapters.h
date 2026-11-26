@@ -42,6 +42,8 @@ struct Catalog {
 };
 
 Catalog enumerate();
+// Refresh only the live link state without repeating capability probes.
+void refresh_link_state(AdapterInfo& adapter);
 const char* capability_label(CapabilityState state);
 
 } // namespace platform::wireless

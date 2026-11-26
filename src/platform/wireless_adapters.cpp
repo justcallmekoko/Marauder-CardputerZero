@@ -75,6 +75,22 @@ std::string AdapterInfo::display_name() const {
     return manufacturer + " " + product_name;
 }
 
+void refresh_link_state(AdapterInfo& adapter) {
+    if (adapter.interface_name.empty() ||
+        adapter.interface_name.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-") != std::string::npos ||
+        adapter.interface_name == "." || adapter.interface_name == "..") {
+        adapter.monitor_status = "Unknown";
+        adapter.operstate.clear();
+        return;
+    }
+    const fs::path link = fs::path("/sys/class/net") / adapter.interface_name;
+    const auto type = read_value(link / "type");
+    // Linux ARPHRD_IEEE80211, PRISM and RADIOTAP identify monitor interfaces.
+    adapter.monitor_status = type == "801" || type == "802" || type == "803" ? "On" :
+                             type == "1" ? "Off" : "Unknown";
+    adapter.operstate = read_value(link / "operstate");
+}
+
 Catalog enumerate() {
     Catalog catalog;
     const fs::path root("/sys/class/net");
@@ -96,11 +112,7 @@ Catalog enumerate() {
         AdapterInfo adapter;
         adapter.interface_name = entry.path().filename().string();
         adapter.ifindex = read_value(entry.path() / "ifindex");
-        const auto link_type = read_value(entry.path() / "type");
-        // Linux ARPHRD_IEEE80211, PRISM and RADIOTAP identify monitor interfaces.
-        adapter.monitor_status = link_type == "801" || link_type == "802" || link_type == "803" ? "On" :
-                                 link_type == "1" ? "Off" : "Unknown";
-        adapter.operstate = read_value(entry.path() / "operstate");
+        refresh_link_state(adapter);
         adapter.mac_address = read_value(entry.path() / "address");
         adapter.permanent_mac = read_value(entry.path() / "addr_assign_type") == "0";
         adapter.device_path = canonical_path(entry.path() / "device");

@@ -352,6 +352,7 @@ std::string BaseViewModel::collection_warning(model::RadioRequirement requiremen
     if (!(std::ifstream(path + "ifindex") >> index) || index != selected->ifindex)
         return "Selected adapter unavailable";
     if (requirement == Requirement::Selected) return {};
+    if (monitor_job_.valid()) return "Radio mode is changing";
     int type{};
     if (!(std::ifstream(path + "type") >> type)) return "Cannot verify adapter mode";
     const bool monitor = type == 801 || type == 802 || type == 803;
@@ -593,9 +594,14 @@ void BaseViewModel::toggle_monitor() {
             monitor_job_ = std::async(std::launch::async, [this, name, start] {
                 return start ? monitor_session_.start(name) : monitor_session_.stop();
             });
+            monitor_pending_name_ = name;
+            monitor_target_on_ = start;
+            monitor_started_tick_ = lv_tick_get();
+            monitor_status_tick_ = 0;
             adapter_error_ = "Switching radio mode...";
         } catch (const std::system_error&) {
             if (start) monitor_owner_.clear();
+            monitor_pending_name_.clear();
             adapter_error_ = "Cannot switch mode now";
         }
     }
@@ -603,6 +609,12 @@ void BaseViewModel::toggle_monitor() {
 }
 
 void BaseViewModel::refresh_adapters() {
+    // A capability probe runs `iw phy info`; keep it off the UI timer while a
+    // mode switch is underway. The adapter list is already loaded at this point.
+    if (monitor_busy() && !adapters_.empty()) {
+        refresh_pending_monitor_status();
+        return;
+    }
     auto catalog = platform::wireless::enumerate();
     adapters_ = std::move(catalog.adapters);
     adapter_error_ = std::move(catalog.error);
@@ -617,6 +629,25 @@ void BaseViewModel::refresh_adapters() {
     if (saved != adapters_.end()) highlighted_adapter_ = saved - adapters_.begin();
     adapter_details_expanded_ = false;
     publish_adapter_detail();
+}
+
+void BaseViewModel::refresh_pending_monitor_status() {
+    if (monitor_pending_name_.empty()) return;
+    const auto found = std::find_if(adapters_.begin(), adapters_.end(), [&](const auto& adapter) {
+        return adapter.interface_name == monitor_pending_name_;
+    });
+    if (found == adapters_.end()) return;
+    const auto previous = found->monitor_status;
+    platform::wireless::refresh_link_state(*found);
+    const bool observed_target = found->monitor_status == (monitor_target_on_ ? "On" : "Off");
+    const auto seconds = lv_tick_elaps(monitor_started_tick_) / 1000;
+    const std::string progress = observed_target ?
+        (monitor_target_on_ ? "Monitor on - confirming" : "Monitor off - confirming") :
+        "Switching radio mode " + std::to_string(seconds) + "s";
+    if (previous != found->monitor_status || adapter_error_ != progress) {
+        adapter_error_ = progress;
+        publish_adapter_detail();
+    }
 }
 
 void BaseViewModel::previous_adapter() {
@@ -1048,12 +1079,25 @@ void BaseViewModel::wifi_scan_timer_cb(lv_timer_t* timer) {
     auto* self = static_cast<BaseViewModel*>(lv_timer_get_user_data(timer));
     if (self) {
         self->idle_display();
-        if (self->monitor_busy() && self->monitor_job_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
-            const auto message = self->monitor_job_.get();
-            if (message != "Monitor on") self->monitor_owner_.clear();
-            self->refresh_adapters();
-            self->adapter_error_ = message;
-            self->publish_adapter_detail();
+        if (self->monitor_busy()) {
+            if (self->monitor_job_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+                const auto message = self->monitor_job_.get();
+                if (message != "Monitor on") self->monitor_owner_.clear();
+                self->refresh_pending_monitor_status();
+                const auto selected = std::find_if(self->adapters_.begin(), self->adapters_.end(), [&](const auto& adapter) {
+                    return adapter.interface_name == self->monitor_pending_name_;
+                });
+                const bool confirmed = selected != self->adapters_.end() &&
+                    selected->monitor_status == (message == "Monitor on" ? "On" : "Off");
+                self->monitor_pending_name_.clear();
+                if (message == "Monitor on" && !confirmed) self->monitor_owner_.clear();
+                self->adapter_error_ = message == "Monitor on" && !confirmed ? "Monitor mode unconfirmed" :
+                    message == "Monitor off" && !confirmed ? "Check adapter restore" : message;
+                self->publish_adapter_detail();
+            } else if (!self->monitor_status_tick_ || lv_tick_elaps(self->monitor_status_tick_) >= 500) {
+                self->monitor_status_tick_ = lv_tick_get();
+                self->refresh_pending_monitor_status();
+            }
         }
         self->finish_wifi_scan_if_ready();
         const auto pcap_error = self->pcap_capture_.take_error();

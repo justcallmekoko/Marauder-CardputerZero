@@ -20,6 +20,7 @@ Native C++17/LVGL 9.5 port of ESP32 Marauder for the ARM64 Linux-based Cardputer
 - **WiFi → Activity → Remote ID** listens for Wi-Fi Beacon and NAN aircraft broadcasts on the selected monitor-mode adapter. A live list shows aircraft ID, channel, signal and distance when the Cardputer has a fresh GPS fix. The relative-position map centers on the Cardputer and shows aircraft positions and recent paths; without a fix it shows a clear GPS prompt while collection continues. `F`/`X` selects an aircraft, Enter opens identity, position and operator details, `F`/`X` changes detail tabs, and Esc returns to the map. Bluetooth Remote ID is not collected. The app does not provide offline map tiles or terrain. The Remote ID display depends on receiving an aircraft broadcast on a channel the adapter visits and on the aircraft broadcasting its own location.
 - The Wi-Fi Remote ID decoder and relative-position math are adapted from ESP32 Marauder's MIT-licensed `RemoteIdDecoder` and `RemoteIdModel`; the original license is included in `REMOTE_ID_MIT_LICENSE.txt`. The Pineapple Pager Remote ID monitor was consulted for its Wi-Fi transport handling.
 - Direct menu navigation with the printed `Z`/`X`/`C`/`F` arrow cluster, `Enter` for the primary action, and `D` for details on supported screens
+- Context key guides highlight the key names in muted blue, separate from their action descriptions. Adapter mode changes show the observed interface state while the helper finishes and update the adapter screen without rerunning a full capability scan on the UI thread.
 - APPLaunch icon uses the white JCMK LLC mark on a black background
 - Read-only inventory of:
   - operating system, kernel, uptime, memory, and storage
@@ -107,7 +108,7 @@ cmake --build --preset linux-x86-64-dbg
 cmake --workflow --preset cp0-cross-package
 ```
 
-The expected artifact is `dist/Marauder_0.6.35_rev1_arm64.deb`. Packaging and deployment remain separate actions.
+The expected artifact is `dist/Marauder_0.6.36_rev1_arm64.deb`. Packaging and deployment remain separate actions.
 
 ## Safety and scope
 

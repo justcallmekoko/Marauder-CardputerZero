@@ -200,6 +200,7 @@ private:
     std::string credential_input_, credential_prompt_;
     void publish_navigation();
     void publish_adapter_detail();
+    void refresh_pending_monitor_status();
     void publish_diagnostics();
     void publish_wifi_scan();
     void publish_remote();
@@ -216,6 +217,10 @@ private:
     platform::MonitorSession monitor_session_;
     std::future<std::string> monitor_job_;
     std::string monitor_owner_;
+    std::string monitor_pending_name_;
+    bool monitor_target_on_{};
+    uint32_t monitor_started_tick_{};
+    uint32_t monitor_status_tick_{};
     platform::GpsSession gps_session_;
     std::string gps_id_, radio_session_;
     void finish_radio_setting();
