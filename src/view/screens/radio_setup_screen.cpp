@@ -101,7 +101,7 @@ void RadioSetupScreen::render() {
     const bool verified = gps && d.state == "On" && (receiver_state == "No fix" ||
         receiver_state == "Fix" || receiver_state.find(" sat") != std::string::npos);
     put(driver_, verified ? "GPS receiver" : d.driver, colors.text_disabled);
-    put(detail_, d.detail, colors.text_disabled);
+    put(detail_, vm.screen_text(d.detail), colors.text_disabled);
     const char* action = d.state == "On" ? "Disable" :
                          d.state == "Off" ? "Enable" : "";
     const std::string guide = std::string("F/X Browse   ") +

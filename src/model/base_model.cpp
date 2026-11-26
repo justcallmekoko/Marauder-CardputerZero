@@ -143,6 +143,13 @@ BaseModel::BaseModel() {
     const auto value = read_value("battery-display");
     if (value == "Icon") battery_display_ = BatteryDisplay::Icon;
     else if (value == "Percentage") battery_display_ = BatteryDisplay::Percent;
+    censor_enabled_ = read_value("censor-display") == "on";
+}
+
+bool BaseModel::toggle_censor() {
+    if (!save_value("censor-display", censor_enabled_ ? "off" : "on")) return false;
+    censor_enabled_ = !censor_enabled_;
+    return true;
 }
 
 bool BaseModel::cycle_traffic_source() {

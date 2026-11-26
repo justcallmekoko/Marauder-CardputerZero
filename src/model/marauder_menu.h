@@ -37,6 +37,7 @@ enum class MarauderMenuAction {
     OpenAdapters,
     OpenDiagnostics,
     CycleBatteryDisplay,
+    CycleCensor,
     OpenRadioSetup,
     CycleStorage,
     CycleCache,

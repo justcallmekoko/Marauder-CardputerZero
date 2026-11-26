@@ -6,7 +6,7 @@
 
 cmake_minimum_required(VERSION 3.31)
 
-project(marauder_cardputerzero VERSION 0.6.40 LANGUAGES C CXX)
+project(marauder_cardputerzero VERSION 0.6.41 LANGUAGES C CXX)
 
 include(CTest)
 find_package(Threads REQUIRED)
@@ -624,6 +624,12 @@ target_link_libraries(${PROJECT_NAME}
 )
 
 if(BUILD_TESTING AND USE_DESKTOP)
+    add_executable(censor_text_test tests/censor_text_test.cpp src/model/censor_text.cpp)
+    target_include_directories(censor_text_test PRIVATE src/model)
+    add_test(NAME censor_text_test COMMAND censor_text_test)
+    add_executable(censor_setting_test tests/censor_setting_test.cpp src/model/base_model.cpp)
+    target_include_directories(censor_setting_test PRIVATE src/model)
+    add_test(NAME censor_setting_test COMMAND censor_setting_test)
     add_executable(fox_hunt_test tests/fox_hunt_test.cpp src/model/fox_hunt.cpp)
     target_include_directories(fox_hunt_test PRIVATE src/model)
     add_test(NAME fox_hunt_test COMMAND fox_hunt_test)

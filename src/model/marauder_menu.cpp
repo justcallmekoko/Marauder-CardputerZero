@@ -71,6 +71,7 @@ const std::vector<Item>& items_for(Id menu) {
         {"Brightness", Color::Green, Action::Brightness, Id::Main, false, true},
         {"Dim after", Color::Green, Action::DimDelay, Id::Main, false, true},
         {"Battery display", Color::Green, Action::CycleBatteryDisplay, Id::Main, false, true},
+        {"Censor display", Color::Magenta, Action::CycleCensor, Id::Main, false, true},
     };
     static const std::vector<Item> accounts = {
         {"Upload policy", Color::Purple, Action::UploadPolicy, Id::Main, false, true},

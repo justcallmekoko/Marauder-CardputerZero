@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "fox_hunt_panel.h"
+#include "censor_text.h"
 #include "asset_manager.h"
 #include "channel_survey.h"
 #include "theme.h"
@@ -51,12 +52,13 @@ void FoxHuntPanel::show(bool visible) {
     else lv_obj_add_flag(root_, LV_OBJ_FLAG_HIDDEN);
 }
 void FoxHuntPanel::render(const model::FoxHunt& hunt, const std::string& label,
-                          const std::string& vendor, lv_color_t accent, bool dark_mode, bool tuned) {
+                          const std::string& vendor, lv_color_t accent, bool dark_mode, bool tuned, bool censor) {
     const auto colors = view::palette(dark_mode);
     const auto now = lv_tick_get();
     const bool fresh = hunt.fresh(now);
     lv_label_set_text(name_, label.c_str());
-    lv_label_set_text(address_, hunt.address().c_str());
+    const auto address = censor ? model::censor::mac(hunt.address()) : hunt.address();
+    lv_label_set_text(address_, address.c_str());
     lv_label_set_text(vendor_, vendor.empty() ? "Vendor unknown" : vendor.c_str());
     const auto signal = hunt.sample_count() ? std::to_string(hunt.rssi()) + " dBm" : "-- dBm";
     lv_label_set_text(signal_, signal.c_str());

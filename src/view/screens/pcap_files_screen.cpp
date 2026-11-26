@@ -78,12 +78,15 @@ void PcapFilesScreen::render() {
     else lv_obj_add_flag(message_, LV_OBJ_FLAG_HIDDEN);
     if (details) {
         const auto& item = files[cursor];
-        const auto text = item.name + "\n\nSize  " + size_label(item.bytes) +
+        const auto text = view_model().screen_capture_name(item.name) + "\n\nSize  " + size_label(item.bytes) +
             "\nSaved  " + item.modified + "\nFolder  ~/Documents/Marauder/pcap";
         lv_label_set_text(message_, text.c_str());
     } else if (files.empty()) {
         lv_label_set_text(message_, "No PCAP captures saved yet.\nSelect a monitor adapter and press P to record.");
-    } else lv_label_set_text(message_, view_model().pcap_message().c_str());
+    } else {
+        const auto message = view_model().screen_capture_name(view_model().pcap_message());
+        lv_label_set_text(message_, message.c_str());
+    }
     lv_obj_set_style_text_color(message_, colors.text_disabled, 0);
     if (cursor < first_) first_ = cursor;
     if (cursor >= first_ + rows_.size()) first_ = cursor + 1 - rows_.size();
@@ -95,7 +98,8 @@ void PcapFilesScreen::render() {
         const bool focus = index == cursor;
         lv_obj_set_style_bg_color(row.box, focus ? colors.button : colors.surface, 0);
         lv_obj_set_style_border_color(row.box, focus ? colors.error : colors.border, 0);
-        lv_label_set_text(row.name, files[index].name.c_str());
+        const auto name = view_model().screen_capture_name(files[index].name);
+        lv_label_set_text(row.name, name.c_str());
         const auto meta = files[index].modified + "    " + size_label(files[index].bytes);
         lv_label_set_text(row.meta, meta.c_str());
         lv_obj_set_style_text_color(row.name, colors.text, 0);

@@ -135,8 +135,10 @@ void WifiScanScreen::render() {
         lv_obj_add_flag(message_, LV_OBJ_FLAG_HIDDEN);
         const auto signal_color = vm.fox_target() == viewmodel::BaseViewModel::FoxTarget::Station ? colors.info :
             vm.fox_target() == viewmodel::BaseViewModel::FoxTarget::Pineapple ? frame_color(platform::wireless::FrameKind::Pineapple) : colors.success;
-        fox_panel_->render(vm.fox_hunt(), vm.fox_label(), vm.fox_vendor(), signal_color,
-                           vm.is_dark_mode(), vm.wifi_tuned_frequency() == vm.fox_hunt().frequency_mhz());
+        fox_panel_->render(vm.fox_hunt(), vm.fox_label() == "Remote ID aircraft" ? vm.fox_label() :
+                           vm.screen_identifier(vm.fox_label()), vm.fox_vendor(), signal_color,
+                           vm.is_dark_mode(), vm.wifi_tuned_frequency() == vm.fox_hunt().frequency_mhz(),
+                           vm.censor_enabled());
         set_key_guide("Esc Operations  P PCAP");
         return;
     }
@@ -183,7 +185,8 @@ void WifiScanScreen::render() {
                     return items[cursor].ssid;
                 return mac;
             };
-            const std::string route = display_address(frame.sender) + " > " + display_address(frame.receiver);
+            const std::string route = vm.screen_identifier(display_address(frame.sender)) + " > " +
+                vm.screen_identifier(display_address(frame.receiver));
             lv_label_set_text(row.detail, route.c_str());
             lv_obj_set_style_text_color(row.detail, colors.text_disabled, 0);
             lv_obj_set_style_text_color(row.name, frame_color(frame.kind), 0);
@@ -208,22 +211,22 @@ void WifiScanScreen::render() {
             lv_obj_set_y(row.name, 0);
             lv_obj_set_y(row.metric, 1);
             lv_obj_set_y(row.detail, 12);
-            const auto association = "AP " + items[station.first].ssid +
+            const auto association = "AP " + vm.screen_name(items[station.first].ssid) +
                 "  CH " + std::to_string(items[station.first].channel);
             lv_label_set_text(row.detail, association.c_str());
             lv_obj_set_style_text_color(row.detail, colors.text_disabled, 0);
         }
         const std::string name = pine_list ? (pineapples[index].ssid == "[hidden/unknown]" ?
-            pineapples[index].mac : pineapples[index].ssid) :
+            vm.screen_mac(pineapples[index].mac) : vm.screen_name(pineapples[index].ssid)) :
             pine_ops ? (index == 0 ? "Information" : index == 1 ? "Traffic filter" :
                          index == 2 ? "Fox hunt" : recording_target ? "Stop device recording" : "Record this device") :
             filter_list ? (index ? platform::wireless::frame_kind_label(kind) : "All frames") :
-            station_list ? station_client.mac : operations ?
+            station_list ? vm.screen_mac(station_client.mac) : operations ?
             (hunt_action ? "Fox hunt" : record ? recording_target ? (mode == 4 ? "Stop AP recording" : "Stop station recording") :
                                        (mode == 4 ? "Record this AP" : "Record this station") :
              mode == 4 ? (index == 0 ? "Information" : index == 1 ? "Observed clients" : "Traffic filter") :
                          (index == 0 ? "Information" : "Traffic filter")) :
-            client_list ? (*clients)[index].mac : items[index].ssid;
+            client_list ? vm.screen_mac((*clients)[index].mac) : vm.screen_name(items[index].ssid);
         lv_label_set_text(row.name, name.c_str());
         lv_obj_set_style_text_color(row.name, pine_list ? frame_color(platform::wireless::FrameKind::Pineapple) :
             filter_list && index ? frame_color(kind) : colors.text, 0);
@@ -247,18 +250,18 @@ void WifiScanScreen::render() {
     std::string message;
     if (pine_info && pine_cursor < pineapples.size()) {
         const auto& item = pineapples[pine_cursor];
-        message = item.ssid + "\n" + item.mac + "\n" + item.vendor.substr(0, 40) +
+        message = vm.screen_name(item.ssid) + "\n" + vm.screen_mac(item.mac) + "\n" + item.vendor.substr(0, 40) +
             "\n" + item.evidence + "  |  " + item.security +
             "\nCH " + std::to_string(platform::wireless::channel_number(item.frequency_mhz)) +
             "  " + (item.has_rssi ? std::to_string(item.rssi) + " dBm" : "RSSI unknown") +
             "  " + std::to_string(item.beacons) + " beacons\nCandidate only; identity can be spoofed";
     } else if (pine_ops && pine_cursor < pineapples.size()) {
         const auto& item = pineapples[pine_cursor];
-        message = !vm.wifi_error().empty() ? vm.wifi_error() : item.ssid + "  CH " +
+        message = !vm.wifi_error().empty() ? vm.wifi_error() : vm.screen_name(item.ssid) + "  CH " +
             std::to_string(platform::wireless::channel_number(item.frequency_mhz)) + "  " + item.evidence;
     } else if (pine_feed && pine_cursor < pineapples.size()) {
         const auto& item = pineapples[pine_cursor];
-        message = "CH " + std::to_string(platform::wireless::channel_number(item.frequency_mhz)) + "  " + item.ssid +
+        message = "CH " + std::to_string(platform::wireless::channel_number(item.frequency_mhz)) + "  " + vm.screen_name(item.ssid) +
             (vm.wifi_tuned_frequency() == static_cast<unsigned>(item.frequency_mhz) ?
              vm.wifi_feed_offset() ? "  HISTORY" : "  LIVE" : "  TUNING");
         if (!vm.wifi_error().empty()) message = vm.wifi_error();
@@ -276,36 +279,36 @@ void WifiScanScreen::render() {
             (vm.raw_auto_hop() ? "   AUTO" : "   MANUAL") + "   Waiting for frames";
     } else if (feed && cursor < items.size()) {
         const auto channel = items[cursor].channel;
-        message = "CH " + std::to_string(channel) + "   " + vm.wifi_feed_target() +
+        message = "CH " + std::to_string(channel) + "   " + vm.screen_mac(vm.wifi_feed_target()) +
             (vm.wifi_tuned_frequency() == static_cast<unsigned>(items[cursor].frequency_mhz) ?
                 (vm.wifi_feed_offset() ? "   HISTORY" : "   LIVE") : "   TUNING");
         if (!vm.wifi_error().empty()) message = vm.wifi_error();
         if (frames.empty() && vm.wifi_error().empty()) message = "CH " + std::to_string(channel) + "   Waiting for frames";
     } else if (operations && cursor < items.size()) {
-        message = !vm.wifi_error().empty() ? vm.wifi_error() : mode == 4 ? items[cursor].ssid + "   CH " + std::to_string(items[cursor].channel) :
-            clients && vm.wifi_client_cursor() < clients->size() ? (*clients)[vm.wifi_client_cursor()].mac : "";
+        message = !vm.wifi_error().empty() ? vm.wifi_error() : mode == 4 ? vm.screen_name(items[cursor].ssid) + "   CH " + std::to_string(items[cursor].channel) :
+            clients && vm.wifi_client_cursor() < clients->size() ? vm.screen_mac((*clients)[vm.wifi_client_cursor()].mac) : "";
     } else if (mode == 3 && clients && vm.wifi_client_cursor() < clients->size()) {
         const auto& client = (*clients)[vm.wifi_client_cursor()];
-        message = client.mac + "\n" + client.vendor.substr(0, 40) +
+        message = vm.screen_mac(client.mac) + "\n" + client.vendor.substr(0, 40) +
             "\nRSSI  " + (client.has_rssi ? std::to_string(client.rssi) + " dBm" : "Not observed uplink") +
             "\nFrames  " + std::to_string(client.frames) +
-            "\nAP  " + items[cursor].ssid;
+            "\nAP  " + vm.screen_name(items[cursor].ssid);
     } else if (mode == 1 && cursor < items.size()) {
         const auto& item = items[cursor];
         const auto& security = item.security_info;
         if (vm.wifi_info_tab() == 1) {
-            message = item.ssid + "\n" + (security.summary.empty() ? "Security unknown" : security.summary) +
+            message = vm.screen_name(item.ssid) + "\n" + (security.summary.empty() ? "Security unknown" : security.summary) +
                 "\nAKM  " + (security.akm.empty() ? "Unknown" : security.akm) +
                 "\nPMF  " + (security.pmf.empty() ? "Unknown" : security.pmf) +
                 "\nRSNXE  " + (security.rsnxe.empty() ? "Unknown" : security.rsnxe);
             if (!security.note.empty()) message += "\nNote  " + security.note;
         } else if (vm.wifi_info_tab() == 2) {
-            message = item.ssid + "\nPairwise  " + (security.pairwise.empty() ? "Unknown" : security.pairwise) +
+            message = vm.screen_name(item.ssid) + "\nPairwise  " + (security.pairwise.empty() ? "Unknown" : security.pairwise) +
                 "\nGroup  " + (security.group.empty() ? "Unknown" : security.group) +
                 "\nMgmt  " + (security.group_management.empty() ? "Unknown" : security.group_management);
             if (!security.legacy_wpa.empty()) message += "\nLegacy  " + security.legacy_wpa;
         } else {
-            message = item.ssid + "\n" + item.bssid;
+            message = vm.screen_name(item.ssid) + "\n" + vm.screen_mac(item.bssid);
             message += "\nVendor  " + item.vendor.substr(0, 40);
             message += "\nCH " + std::to_string(item.channel) + "    " +
                 (item.has_rssi ? std::to_string(item.rssi) + " dBm" : "RSSI unknown");
