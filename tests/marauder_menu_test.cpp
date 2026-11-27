@@ -96,7 +96,8 @@ int main() {
     menu.activate();
     if (menu.columns() != 1 || menu.item_count() != 5) return 16;
     const std::vector<std::vector<MarauderMenuAction>> groups = {
-        {MarauderMenuAction::OpenRadioSetup, MarauderMenuAction::OpenAdapters, MarauderMenuAction::CycleTrafficSource},
+        {MarauderMenuAction::OpenRadioSetup, MarauderMenuAction::OpenAdapters,
+         MarauderMenuAction::CycleTrafficSource, MarauderMenuAction::None},
         {MarauderMenuAction::Brightness, MarauderMenuAction::DimDelay, MarauderMenuAction::CycleBatteryDisplay,
          MarauderMenuAction::CycleCensor},
         {MarauderMenuAction::CycleStorage, MarauderMenuAction::OpenPcapFiles, MarauderMenuAction::OpenMapPacks,
@@ -108,6 +109,7 @@ int main() {
         if (menu.item_count() != group.size() || menu.columns() != 1) return 17;
         for (auto action : group) {
             if (menu.activate() != action) return 18;
+            if (action == MarauderMenuAction::None) menu.back();
             menu.next();
         }
         menu.back();

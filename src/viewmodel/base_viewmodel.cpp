@@ -145,12 +145,19 @@ BaseViewModel::BaseViewModel()
         restore.emplace_back(adapter.stable_id, adapter.interface_name,
                              &monitor_session_for(adapter.stable_id));
     }
-    if (!restore.empty()) monitor_restore_job_ = std::async(std::launch::async, [restore] {
-        std::vector<std::string> started;
-        for (const auto& [id, name, session] : restore)
-            if (session->start(name) == "Monitor on") started.push_back(id);
-        return started;
-    });
+    if (!restore.empty()) {
+        try {
+            monitor_restore_job_ = std::async(std::launch::async, [restore] {
+                std::vector<std::string> started;
+                for (const auto& [id, name, session] : restore)
+                    if (session->start(name) == "Monitor on") started.push_back(id);
+                return started;
+            });
+        } catch (const std::system_error&) {
+            adapter_error_ = "Saved monitor restore unavailable";
+        }
+    } else if (!model_.monitor_preferences().empty())
+        adapter_error_ = "Saved monitor adapters missing or busy";
 #endif
 }
 
@@ -1111,6 +1118,7 @@ void BaseViewModel::run_wardrive_capture(std::vector<platform::wireless::Adapter
         std::unique_ptr<platform::MonitorSession> lease;
         platform::MonitorSession* session{};
         int capture{-1};
+        std::vector<unsigned> supported;
         std::vector<unsigned> channels;
         std::size_t next_channel{};
         Clock::time_point next_tune{};
@@ -1119,7 +1127,6 @@ void BaseViewModel::run_wardrive_capture(std::vector<platform::wireless::Adapter
         return a.stable_id == selected_id && b.stable_id != selected_id;
     });
     std::vector<Radio> radios;
-    std::vector<platform::wireless::WardriveRadioPlan> requested;
     std::set<std::string> phys;
     for (const auto& adapter : adapters) {
         if (wifi_capture_stop_) break;
@@ -1150,16 +1157,27 @@ void BaseViewModel::run_wardrive_capture(std::vector<platform::wireless::Adapter
         }
         if (radio.capture < 0) continue;
         phys.insert(phy);
-        requested.push_back({radio.id, adapter.frequencies, {}});
+        radio.supported = adapter.frequencies;
         radios.push_back(std::move(radio));
     }
     if (radios.empty()) {
         if (!wifi_capture_stop_) wifi_capture_failed_ = true;
         return;
     }
-    const auto plans = platform::wireless::wardrive_channel_blocks(std::move(requested), priority);
-    for (std::size_t i = 0; i < radios.size(); ++i) radios[i].channels = plans[i].channels;
-    wardrive_active_radios_ = static_cast<unsigned>(radios.size());
+    const auto rebuild_plan = [&] {
+        std::vector<platform::wireless::WardriveRadioPlan> requested;
+        for (const auto& radio : radios)
+            if (radio.capture >= 0) requested.push_back({radio.id, radio.supported, {}});
+        const auto plans = platform::wireless::wardrive_channel_blocks(std::move(requested), priority);
+        std::size_t index = 0;
+        for (auto& radio : radios) {
+            radio.channels = radio.capture >= 0 ? plans[index++].channels : std::vector<unsigned>{};
+            radio.next_channel = 0;
+            radio.next_tune = {};
+        }
+        wardrive_active_radios_ = static_cast<unsigned>(plans.size());
+    };
+    rebuild_plan();
     uint8_t bytes[65535];
     while (!wifi_capture_stop_) {
         const auto now = Clock::now();
@@ -1181,10 +1199,12 @@ void BaseViewModel::run_wardrive_capture(std::vector<platform::wireless::Adapter
         const int status = poll(ready.data(), ready.size(), 100);
         if (status < 0) { if (errno == EINTR) continue; break; }
         if (status == 0) continue;
+        bool lost_radio = false;
         for (auto& item : ready) {
             if (item.revents & (POLLERR | POLLHUP | POLLNVAL)) {
                 close(item.fd);
                 for (auto& radio : radios) if (radio.capture == item.fd) radio.capture = -1;
+                lost_radio = true;
                 continue;
             }
             if (!(item.revents & POLLIN)) continue;
@@ -1192,6 +1212,7 @@ void BaseViewModel::run_wardrive_capture(std::vector<platform::wireless::Adapter
             if (count <= 0) {
                 close(item.fd);
                 for (auto& radio : radios) if (radio.capture == item.fd) radio.capture = -1;
+                lost_radio = true;
                 continue;
             }
             platform::wireless::FrameObservation frame;
@@ -1199,6 +1220,7 @@ void BaseViewModel::run_wardrive_capture(std::vector<platform::wireless::Adapter
             std::lock_guard<std::mutex> lock(wifi_scan_mutex_);
             if (incoming_frames_.size() < 1024) incoming_frames_.push_back(std::move(frame));
         }
+        if (lost_radio) rebuild_plan();
     }
     for (auto& radio : radios) if (radio.capture >= 0) close(radio.capture);
     wardrive_active_radios_ = 0;
@@ -1752,6 +1774,10 @@ void BaseViewModel::wifi_scan_timer_cb(lv_timer_t* timer) {
             const auto& selected_id = self->model_.selected_adapter_id();
             self->monitor_owner_ = self->active_monitor_ids_.count(selected_id) ? selected_id : "";
             self->refresh_adapters();
+            if (self->active_monitor_ids_.size() < self->model_.monitor_preferences().size()) {
+                self->adapter_error_ = "Some saved monitors were unavailable or busy";
+                self->publish_adapter_detail();
+            }
         }
         if (self->monitor_job_.valid()) {
             if (self->monitor_job_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
