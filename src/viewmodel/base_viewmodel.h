@@ -122,6 +122,7 @@ public:
         int32_t lat{}, lon{};
         return remote_position(lat, lon) ? platform::maps::local_estimate(lat, lon, map_preview_zoom_) : 0;
     }
+    std::uint64_t map_area_estimate() const { return platform::maps::area_estimate(map_pack_cursor_, map_preview_zoom_); }
     bool map_installing() const { return map_job_.valid(); }
     const std::string& map_message() const { return map_message_; }
     lv_subject_t* map_subject() { return map_generation_.native(); }

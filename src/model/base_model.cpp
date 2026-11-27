@@ -4,6 +4,7 @@
  */
 
 #include "base_model.h"
+#include "../platform/map_packs.h"
 
 #include <cstdlib>
 #include <algorithm>
@@ -150,7 +151,10 @@ BaseModel::BaseModel() {
         if (value >= 1 && value <= 16) map_zoom_ = value;
     }
     const auto saved_pack = read_value("map-pack");
-    map_pack_ = saved_pack == "2" ? 2 : saved_pack == "1" ? 1 : 0;
+    if (!saved_pack.empty() && saved_pack.size() <= 2 && saved_pack.find_first_not_of("0123456789") == std::string::npos) {
+        const auto value = static_cast<unsigned>(std::stoul(saved_pack));
+        if (value < platform::maps::pack_count()) map_pack_ = value;
+    }
 }
 
 bool BaseModel::set_map_zoom(unsigned zoom) {
@@ -159,7 +163,7 @@ bool BaseModel::set_map_zoom(unsigned zoom) {
     return true;
 }
 bool BaseModel::set_map_pack(unsigned pack) {
-    if (pack > 2 || !save_value("map-pack", std::to_string(pack))) return false;
+    if (pack >= platform::maps::pack_count() || !save_value("map-pack", std::to_string(pack))) return false;
     map_pack_ = pack;
     return true;
 }

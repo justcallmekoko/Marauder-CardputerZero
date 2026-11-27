@@ -226,7 +226,8 @@ void BaseViewModel::move_map_pack(int direction) {
     map_pack_cursor_ = direction < 0 ? (map_pack_cursor_ + platform::maps::pack_count() - 1) % platform::maps::pack_count() :
         (map_pack_cursor_ + 1) % platform::maps::pack_count();
     if (map_pack_cursor_ == 2 && map_preview_zoom_ < 10) map_preview_zoom_ = 14;
-    if (map_pack_cursor_ != 2 && map_preview_zoom_ > 6) map_preview_zoom_ = 6;
+    if (map_pack_cursor_ < 2 && map_preview_zoom_ > 6) map_preview_zoom_ = 6;
+    if (map_pack_cursor_ >= 3 && map_preview_zoom_ > 10) map_preview_zoom_ = 6;
     map_generation_.set(map_generation_.value() + 1);
 }
 void BaseViewModel::select_map_pack() {
@@ -241,21 +242,29 @@ void BaseViewModel::select_map_pack() {
             try { map_job_ = std::async(std::launch::async, platform::maps::install_local, lat, lon, map_download_zoom_); }
             catch (const std::system_error&) { map_message_ = "Download worker unavailable"; }
         }
-    } else if (platform::maps::installed(map_pack_cursor_)) {
+    } else if (platform::maps::installed_zoom(map_pack_cursor_) >= map_preview_zoom_) {
         map_message_ = model_.set_map_zoom(map_preview_zoom_) && model_.set_map_pack(map_pack_cursor_) ?
             "Map selected for Remote ID" : "Could not save map";
     } else {
-        map_message_ = "Downloading map pack...";
+        if (map_pack_cursor_ >= 3 && map_area_estimate() > 2000ULL * 40960) {
+            map_message_ = "Area too large; lower zoom";
+            map_generation_.set(map_generation_.value() + 1);
+            return;
+        }
+        map_message_ = "Downloading map tiles...";
         map_download_pack_ = map_pack_cursor_;
         map_download_zoom_ = map_preview_zoom_;
-        try { map_job_ = std::async(std::launch::async, platform::maps::install, map_pack_cursor_); }
+        try {
+            if (map_pack_cursor_ >= 3) map_job_ = std::async(std::launch::async, platform::maps::install_area, map_pack_cursor_, map_download_zoom_);
+            else map_job_ = std::async(std::launch::async, platform::maps::install, map_pack_cursor_);
+        }
         catch (const std::system_error&) { map_message_ = "Download worker unavailable"; }
     }
     map_generation_.set(map_generation_.value() + 1);
 }
 void BaseViewModel::step_map_zoom(int direction) {
     const auto zoom = static_cast<int>(map_preview_zoom_) + direction;
-    if (zoom < (map_pack_cursor_ == 2 ? 6 : 1) || zoom > (map_pack_cursor_ == 2 ? 16 : 6)) return;
+    if (zoom < (map_pack_cursor_ == 2 ? 6 : 1) || zoom > (map_pack_cursor_ == 2 ? 16 : map_pack_cursor_ >= 3 ? 10 : 6)) return;
     map_preview_zoom_ = static_cast<unsigned>(zoom);
     map_message_ = "Zoom saved when pack is selected";
     map_generation_.set(map_generation_.value() + 1);
@@ -1456,7 +1465,7 @@ void BaseViewModel::wifi_scan_timer_cb(lv_timer_t* timer) {
     if (self) {
         if (self->map_job_.valid() && self->map_job_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
             self->map_message_ = self->map_job_.get();
-            if ((self->map_message_ == "Map installed" || self->map_message_ == "Local map installed") &&
+            if ((self->map_message_ == "Map installed" || self->map_message_ == "Local map installed" || self->map_message_ == "Area map installed") &&
                 self->model_.set_map_zoom(self->map_download_zoom_) && self->model_.set_map_pack(self->map_download_pack_))
                 self->map_message_ = "Installed and selected for Remote ID";
             self->map_generation_.set(self->map_generation_.value() + 1);

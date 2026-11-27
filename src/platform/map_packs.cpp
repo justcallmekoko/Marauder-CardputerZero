@@ -14,12 +14,46 @@
 
 namespace platform::maps {
 namespace {
-const std::array<Pack, 3> packs = {{
+const std::array<Pack, pack_count()> packs = {{
     {"OSM Bright", "openstreetmap", "https://raw.githubusercontent.com/meshtastic/device-ui/fb3c069926505c1d59a9ab7b547edfda9f82e70e/maps/osm.zip", 26104110, 25286324},
     {"Dark Matter", "dark-matter-brown", "https://raw.githubusercontent.com/meshtastic/device-ui/fb3c069926505c1d59a9ab7b547edfda9f82e70e/maps/dark-matter-brown.zip", 12425866, 11920338},
     {"Around GPS", "local", "https://tiles.coalition.space/raster/styles/dark-matter", 0, 0},
+    {"North America", "area-north-america", "", 0, 0, "REGION", -169, 7, -52, 72},
+    {"South America", "area-south-america", "", 0, 0, "REGION", -82, -56, -34, 13},
+    {"Europe", "area-europe", "", 0, 0, "REGION", -12, 34, 42, 72},
+    {"Africa", "area-africa", "", 0, 0, "REGION", -18, -35, 52, 38},
+    {"Asia", "area-asia", "", 0, 0, "REGION", 25, -11, 180, 78},
+    {"Oceania", "area-oceania", "", 0, 0, "REGION", 110, -48, 179, 0},
+    {"United States (lower 48)", "area-us-lower-48", "", 0, 0, "COUNTRY", -125, 24, -66, 50},
+    {"Canada (south)", "area-canada-south", "", 0, 0, "COUNTRY", -140, 41, -52, 60},
+    {"Mexico", "area-mexico", "", 0, 0, "COUNTRY", -118, 14, -86, 33},
+    {"Brazil", "area-brazil", "", 0, 0, "COUNTRY", -74, -34, -34, 6},
+    {"United Kingdom", "area-uk", "", 0, 0, "COUNTRY", -9, 49, 2, 59},
+    {"France (mainland)", "area-france", "", 0, 0, "COUNTRY", -6, 41, 10, 52},
+    {"Germany", "area-germany", "", 0, 0, "COUNTRY", 5, 47, 16, 56},
+    {"Spain", "area-spain", "", 0, 0, "COUNTRY", -10, 35, 5, 45},
+    {"Italy", "area-italy", "", 0, 0, "COUNTRY", 6, 36, 19, 48},
+    {"Netherlands", "area-netherlands", "", 0, 0, "COUNTRY", 3, 50, 8, 54},
+    {"Japan", "area-japan", "", 0, 0, "COUNTRY", 123, 24, 146, 46},
+    {"South Korea", "area-south-korea", "", 0, 0, "COUNTRY", 126, 33, 130, 39},
+    {"Australia", "area-australia", "", 0, 0, "COUNTRY", 112, -44, 154, -10},
+    {"New Zealand", "area-new-zealand", "", 0, 0, "COUNTRY", 166, -48, 179, -34},
+    {"California", "area-california", "", 0, 0, "US STATE", -125, 32, -114, 43},
+    {"Texas", "area-texas", "", 0, 0, "US STATE", -107, 25, -93, 37},
+    {"Florida", "area-florida", "", 0, 0, "US STATE", -88, 24, -80, 32},
+    {"New York", "area-new-york", "", 0, 0, "US STATE", -80, 40, -71, 46},
 }};
 struct Bounds { int min_x, max_x, min_y, max_y; };
+int tile_x(double longitude, unsigned zoom) {
+    return std::clamp(static_cast<int>(std::floor((longitude + 180.0) / 360.0 * (1u << zoom))), 0, (1 << zoom) - 1);
+}
+int tile_y(double latitude, unsigned zoom) {
+    const double radians = std::clamp(latitude, -85.0, 85.0) * 3.141592653589793 / 180.0;
+    return std::clamp(static_cast<int>(std::floor((1.0 - std::asinh(std::tan(radians)) / 3.141592653589793) * (1u << zoom) / 2.0)), 0, (1 << zoom) - 1);
+}
+Bounds area_bounds(const Pack& area, unsigned zoom) {
+    return {tile_x(area.west, zoom), tile_x(area.east, zoom), tile_y(area.north, zoom), tile_y(area.south, zoom)};
+}
 Bounds local_bounds(int32_t lat_e7, int32_t lon_e7, unsigned zoom) {
     const double latitude_deg = std::clamp(static_cast<double>(lat_e7) / 1e7, -85.0, 85.0);
     const double latitude = latitude_deg * 3.141592653589793 / 180.0;
@@ -58,13 +92,21 @@ std::filesystem::path root() {
     return home && *home ? std::filesystem::path(home) / "Documents/Marauder/maps" : std::filesystem::path{};
 }
 std::filesystem::path tile(unsigned index, unsigned zoom, unsigned x, unsigned y) {
-    if (index >= packs.size() || zoom < 1 || zoom > (index == 2 ? 16u : 6u) || x >= (1u << zoom) || y >= (1u << zoom)) return {};
+    if (index >= packs.size() || zoom < 1 || zoom > (index == 2 ? 16u : index >= 3 ? 10u : 6u) || x >= (1u << zoom) || y >= (1u << zoom)) return {};
     return root() / pack(index).directory / std::to_string(zoom) / std::to_string(x) / (std::to_string(y) + ".png");
 }
 bool installed(unsigned index) {
-    return index < packs.size() && !root().empty() && (index == 2 ?
-        std::filesystem::is_regular_file(root() / "local/.ready") :
+    return index < packs.size() && !root().empty() && (index >= 2 ?
+        std::filesystem::is_regular_file(root() / pack(index).directory / ".ready") :
         std::filesystem::is_regular_file(tile(index, 1, 0, 0)));
+}
+unsigned installed_zoom(unsigned index) {
+    if (!installed(index)) return 0;
+    if (index < 2) return 6;
+    std::ifstream marker(root() / pack(index).directory / ".ready");
+    unsigned zoom{};
+    marker >> zoom;
+    return zoom;
 }
 std::uint64_t free_bytes() {
     const auto directory = root();
@@ -169,8 +211,77 @@ std::string install_local(int32_t lat_e7, int32_t lon_e7, unsigned max_zoom) {
         }
     }
     std::ofstream ready(root() / "local/.ready");
-    ready << "OpenStreetMap contributors\n";
+    ready << max_zoom << "\nOpenStreetMap contributors\n";
     return ready ? "Local map installed" : "Could not finish map pack";
+#endif
+}
+std::uint64_t area_estimate(unsigned index, unsigned max_zoom) {
+    if (index < 3 || index >= packs.size() || max_zoom < 1 || max_zoom > 10) return 0;
+    std::uint64_t count{};
+    for (unsigned zoom = 1; zoom <= max_zoom; ++zoom) {
+        const auto bounds = area_bounds(pack(index), zoom);
+        count += static_cast<std::uint64_t>(bounds.max_x - bounds.min_x + 1) *
+                 static_cast<std::uint64_t>(bounds.max_y - bounds.min_y + 1);
+    }
+    return count * 40960;
+}
+std::uint64_t area_size(unsigned index) {
+    if (index < 3 || index >= packs.size()) return 0;
+    std::error_code error;
+    const auto directory = root() / pack(index).directory;
+    if (!std::filesystem::exists(directory, error)) return 0;
+    std::uint64_t total{};
+    for (auto it = std::filesystem::recursive_directory_iterator(directory, error);
+         !error && it != std::filesystem::recursive_directory_iterator(); it.increment(error)) {
+        if (it->is_regular_file(error) && it->path().extension() == ".png") total += it->file_size(error);
+    }
+    return total;
+}
+std::string install_area(unsigned index, unsigned max_zoom) {
+    const auto estimate = area_estimate(index, max_zoom);
+    if (!estimate || root().empty()) return "Map area unavailable";
+    if (estimate > 2000ULL * 40960) return "Area too large; lower zoom";
+    if (free_bytes() < estimate + 64ULL * 1024 * 1024) return "Not enough free space";
+#ifdef _WIN32
+    return "Download on the Cardputer";
+#else
+    std::error_code error;
+    const auto& selected = pack(index);
+    for (unsigned zoom = 1; zoom <= max_zoom; ++zoom) {
+        const auto bounds = area_bounds(selected, zoom);
+        std::vector<std::pair<std::filesystem::path, std::filesystem::path>> pending;
+        auto fetch = [&]() -> bool {
+            if (pending.empty()) return true;
+            std::vector<std::string> args = {"curl", "--parallel", "--parallel-immediate", "--parallel-max", "4",
+                "--fail", "--location", "--silent", "--show-error", "--retry", "2", "--max-time", "30"};
+            for (const auto& [temp, final] : pending) {
+                const auto y = final.stem().string();
+                const auto x = final.parent_path().filename().string();
+                args.insert(args.end(), {"--output", temp.string(),
+                    "https://tiles.coalition.space/raster/styles/dark-matter/" + std::to_string(zoom) + "/" + x + "/" + y + ".png"});
+            }
+            if (!run(args)) return false;
+            for (const auto& [temp, final] : pending) {
+                if (!png(temp)) return false;
+                std::filesystem::rename(temp, final, error);
+                if (error) return false;
+            }
+            pending.clear();
+            return true;
+        };
+        for (int y = bounds.min_y; y <= bounds.max_y; ++y) for (int x = bounds.min_x; x <= bounds.max_x; ++x) {
+            const auto final = tile(index, zoom, static_cast<unsigned>(x), static_cast<unsigned>(y));
+            if (png(final)) continue;
+            std::filesystem::create_directories(final.parent_path(), error);
+            if (error) return "Cannot create map folder";
+            pending.emplace_back(final.string() + ".part", final);
+            if (pending.size() == 32 && !fetch()) return "Tile download failed; retry to resume";
+        }
+        if (!fetch()) return "Tile download failed; retry to resume";
+    }
+    std::ofstream marker(root() / selected.directory / ".ready");
+    marker << max_zoom << "\nOpenStreetMap contributors\n";
+    return marker ? "Area map installed" : "Could not finish map pack";
 #endif
 }
 }
