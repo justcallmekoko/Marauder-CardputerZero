@@ -9,6 +9,7 @@
 #include "system_diagnostics.h"
 #include "radio_power.h"
 #include "channel_survey.h"
+#include "wardrive_plan.h"
 #include "src/misc/cache/instance/lv_image_cache.h"
 #include <chrono>
 #include <fstream>
@@ -18,6 +19,9 @@
 #include <sstream>
 #include <system_error>
 #include <iterator>
+#include <memory>
+#include <set>
+#include <tuple>
 #include <cstring>
 #if defined(__linux__) && !USE_DESKTOP
 #include <cerrno>
@@ -130,6 +134,24 @@ BaseViewModel::BaseViewModel()
     if (model_.brightness() && original_light_ >= 0 && light_max_ > 0)
         set_light(std::max(1, static_cast<int>(model_.brightness()) * light_max_ / 100));
     refresh_diagnostics();
+#if defined(__linux__) && !USE_DESKTOP
+    std::vector<std::tuple<std::string, std::string, platform::MonitorSession*>> restore;
+    for (const auto& adapter : adapters_) {
+        if (!model_.monitor_preferences().count(adapter.stable_id) ||
+            adapter.monitor_mode != platform::wireless::CapabilityState::Supported) continue;
+        const auto use = platform::wireless::connection_use(adapter.interface_name);
+        if (use == platform::wireless::ConnectionUse::Connected ||
+            use == platform::wireless::ConnectionUse::Hotspot) continue;
+        restore.emplace_back(adapter.stable_id, adapter.interface_name,
+                             &monitor_session_for(adapter.stable_id));
+    }
+    if (!restore.empty()) monitor_restore_job_ = std::async(std::launch::async, [restore] {
+        std::vector<std::string> started;
+        for (const auto& [id, name, session] : restore)
+            if (session->start(name) == "Monitor on") started.push_back(id);
+        return started;
+    });
+#endif
 }
 
 BaseViewModel::~BaseViewModel() {
@@ -145,7 +167,8 @@ BaseViewModel::~BaseViewModel() {
     stop_wifi_capture();
     if (radio_job_.valid()) radio_job_.wait();
     if (monitor_job_.valid()) monitor_job_.wait();
-    monitor_session_.stop();
+    if (monitor_restore_job_.valid()) monitor_restore_job_.wait();
+    for (auto& [id, session] : monitor_sessions_) session->stop();
     gps_session_.stop();
     platform::end_radio_session(radio_session_);
 }
@@ -159,6 +182,11 @@ lv_subject_t* BaseViewModel::diagnostics_generation_subject() { return diagnosti
 lv_subject_t* BaseViewModel::adapter_detail_subject() { return adapter_detail_subject_.native(); }
 lv_subject_t* BaseViewModel::wifi_scan_subject() { return wifi_scan_subject_.native(); }
 lv_subject_t* BaseViewModel::quit_requested_subject() { return quit_requested_subject_.native(); }
+platform::MonitorSession& BaseViewModel::monitor_session_for(const std::string& stable_id) {
+    auto& session = monitor_sessions_[stable_id];
+    if (!session) session = std::make_unique<platform::MonitorSession>();
+    return *session;
+}
 bool BaseViewModel::is_dark_mode() const { return model_.dark_mode(); }
 model::AppPage BaseViewModel::current_page() const { return model_.current_page(); }
 void BaseViewModel::show_dashboard_page() {
@@ -550,7 +578,7 @@ std::string BaseViewModel::start_pcap_capture(platform::pcap::Filter filter) {
     const auto warning = collection_warning(model::RadioRequirement::Monitor);
     if (!warning.empty()) return warning;
     if (monitor_job_.valid()) return "Radio mode is changing";
-    const int socket = monitor_session_.capture_socket();
+    const int socket = monitor_session_for(model_.selected_adapter_id()).capture_socket();
     if (socket < 0) return "Monitor capture unavailable";
     const auto error = pcap_capture_.start(socket, model_.reserve_mib(), std::move(filter));
     if (!error.empty()) return error;
@@ -586,7 +614,7 @@ std::string BaseViewModel::toggle_selected_pcap_capture() {
     if (!mhz || std::find(wifi_frequencies_.begin(), wifi_frequencies_.end(), static_cast<unsigned>(mhz)) == wifi_frequencies_.end())
         return "AP channel not available";
     if (wifi_hop_job_.valid()) { wifi_hop_job_.wait(); wifi_hop_job_.get(); }
-    const auto tuned = monitor_session_.tune(static_cast<unsigned>(mhz));
+    const auto tuned = monitor_session_for(model_.selected_adapter_id()).tune(static_cast<unsigned>(mhz));
     if (tuned != "OK") return tuned;
     wifi_tuned_frequency_ = static_cast<unsigned>(mhz);
     wifi_tune_failed_frequency_ = 0;
@@ -712,6 +740,12 @@ void BaseViewModel::marauder_menu_activate() {
     }
     if (action == Action::CycleTrafficSource && !model_.cycle_traffic_source())
         resource_error_ = "Could not save graph source";
+    if (action == Action::CycleWardriveDwell && !model_.cycle_wardrive_dwell())
+        resource_error_ = "Could not save channel dwell";
+    if (action == Action::CycleWardrivePriority && !model_.cycle_wardrive_priority())
+        resource_error_ = "Could not save channel priority";
+    if (action == Action::CycleWardriveAdapters && !model_.cycle_wardrive_adapters())
+        resource_error_ = "Could not save adapter policy";
     marauder_menu_generation_subject_.set(marauder_menu_generation_subject_.value() + 1);
     switch (action) {
         case model::MarauderMenuAction::OpenWifiScan:
@@ -760,6 +794,9 @@ void BaseViewModel::marauder_menu_activate() {
         case Action::UploadPolicy:
         case Action::CycleCache:
         case Action::CycleTrafficSource:
+        case Action::CycleWardriveDwell:
+        case Action::CycleWardrivePriority:
+        case Action::CycleWardriveAdapters:
         case model::MarauderMenuAction::CycleBatteryDisplay:
         case model::MarauderMenuAction::None:
             break;
@@ -778,6 +815,13 @@ std::string BaseViewModel::setting_value(model::MarauderMenuAction action) const
     if (action == Action::DimDelay) return model_.dim_seconds() ? std::to_string(model_.dim_seconds()) + " sec" : "Never";
     if (action == Action::Reserve) return model_.reserve_mib() ? std::to_string(model_.reserve_mib()) + " MiB" : "Off";
     if (action == Action::CycleTrafficSource) return model_.traffic_monitor_source() ? "Monitor" : "Adapter";
+    if (action == Action::CycleWardriveDwell) return std::to_string(model_.wardrive_dwell_ms()) + " ms";
+    if (action == Action::CycleWardriveAdapters)
+        return model_.wardrive_all_idle_adapters() ? "All idle" : "Selected";
+    if (action == Action::CycleWardrivePriority) {
+        constexpr const char* profiles[] = {"Even", "1/6/11", "1/5/9/13", "5G low", "5G high"};
+        return profiles[model_.wardrive_priority()];
+    }
     if (action == Action::UploadPolicy) return !pending_uuid_.empty() ? screen_name(pending_network_) :
         model_.trusted_profile().empty() ? "Manual" : "Trusted WiFi";
     if (action == Action::CycleCensor) return model_.censor_enabled() ? "On" : "Off";
@@ -914,13 +958,16 @@ void BaseViewModel::toggle_monitor() {
     else if (monitor_owner_.empty() && adapter.monitor_mode != platform::wireless::CapabilityState::Supported)
         adapter_error_ = "Monitor support unavailable";
     else {
-        const bool start = monitor_owner_.empty();
+        const bool start = !active_monitor_ids_.count(adapter.stable_id);
         const auto name = adapter.interface_name;
+        const auto id = adapter.stable_id;
+        auto* session = &monitor_session_for(id);
         monitor_owner_ = adapter.stable_id;
         try {
-            monitor_job_ = std::async(std::launch::async, [this, name, start] {
-                return start ? monitor_session_.start(name) : monitor_session_.stop();
+            monitor_job_ = std::async(std::launch::async, [session, name, start] {
+                return start ? session->start(name) : session->stop();
             });
+            monitor_pending_id_ = id;
             monitor_pending_name_ = name;
             monitor_target_on_ = start;
             monitor_started_tick_ = lv_tick_get();
@@ -995,17 +1042,13 @@ void BaseViewModel::select_highlighted_adapter() {
     if (adapters_.empty()) return;
     const auto& adapter = adapters_[highlighted_adapter_];
     const bool changed = model_.selected_adapter_id() != adapter.stable_id;
-    if (changed && !monitor_owner_.empty()) {
-        adapter_error_ = "Turn monitor off first";
-        publish_adapter_detail();
-        return;
-    }
     if (!model_.set_selected_adapter_id(adapter.stable_id)) {
         adapter_error_ = "Could not save WiFi selection";
         publish_adapter_detail();
         return;
     }
     adapter_error_.clear();
+    monitor_owner_ = active_monitor_ids_.count(adapter.stable_id) ? adapter.stable_id : "";
     if (changed) {
         wifi_networks_.clear();
         station_refs_.clear();
@@ -1025,7 +1068,150 @@ void BaseViewModel::toggle_adapter_details() {
     publish_adapter_detail();
 }
 
+void BaseViewModel::start_wardrive_capture(bool clear_results) {
+    stop_wifi_capture();
+    if (clear_results) {
+        wifi_networks_.clear();
+        station_refs_.clear();
+    }
+    wifi_scan_error_.clear();
+    wifi_list_builder_ = true;
+    wifi_capture_stop_ = false;
+    wifi_capture_failed_ = false;
+    wifi_scan_running_ = true;
+    const auto adapters = adapters_;
+    const auto selected = model_.selected_adapter_id();
+    std::unordered_map<std::string, platform::MonitorSession*> active_sessions;
+    for (const auto& id : model_.monitor_preferences())
+        active_sessions.emplace(id, &monitor_session_for(id));
+    for (const auto& id : active_monitor_ids_)
+        active_sessions.emplace(id, &monitor_session_for(id));
+    const auto all_idle = model_.wardrive_all_idle_adapters();
+    const auto dwell = model_.wardrive_dwell_ms();
+    const auto priority = model_.wardrive_priority();
+    try {
+        wifi_scan_thread_ = std::thread([this, adapters, selected, active_sessions, all_idle, dwell, priority] {
+            run_wardrive_capture(adapters, selected, active_sessions, all_idle, dwell, priority);
+        });
+    } catch (const std::system_error&) {
+        wifi_scan_running_ = false;
+        wifi_scan_error_ = "Unable to start wardrive capture";
+    }
+    publish_wifi_scan();
+}
+
+void BaseViewModel::run_wardrive_capture(std::vector<platform::wireless::AdapterInfo> adapters,
+                                          std::string selected_id,
+                                          std::unordered_map<std::string, platform::MonitorSession*> active_sessions,
+                                          bool all_idle, unsigned dwell_ms, unsigned priority) {
+#if defined(__linux__) && !USE_DESKTOP
+    using Clock = std::chrono::steady_clock;
+    struct Radio {
+        std::string id;
+        std::unique_ptr<platform::MonitorSession> lease;
+        platform::MonitorSession* session{};
+        int capture{-1};
+        std::vector<unsigned> channels;
+        std::size_t next_channel{};
+        Clock::time_point next_tune{};
+    };
+    std::stable_sort(adapters.begin(), adapters.end(), [&](const auto& a, const auto& b) {
+        return a.stable_id == selected_id && b.stable_id != selected_id;
+    });
+    std::vector<Radio> radios;
+    std::vector<platform::wireless::WardriveRadioPlan> requested;
+    std::set<std::string> phys;
+    for (const auto& adapter : adapters) {
+        if (wifi_capture_stop_) break;
+        if (!all_idle && adapter.stable_id != selected_id) continue;
+        if (adapter.monitor_mode != platform::wireless::CapabilityState::Supported ||
+            adapter.frequencies.empty()) continue;
+        const auto use = platform::wireless::connection_use(adapter.interface_name);
+        if (use == platform::wireless::ConnectionUse::Connected ||
+            use == platform::wireless::ConnectionUse::Hotspot) continue;
+        const auto phy = adapter.phy_name.empty() ? adapter.interface_name : adapter.phy_name;
+        if (phys.count(phy)) continue;
+        Radio radio;
+        radio.id = adapter.stable_id;
+        if (const auto active = active_sessions.find(adapter.stable_id); active != active_sessions.end())
+            radio.session = active->second;
+        else {
+            radio.lease = std::make_unique<platform::MonitorSession>();
+            if (radio.lease->start(adapter.interface_name) != "Monitor on") continue;
+            radio.session = radio.lease.get();
+        }
+        radio.capture = radio.session->capture_socket();
+        if (radio.capture < 0 && !radio.lease) {
+            radio.lease = std::make_unique<platform::MonitorSession>();
+            if (radio.lease->start(adapter.interface_name) == "Monitor on") {
+                radio.session = radio.lease.get();
+                radio.capture = radio.session->capture_socket();
+            }
+        }
+        if (radio.capture < 0) continue;
+        phys.insert(phy);
+        requested.push_back({radio.id, adapter.frequencies, {}});
+        radios.push_back(std::move(radio));
+    }
+    if (radios.empty()) {
+        if (!wifi_capture_stop_) wifi_capture_failed_ = true;
+        return;
+    }
+    const auto plans = platform::wireless::wardrive_channel_blocks(std::move(requested), priority);
+    for (std::size_t i = 0; i < radios.size(); ++i) radios[i].channels = plans[i].channels;
+    wardrive_active_radios_ = static_cast<unsigned>(radios.size());
+    uint8_t bytes[65535];
+    while (!wifi_capture_stop_) {
+        const auto now = Clock::now();
+        std::vector<pollfd> ready;
+        ready.reserve(radios.size());
+        for (auto& radio : radios) {
+            if (radio.capture < 0) continue;
+            if (!radio.channels.empty() && now >= radio.next_tune) {
+                const auto mhz = radio.channels[radio.next_channel];
+                if (radio.session->tune(mhz) == "OK" &&
+                    (radio.id == selected_id || radios.size() == 1))
+                    wardrive_tuned_frequency_ = mhz;
+                radio.next_channel = (radio.next_channel + 1) % radio.channels.size();
+                radio.next_tune = Clock::now() + std::chrono::milliseconds(dwell_ms);
+            }
+            ready.push_back({radio.capture, POLLIN, 0});
+        }
+        if (ready.empty()) break;
+        const int status = poll(ready.data(), ready.size(), 100);
+        if (status < 0) { if (errno == EINTR) continue; break; }
+        if (status == 0) continue;
+        for (auto& item : ready) {
+            if (item.revents & (POLLERR | POLLHUP | POLLNVAL)) {
+                close(item.fd);
+                for (auto& radio : radios) if (radio.capture == item.fd) radio.capture = -1;
+                continue;
+            }
+            if (!(item.revents & POLLIN)) continue;
+            const auto count = read(item.fd, bytes, sizeof(bytes));
+            if (count <= 0) {
+                close(item.fd);
+                for (auto& radio : radios) if (radio.capture == item.fd) radio.capture = -1;
+                continue;
+            }
+            platform::wireless::FrameObservation frame;
+            if (!platform::wireless::parse_monitor_frame(bytes, static_cast<std::size_t>(count), frame)) continue;
+            std::lock_guard<std::mutex> lock(wifi_scan_mutex_);
+            if (incoming_frames_.size() < 1024) incoming_frames_.push_back(std::move(frame));
+        }
+    }
+    for (auto& radio : radios) if (radio.capture >= 0) close(radio.capture);
+    wardrive_active_radios_ = 0;
+    if (!wifi_capture_stop_) wifi_capture_failed_ = true;
+#else
+    (void)adapters; (void)selected_id; (void)active_sessions;
+    (void)all_idle; (void)dwell_ms; (void)priority;
+    if (!wifi_capture_stop_) wifi_capture_failed_ = true;
+#endif
+}
+
 void BaseViewModel::start_wifi_scan(bool clear_results) {
+    if (wardrive_session_) { start_wardrive_capture(clear_results); return; }
     stop_wifi_capture();
     if (remote_session_) { remote_view_ = 0; remote_detail_tab_ = 0; }
     const auto selected = std::find_if(adapters_.begin(), adapters_.end(), [&](const auto& adapter) {
@@ -1045,7 +1231,7 @@ void BaseViewModel::start_wifi_scan(bool clear_results) {
     wifi_frequencies_.erase(std::unique(wifi_frequencies_.begin(), wifi_frequencies_.end()), wifi_frequencies_.end());
     wifi_scan_error_ = collection_warning(model::RadioRequirement::Monitor);
     if (!wifi_scan_error_.empty()) { publish_wifi_scan(); return; }
-    const int capture = monitor_session_.capture_socket();
+    const int capture = monitor_session_for(model_.selected_adapter_id()).capture_socket();
     if (capture < 0) {
         wifi_scan_error_ = "Monitor capture unavailable";
         publish_wifi_scan();
@@ -1154,6 +1340,8 @@ void BaseViewModel::stop_wifi_capture() {
         wifi_hop_job_ = {}; // A later scan must not consume this session's tune result.
     }
     wifi_scan_running_ = false;
+    wardrive_active_radios_ = 0;
+    wardrive_tuned_frequency_ = 0;
     std::vector<platform::remote_id::Packet> remote;
     std::vector<platform::wireless::PineappleObservation> pineapple;
     {
@@ -1170,6 +1358,7 @@ void BaseViewModel::stop_wifi_capture() {
 }
 
 void BaseViewModel::advance_wifi_channel() {
+    if (wardrive_session_) return;
     if (!wifi_scan_running_ || wifi_frequencies_.empty()) return;
     if (wifi_hop_job_.valid()) {
         if (wifi_hop_job_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return;
@@ -1212,7 +1401,8 @@ void BaseViewModel::advance_wifi_channel() {
     wifi_hop_index_ = static_cast<size_t>(found - wifi_frequencies_.begin());
     if (requested == wifi_tuned_frequency_ || requested == wifi_tune_failed_frequency_) return;
     wifi_hop_tick_ = lv_tick_get();
-    wifi_hop_job_ = std::async(std::launch::async, [this, requested] { return monitor_session_.tune(requested); });
+    auto* session = &monitor_session_for(model_.selected_adapter_id());
+    wifi_hop_job_ = std::async(std::launch::async, [session, requested] { return session->tune(requested); });
 }
 
 void BaseViewModel::previous_wifi_scan_page() {
@@ -1555,20 +1745,39 @@ void BaseViewModel::wifi_scan_timer_cb(lv_timer_t* timer) {
             }
         }
         self->idle_display();
-        if (self->monitor_busy()) {
+        if (self->monitor_restore_job_.valid() &&
+            self->monitor_restore_job_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+            for (const auto& id : self->monitor_restore_job_.get())
+                self->active_monitor_ids_.insert(id);
+            const auto& selected_id = self->model_.selected_adapter_id();
+            self->monitor_owner_ = self->active_monitor_ids_.count(selected_id) ? selected_id : "";
+            self->refresh_adapters();
+        }
+        if (self->monitor_job_.valid()) {
             if (self->monitor_job_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
                 const auto message = self->monitor_job_.get();
-                if (message != "Monitor on") self->monitor_owner_.clear();
                 self->refresh_pending_monitor_status();
                 const auto selected = std::find_if(self->adapters_.begin(), self->adapters_.end(), [&](const auto& adapter) {
                     return adapter.interface_name == self->monitor_pending_name_;
                 });
                 const bool confirmed = selected != self->adapters_.end() &&
                     selected->monitor_status == (message == "Monitor on" ? "On" : "Off");
+                if (message == "Monitor on") {
+                    self->active_monitor_ids_.insert(self->monitor_pending_id_);
+                    if (!self->model_.set_monitor_preference(self->monitor_pending_id_, true))
+                        self->adapter_error_ = "Monitor on; preference not saved";
+                } else if (message == "Monitor off") {
+                    self->active_monitor_ids_.erase(self->monitor_pending_id_);
+                    if (!self->model_.set_monitor_preference(self->monitor_pending_id_, false))
+                        self->adapter_error_ = "Monitor off; preference not saved";
+                }
+                self->monitor_owner_ = self->active_monitor_ids_.count(self->model_.selected_adapter_id()) ?
+                    self->model_.selected_adapter_id() : "";
                 self->monitor_pending_name_.clear();
-                if (message == "Monitor on" && !confirmed) self->monitor_owner_.clear();
-                self->adapter_error_ = message == "Monitor on" && !confirmed ? "Monitor mode unconfirmed" :
-                    message == "Monitor off" && !confirmed ? "Check adapter restore" : message;
+                self->monitor_pending_id_.clear();
+                if (self->adapter_error_.find("preference not saved") == std::string::npos)
+                    self->adapter_error_ = message == "Monitor on" && !confirmed ? "Monitor mode unconfirmed" :
+                        message == "Monitor off" && !confirmed ? "Check adapter restore" : message;
                 self->publish_adapter_detail();
             } else if (!self->monitor_status_tick_ || lv_tick_elaps(self->monitor_status_tick_) >= 500) {
                 self->monitor_status_tick_ = lv_tick_get();

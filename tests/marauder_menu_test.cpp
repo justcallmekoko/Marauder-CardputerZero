@@ -21,6 +21,18 @@ bool select_index(MarauderMenuModel& menu, std::size_t index) {
 
 int main() {
     MarauderMenuModel menu;
+    MarauderMenuModel wardrive_settings;
+    select_index(wardrive_settings, 3); // Device.
+    if (wardrive_settings.activate() != MarauderMenuAction::None) return 60;
+    if (wardrive_settings.activate() != MarauderMenuAction::None) return 61; // Radios and GPS.
+    select_index(wardrive_settings, 3); // Wardrive setup.
+    if (wardrive_settings.activate() != MarauderMenuAction::None ||
+        wardrive_settings.columns() != 1 || wardrive_settings.item_count() != 3) return 62;
+    if (wardrive_settings.activate() != MarauderMenuAction::CycleWardriveDwell) return 63;
+    select_index(wardrive_settings, 1);
+    if (wardrive_settings.activate() != MarauderMenuAction::CycleWardrivePriority) return 64;
+    select_index(wardrive_settings, 2);
+    if (wardrive_settings.activate() != MarauderMenuAction::CycleWardriveAdapters) return 65;
     if (menu.item_count() != 4 || menu.selected_index() != 0 || menu.depth() != 1) return 1;
     if (std::string(menu.title()) != "MARAUDER") return 21;
     const MarauderMenuColor root_colors[] = {

@@ -21,6 +21,7 @@ enum class MarauderMenuId {
     Device,
     Accounts,
     Radios,
+    WardriveSettings,
     Display,
     FilesAndMemory,
 };
@@ -42,6 +43,9 @@ enum class MarauderMenuAction {
     OpenDiagnostics,
     CycleBatteryDisplay,
     CycleCensor,
+    CycleWardriveDwell,
+    CycleWardrivePriority,
+    CycleWardriveAdapters,
     OpenRadioSetup,
     CycleStorage,
     CycleCache,

@@ -102,6 +102,8 @@ namespace {
 constexpr unsigned brightness_levels[] = {0, 25, 50, 75, 100};
 constexpr unsigned dim_delays[] = {0, 30, 60, 120, 300};
 constexpr unsigned reserves[] = {64, 128, 256, 512, 0};
+constexpr unsigned wardrive_dwell_levels[] = {650, 300, 1000, 1500};
+constexpr unsigned wardrive_priority_profiles[] = {0, 1, 2, 3, 4};
 
 template <size_t N>
 unsigned load_choice(const char* key, const unsigned (&options)[N]) {
@@ -123,6 +125,29 @@ bool cycle_choice(const char* key, unsigned& current, const unsigned (&options)[
 bool BaseModel::cycle_brightness() { return cycle_choice("brightness", brightness_, brightness_levels); }
 bool BaseModel::cycle_dim() { return cycle_choice("idle-seconds", dim_seconds_, dim_delays); }
 bool BaseModel::cycle_reserve() { return cycle_choice("reserve-mib", reserve_mib_, reserves); }
+bool BaseModel::cycle_wardrive_dwell() {
+    return cycle_choice("wardrive-dwell-ms", wardrive_dwell_ms_, wardrive_dwell_levels);
+}
+bool BaseModel::cycle_wardrive_priority() {
+    return cycle_choice("wardrive-priority", wardrive_priority_, wardrive_priority_profiles);
+}
+bool BaseModel::cycle_wardrive_adapters() {
+    if (!save_value("wardrive-all-idle", wardrive_all_idle_adapters_ ? "off" : "on")) return false;
+    wardrive_all_idle_adapters_ = !wardrive_all_idle_adapters_;
+    return true;
+}
+bool BaseModel::set_monitor_preference(const std::string& stable_id, bool enabled) {
+    if (stable_id.empty() || stable_id.size() > 256 || stable_id.find_first_of("\r\n") != std::string::npos ||
+        stable_id.rfind("ifindex:", 0) == 0) return false;
+    auto next = monitor_preferences_;
+    if (enabled) next.insert(stable_id);
+    else next.erase(stable_id);
+    std::string data;
+    for (const auto& id : next) data += id + "\n";
+    if (!replace_preference(preference_path("monitor-adapters"), data)) return false;
+    monitor_preferences_ = std::move(next);
+    return true;
+}
 bool BaseModel::set_trusted_profile(const std::string& uuid) {
     if (!save_value("trusted-wifi-uuid", uuid)) return false;
     trusted_profile_ = uuid;
@@ -132,9 +157,18 @@ bool BaseModel::set_trusted_profile(const std::string& uuid) {
 BaseModel::BaseModel() {
     std::ifstream selection(preference_path("wifi-adapter"));
     std::getline(selection, selected_adapter_id_);
+    std::ifstream saved_monitors(preference_path("monitor-adapters"));
+    std::string monitor_id;
+    while (std::getline(saved_monitors, monitor_id))
+        if (!monitor_id.empty() && monitor_id.size() <= 256 &&
+            monitor_id.rfind("ifindex:", 0) != 0 && monitor_id.find('\r') == std::string::npos)
+            monitor_preferences_.insert(monitor_id);
     brightness_ = load_choice("brightness", brightness_levels);
     dim_seconds_ = load_choice("idle-seconds", dim_delays);
     reserve_mib_ = load_choice("reserve-mib", reserves);
+    wardrive_dwell_ms_ = load_choice("wardrive-dwell-ms", wardrive_dwell_levels);
+    wardrive_priority_ = load_choice("wardrive-priority", wardrive_priority_profiles);
+    wardrive_all_idle_adapters_ = read_value("wardrive-all-idle") != "off";
     trusted_profile_ = read_value("trusted-wifi-uuid");
     traffic_monitor_source_ = read_value("traffic-graph-source") != "adapter";
     documents_ = read_value("screenshot-folder") == "Documents";

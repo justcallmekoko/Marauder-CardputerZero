@@ -6,6 +6,7 @@
 #pragma once
 
 #include <string>
+#include <set>
 
 namespace model {
 
@@ -60,6 +61,14 @@ public:
     bool set_selected_adapter_id(std::string stable_id);
     bool traffic_monitor_source() const { return traffic_monitor_source_; }
     bool cycle_traffic_source();
+    unsigned wardrive_dwell_ms() const { return wardrive_dwell_ms_; }
+    unsigned wardrive_priority() const { return wardrive_priority_; }
+    bool wardrive_all_idle_adapters() const { return wardrive_all_idle_adapters_; }
+    bool cycle_wardrive_dwell();
+    bool cycle_wardrive_priority();
+    bool cycle_wardrive_adapters();
+    const std::set<std::string>& monitor_preferences() const { return monitor_preferences_; }
+    bool set_monitor_preference(const std::string& stable_id, bool enabled);
     unsigned map_zoom() const { return map_zoom_; }
     unsigned map_pack() const { return map_pack_; }
     bool set_map_zoom(unsigned zoom);
@@ -75,6 +84,10 @@ private:
     AppPage current_page_{AppPage::Dashboard};
     std::string selected_adapter_id_;
     bool traffic_monitor_source_{true};
+    unsigned wardrive_dwell_ms_{650};
+    unsigned wardrive_priority_{};
+    bool wardrive_all_idle_adapters_{true};
+    std::set<std::string> monitor_preferences_;
     unsigned map_zoom_{6};
     unsigned map_pack_{};
 };

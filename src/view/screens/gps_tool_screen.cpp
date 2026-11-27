@@ -247,8 +247,12 @@ void GpsToolScreen::render() {
         const bool alert = message.find("failed") != std::string::npos ||
                            message.find("unavailable") != std::string::npos ||
                            message.find("Enable") != std::string::npos;
+        const auto scan_status = vm.wardrive_active_radios() > 1 ?
+            "RADIOS " + std::to_string(vm.wardrive_active_radios()) :
+            "CH " + (vm.scanning() && vm.wifi_tuned_frequency() ?
+                std::to_string(platform::wireless::channel_number(vm.wifi_tuned_frequency())) : "--");
         const auto meta = alert ? message :
-            "CH " + (vm.scanning() ? std::to_string(platform::wireless::channel_number(vm.wifi_tuned_frequency())) : "--") +
+            scan_status +
             "  GPS " + fix + "  CSV " + std::to_string(vm.gps_record_count()) +
             " (W" + std::to_string(vm.gps_record_count() - vm.bluetooth_record_count()) +
             " B" + std::to_string(vm.bluetooth_record_count()) + ")";

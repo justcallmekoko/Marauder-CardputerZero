@@ -52,7 +52,7 @@ const std::vector<Item>& items_for(Id menu) {
     };
     static const std::vector<Item> gps = {
         {"GPS Info", Color::Red, Action::OpenGpsInfo, Id::Main, false, true},
-        {"Wardrive", Color::Green, Action::OpenWardrive, Id::Main, false, true, RadioRequirement::Monitor},
+        {"Wardrive", Color::Green, Action::OpenWardrive, Id::Main, false, true},
         {"Track", Color::Orange, Action::OpenGpsTrack, Id::Main, false, true},
     };
     static const std::vector<Item> device = {
@@ -66,6 +66,12 @@ const std::vector<Item>& items_for(Id menu) {
         {"Radio setup", Color::Cyan, Action::OpenRadioSetup, Id::Main, false, true},
         {"WiFi adapter", Color::Green, Action::OpenAdapters, Id::Main, false, true},
         {"Graph source", Color::Yellow, Action::CycleTrafficSource, Id::Main, false, true},
+        {"Wardrive setup", Color::Orange, Action::None, Id::WardriveSettings, true, true},
+    };
+    static const std::vector<Item> wardrive_settings = {
+        {"Channel dwell", Color::Green, Action::CycleWardriveDwell, Id::Main, false, true},
+        {"Priority channels", Color::Yellow, Action::CycleWardrivePriority, Id::Main, false, true},
+        {"WiFi adapters", Color::Cyan, Action::CycleWardriveAdapters, Id::Main, false, true},
     };
     static const std::vector<Item> display = {
         {"Brightness", Color::Green, Action::Brightness, Id::Main, false, true},
@@ -99,6 +105,7 @@ const std::vector<Item>& items_for(Id menu) {
         case Id::Gps: return gps;
         case Id::Device: return device;
         case Id::Radios: return radios;
+        case Id::WardriveSettings: return wardrive_settings;
         case Id::Display: return display;
         case Id::Accounts: return accounts;
     }
@@ -117,6 +124,7 @@ const char* title_for(Id menu) {
         case Id::Gps: return "GPS";
         case Id::Device: return "Device";
         case Id::Radios: return "Radios and GPS";
+        case Id::WardriveSettings: return "Wardrive setup";
         case Id::Display: return "Display and power";
         case Id::Accounts: return "Accounts and uploads";
         case Id::FilesAndMemory: return "Storage and memory";
@@ -141,6 +149,7 @@ const MarauderMenuItem& MarauderMenuModel::item(std::size_t index) const {
 std::size_t MarauderMenuModel::columns() const {
     switch (current_menu()) {
         case MarauderMenuId::Radios:
+        case MarauderMenuId::WardriveSettings:
         case MarauderMenuId::Display:
         case MarauderMenuId::Device:
         case MarauderMenuId::FilesAndMemory:

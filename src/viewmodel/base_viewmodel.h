@@ -34,6 +34,9 @@
 #include <chrono>
 #include <thread>
 #include <unordered_set>
+#include <unordered_map>
+#include <memory>
+#include <set>
 #include <vector>
 #include <deque>
 
@@ -201,7 +204,9 @@ public:
         return pcap_capture_.active() && filter.scope != platform::pcap::Scope::All ?
             static_cast<unsigned>(filter.frequency_mhz) : 0;
     }
-    std::string tune_traffic_channel(unsigned mhz) { return monitor_session_.tune(mhz); }
+    std::string tune_traffic_channel(unsigned mhz) {
+        return monitor_session_for(model_.selected_adapter_id()).tune(mhz);
+    }
     int take_traffic_step() { int step = traffic_step_; traffic_step_ = 0; return step; }
     bool scanning() const { return wifi_scan_running_; }
     lv_subject_t* inventory_subject() { return inventory_generation_.native(); }
@@ -245,7 +250,7 @@ public:
     bool radio_busy() const { return radio_job_.valid(); }
     void refresh_adapters();
     void toggle_monitor();
-    bool monitor_busy() const { return monitor_job_.valid(); }
+    bool monitor_busy() const { return monitor_job_.valid() || monitor_restore_job_.valid(); }
     void previous_adapter();
     void next_adapter();
     void select_highlighted_adapter();
@@ -276,7 +281,10 @@ public:
     void show_raw_filters();
     const auto& wifi_feed_target() const { return wifi_feed_target_; }
     bool wifi_feed_station() const { return wifi_feed_station_; }
-    unsigned wifi_tuned_frequency() const { return wifi_tuned_frequency_; }
+    unsigned wifi_tuned_frequency() const {
+        return wardrive_session_ ? wardrive_tuned_frequency_.load() : wifi_tuned_frequency_;
+    }
+    unsigned wardrive_active_radios() const { return wardrive_active_radios_.load(); }
     void wifi_back();
     void advance_wifi_info_tab();
     bool system_details_open() const { return system_info_.details_expanded(); }
@@ -306,6 +314,11 @@ private:
     bool begin_pineapple_fox_hunt();
     void begin_remote_fox_hunt();
     void stop_wifi_capture();
+    void start_wardrive_capture(bool clear_results);
+    void run_wardrive_capture(std::vector<platform::wireless::AdapterInfo> adapters,
+                              std::string selected_id,
+                              std::unordered_map<std::string, platform::MonitorSession*> active_sessions,
+                              bool all_idle, unsigned dwell_ms, unsigned priority);
     std::string start_pcap_capture(platform::pcap::Filter filter);
     void advance_wifi_channel();
     static void wifi_scan_timer_cb(lv_timer_t* timer);
@@ -313,9 +326,13 @@ private:
     void update_gps_status();
     void sync_gps_rows();
     reactive::StringSubject<16> gps_status_{"Off"};
-    platform::MonitorSession monitor_session_;
+    platform::MonitorSession& monitor_session_for(const std::string& stable_id);
+    std::unordered_map<std::string, std::unique_ptr<platform::MonitorSession>> monitor_sessions_;
+    std::set<std::string> active_monitor_ids_;
+    std::future<std::vector<std::string>> monitor_restore_job_;
     std::future<std::string> monitor_job_;
     std::string monitor_owner_;
+    std::string monitor_pending_id_;
     std::string monitor_pending_name_;
     bool monitor_target_on_{};
     uint32_t monitor_started_tick_{};
@@ -447,6 +464,8 @@ private:
     std::future<std::string> wifi_hop_job_;
     std::size_t wifi_hop_index_{};
     unsigned wifi_tuned_frequency_{};
+    std::atomic<unsigned> wardrive_tuned_frequency_{0};
+    std::atomic<unsigned> wardrive_active_radios_{0};
     unsigned wifi_tune_failed_frequency_{};
     uint32_t wifi_hop_tick_{};
     lv_timer_t* wifi_scan_timer_{nullptr};
