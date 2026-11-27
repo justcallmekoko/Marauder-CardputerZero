@@ -74,6 +74,25 @@ def test_server_status():
             assert module["upload_file"](source, "wdg", root) == "accepted"
 
 
+def test_failed_status():
+    with tempfile.TemporaryDirectory() as directory:
+        home = Path(directory)
+        root = home / "Documents" / "Marauder" / "gps"
+        root.mkdir(parents=True)
+        source = root / "wardrive_20261127_120000.csv"
+        source.write_text("utc,radio,address,name,channel,rssi_dbm,security,address_type,latitude,longitude\n"
+                          '2026-11-27T12:00:00Z,WiFi,"AA:BB:CC:DD:EE:FF",Example,6,-42,WPA2,,40.5,-73.5\n')
+        with mock.patch.object(Path, "home", return_value=home), \
+             mock.patch.dict(module["main"].__globals__, {"upload_file": mock.Mock(side_effect=ValueError("Rejected"))}):
+            try:
+                module["main"](["wardrive-upload", str(source), "wigle"])
+                assert False, "Expected rejection"
+            except ValueError:
+                pass
+        assert (root / (source.name + ".upload")).read_text().split()[2:] == ["failed", "pending"]
+
+
 if __name__ == "__main__":
     test_conversion()
     test_server_status()
+    test_failed_status()

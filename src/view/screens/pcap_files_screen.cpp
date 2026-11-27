@@ -106,8 +106,8 @@ void PcapFilesScreen::render() {
             const auto name = view_model().screen_capture_name(files[index].name);
             lv_label_set_text(row.name, name.c_str());
             const auto meta = files[index].modified + "  " + size_label(files[index].bytes) +
-                "  W:" + (files[index].wigle == "Uploaded" ? "OK" : files[index].wigle == "Accepted" ? "WAIT" : "-") +
-                " D:" + (files[index].wdg == "Uploaded" ? "OK" : files[index].wdg == "Accepted" ? "WAIT" : "-");
+                "  W:" + (files[index].wigle == "Uploaded" ? "OK" : files[index].wigle == "Accepted" ? "WAIT" : files[index].wigle == "Failed" ? "ERR" : "-") +
+                " D:" + (files[index].wdg == "Uploaded" ? "OK" : files[index].wdg == "Accepted" ? "WAIT" : files[index].wdg == "Failed" ? "ERR" : "-");
             lv_label_set_text(row.meta, meta.c_str());
             lv_obj_set_style_text_color(row.name, colors.text, 0);
             lv_obj_set_style_text_color(row.meta, focus ? colors.success : colors.text_disabled, 0);

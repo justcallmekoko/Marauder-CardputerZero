@@ -149,14 +149,23 @@ def main(argv):
                 current = dict(zip(("wigle", "wdg"), parts[2:4]))
         except (OSError, ValueError, IndexError):
             pass
-        result = upload_file(converted, argv[2], home)
+        def save_state():
+            fd, temporary_state = tempfile.mkstemp(prefix=".wardrive-state-", dir=root)
+            with os.fdopen(fd, "w") as output:
+                output.write(f"{stat.st_size} {int(stat.st_mtime)} {current['wigle']} {current['wdg']}\n")
+                output.flush()
+                os.fsync(output.fileno())
+            os.replace(temporary_state, state_path)
+
+        try:
+            result = upload_file(converted, argv[2], home)
+        except (OSError, ValueError, http.client.HTTPException):
+            if current[argv[2]] not in ("uploaded", "accepted"):
+                current[argv[2]] = "failed"
+                save_state()
+            raise
         current[argv[2]] = result
-        fd, temporary_state = tempfile.mkstemp(prefix=".wardrive-state-", dir=root)
-        with os.fdopen(fd, "w") as output:
-            output.write(f"{stat.st_size} {int(stat.st_mtime)} {current['wigle']} {current['wdg']}\n")
-            output.flush()
-            os.fsync(output.fileno())
-        os.replace(temporary_state, state_path)
+        save_state()
         print(("WiGLE" if argv[2] == "wigle" else "WDGWars") +
               (" accepted " if result == "accepted" else " uploaded ") + str(count) + " devices")
     finally:

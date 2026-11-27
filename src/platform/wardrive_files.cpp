@@ -60,6 +60,8 @@ std::vector<FileInfo> list_files() {
         if (status && size == item.bytes && std::abs(std::difftime(time, stamp)) <= 1) {
             if (wigle == "uploaded" || wigle == "accepted") item.wigle = wigle == "uploaded" ? "Uploaded" : "Accepted";
             if (wdg == "uploaded" || wdg == "accepted") item.wdg = wdg == "uploaded" ? "Uploaded" : "Accepted";
+            if (wigle == "failed") item.wigle = "Failed";
+            if (wdg == "failed") item.wdg = "Failed";
         }
         files.push_back(std::move(item));
     }
