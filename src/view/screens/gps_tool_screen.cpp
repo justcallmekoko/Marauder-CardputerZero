@@ -202,16 +202,18 @@ void GpsToolScreen::render() {
     lv_label_set_text(position_, position.c_str());
     std::string detail;
     if (wardrive) {
-        lv_label_set_text_fmt(wifi_count_, "%zu", vm.wifi_items().size());
+        lv_label_set_text_fmt(wifi_count_, "%zu", vm.wardrive_wifi_count());
         lv_label_set_text_fmt(bluetooth_count_, "%zu", vm.bluetooth_observed_count());
-        lv_label_set_text_fmt(total_count_, "%zu", vm.wifi_items().size() + vm.bluetooth_observed_count());
+        lv_label_set_text_fmt(total_count_, "%zu", vm.wardrive_wifi_count() + vm.bluetooth_observed_count());
         const auto& message = vm.gps_tool_message();
         const bool alert = message.find("failed") != std::string::npos ||
                            message.find("unavailable") != std::string::npos ||
                            message.find("Enable") != std::string::npos;
         const auto meta = alert ? message :
             "CH " + (vm.scanning() ? std::to_string(platform::wireless::channel_number(vm.wifi_tuned_frequency())) : "--") +
-            "   GPS " + fix + "   Saved " + std::to_string(vm.gps_record_count());
+            "  GPS " + fix + "  CSV " + std::to_string(vm.gps_record_count()) +
+            " (W" + std::to_string(vm.gps_record_count() - vm.bluetooth_record_count()) +
+            " B" + std::to_string(vm.bluetooth_record_count()) + ")";
         lv_label_set_text(wardrive_status_, meta.c_str());
         lv_obj_set_style_text_color(wardrive_status_, alert || !positioned ? colors.warning : colors.text_disabled, 0);
         const auto& sightings = vm.wardrive_sightings();
@@ -251,8 +253,10 @@ void GpsToolScreen::render() {
     lv_obj_set_style_text_color(detail_, colors.info, 0);
     lv_obj_set_style_text_color(message_, colors.text_disabled, 0);
     lv_obj_set_style_text_color(file_, colors.text_disabled, 0);
-    set_key_guide(wardrive ? (map_view ? "M Feed  Enter Start/Stop  Esc Back" :
-                              "M Map  Enter Start/Stop  Esc Back") :
+    set_key_guide(wardrive ? (map_view ? (record ? "M Feed  Enter Stop  Esc Back" :
+                                          "M Feed  Enter New log  Esc Back") :
+                              record ? "M Map  Enter Stop  Esc Back" :
+                                       "M Map  Enter New log  Esc Back") :
                   track ? "Enter Start/Stop  Esc Save & Back  P PCAP" : "Esc Back  P PCAP");
 }
 void GpsToolScreen::render_wardrive_map() {
@@ -304,13 +308,14 @@ void GpsToolScreen::render_wardrive_map() {
                                       static_cast<int>(std::lround(ty * 256 - center.y + 52)));
         lv_obj_remove_flag(map_tiles_[i], LV_OBJ_FLAG_HIDDEN);
     }
-    lv_label_set_text_fmt(map_wifi_, "WI-FI  %zu", vm.wifi_items().size());
+    lv_label_set_text_fmt(map_wifi_, "WI-FI  %zu", vm.wardrive_wifi_count());
     lv_label_set_text_fmt(map_bluetooth_, "BT  %zu", vm.bluetooth_observed_count());
-    lv_label_set_text_fmt(map_total_, "TOTAL  %zu", vm.wifi_items().size() + vm.bluetooth_observed_count());
+    lv_label_set_text_fmt(map_total_, "TOTAL  %zu", vm.wardrive_wifi_count() + vm.bluetooth_observed_count());
     const auto meta = !vm.gps_recording() ? vm.gps_tool_message() :
         !vm.bluetooth_scanning() ? vm.gps_tool_message() :
-        std::string(live_fix ? "GPS FIX" : have_center ? "LAST FIX" : "NO GPS") +
-        "  z" + std::to_string(map_zoom_) + "  " + std::to_string(vm.wardrive_map_points().size()) + " points";
+        std::string(live_fix ? "GPS" : have_center ? "LAST" : "NO GPS") +
+        " z" + std::to_string(map_zoom_) + "  CSV " + std::to_string(vm.gps_record_count()) +
+        "  PLOT " + std::to_string(vm.wardrive_map_points().size());
     lv_label_set_text(map_meta_, meta.c_str());
     lv_obj_invalidate(map_plot_);
 }

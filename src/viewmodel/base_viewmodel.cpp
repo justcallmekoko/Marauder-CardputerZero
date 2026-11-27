@@ -305,6 +305,7 @@ void BaseViewModel::show_pineapple_page() {
 void BaseViewModel::show_gps_tool(GpsTool tool) {
     bluetooth_session_.stop();
     bluetooth_seen_.clear();
+    wardrive_seen_wifi_.clear();
     wardrive_sightings_.clear();
     wardrive_route_.clear();
     wardrive_map_points_.clear();
@@ -347,16 +348,24 @@ void BaseViewModel::toggle_gps_recording() {
         bluetooth_message_.clear();
         const auto count = gps_log_.count();
         gps_log_.stop();
+        if (wardrive_session_) stop_wifi_capture();
         gps_tool_message_ = "Saved " + std::to_string(count) + " records";
     } else if (gps_id_.empty()) {
         gps_tool_message_ = "Enable a GPS receiver in Device > Radio setup";
-    } else if (gps_tool_ == GpsTool::Wardrive && !wifi_scan_running_ && !bluetooth_available) {
-        gps_tool_message_ = wifi_scan_error_.empty() ? "Monitor capture unavailable" : wifi_scan_error_;
     } else {
+        if (wardrive_session_ && !wifi_scan_running_) start_wifi_scan();
+        if (wardrive_session_ && !wifi_scan_running_ && !bluetooth_available) {
+            gps_tool_message_ = wifi_scan_error_.empty() ? "Monitor capture unavailable" : wifi_scan_error_;
+            gps_tool_generation_.set(gps_tool_generation_.value() + 1);
+            return;
+        }
         std::string error;
         if (gps_log_.start(gps_tool_ == GpsTool::Track ? platform::gps::LogKind::Track :
                            platform::gps::LogKind::Wardrive, model_.reserve_mib(), error)) {
             if (gps_tool_ == GpsTool::Wardrive) {
+                bluetooth_seen_.clear();
+                wardrive_seen_wifi_.clear();
+                wardrive_sightings_.clear();
                 wardrive_route_.clear();
                 wardrive_map_points_.clear();
                 wardrive_plotted_.clear();
@@ -1634,6 +1643,32 @@ void BaseViewModel::finish_wifi_scan_if_ready() {
     }
     bool wardrive_feed_changed = false;
     for (const auto& frame : incoming) {
+        // The bounded recon list must not limit a wardrive's counts or CSV rows.
+        if (wardrive_session_ && gps_log_.active() && frame.beacon) {
+            if (wardrive_seen_wifi_.insert(frame.bssid).second) {
+                add_wardrive_sighting(false, frame.ssid.empty() ? "[hidden/unknown]" : frame.ssid,
+                                      frame.bssid);
+                wardrive_feed_changed = true;
+            } else if (!frame.ssid.empty()) {
+                for (auto& sighting : wardrive_sightings_)
+                    if (!sighting.bluetooth && sighting.address == frame.bssid &&
+                        sighting.name == "[hidden/unknown]") {
+                        sighting.name = frame.ssid;
+                        wardrive_feed_changed = true;
+                    }
+            }
+            int32_t lat{}, lon{};
+            if (gps_session_.position(lat, lon)) {
+                const auto frequency = frame.advertised_frequency_mhz ?
+                    frame.advertised_frequency_mhz : frame.frequency_mhz;
+                if (!gps_log_.access_point(frame.bssid,
+                                           frame.ssid.empty() ? "[hidden/unknown]" : frame.ssid,
+                                           platform::wireless::channel_number(frequency),
+                                           frame.has_rssi ? frame.rssi : -128, frame.security, lat, lon))
+                    gps_tool_message_ = "GPS file write failed";
+                else add_wardrive_map_point(false, frame.bssid, lat, lon);
+            }
+        }
         auto ap = std::find_if(wifi_networks_.begin(), wifi_networks_.end(), [&](const auto& item) { return item.bssid == frame.bssid; });
         if (ap == wifi_networks_.end()) {
             if (wifi_networks_.size() >= 512) continue;
@@ -1643,20 +1678,10 @@ void BaseViewModel::finish_wifi_scan_if_ready() {
             item.vendor = platform::wireless::vendor_for_mac(frame.bssid);
             wifi_networks_.push_back(std::move(item));
             ap = std::prev(wifi_networks_.end());
-            if (wardrive_session_) {
-                add_wardrive_sighting(false, ap->ssid, ap->bssid);
-                wardrive_feed_changed = true;
-            }
         }
         ++ap->frames;
         if (frame.beacon) {
             if (!frame.ssid.empty()) {
-                if (wardrive_session_ && ap->ssid == "[hidden/unknown]") {
-                    for (auto& sighting : wardrive_sightings_)
-                        if (!sighting.bluetooth && sighting.address == ap->bssid)
-                            sighting.name = frame.ssid;
-                    wardrive_feed_changed = true;
-                }
                 ap->ssid = frame.ssid;
             }
             ap->security = frame.security;
@@ -1673,15 +1698,6 @@ void BaseViewModel::finish_wifi_scan_if_ready() {
             ap->frequency_mhz = frame.frequency_mhz;
         }
         ap->channel = platform::wireless::channel_number(ap->frequency_mhz);
-        if (wardrive_session_ && gps_log_.active() && frame.beacon) {
-            int32_t lat{}, lon{};
-            if (gps_session_.position(lat, lon)) {
-                if (!gps_log_.access_point(ap->bssid, ap->ssid, ap->channel,
-                                           ap->has_rssi ? ap->rssi : -128, ap->security, lat, lon))
-                    gps_tool_message_ = "GPS file write failed";
-                else add_wardrive_map_point(false, ap->bssid, lat, lon);
-            }
-        }
         if (frame.client.empty()) continue;
         auto client = std::find_if(ap->clients.begin(), ap->clients.end(), [&](const auto& item) { return item.mac == frame.client; });
         if (client == ap->clients.end()) {

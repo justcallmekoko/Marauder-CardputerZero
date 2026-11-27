@@ -146,6 +146,7 @@ public:
     std::size_t gps_record_count() const { return gps_log_.count(); }
     std::size_t bluetooth_record_count() const { return gps_log_.bluetooth_count(); }
     std::size_t bluetooth_observed_count() const { return bluetooth_seen_.size(); }
+    std::size_t wardrive_wifi_count() const { return wardrive_seen_wifi_.size(); }
     const std::deque<WardriveSighting>& wardrive_sightings() const { return wardrive_sightings_; }
     const std::deque<WardriveMapPoint>& wardrive_route() const { return wardrive_route_; }
     const std::deque<WardriveMapPoint>& wardrive_map_points() const { return wardrive_map_points_; }
@@ -316,6 +317,7 @@ private:
     platform::GpsSession gps_session_;
     platform::BluetoothSession bluetooth_session_;
     std::unordered_set<std::string> bluetooth_seen_;
+    std::unordered_set<std::string> wardrive_seen_wifi_;
     std::deque<WardriveSighting> wardrive_sightings_;
     std::deque<WardriveMapPoint> wardrive_route_, wardrive_map_points_;
     std::unordered_set<std::string> wardrive_plotted_;
