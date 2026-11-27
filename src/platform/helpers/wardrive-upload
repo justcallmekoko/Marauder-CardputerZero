@@ -19,18 +19,21 @@ def convert(source, target):
     count = 0
     with source.open(newline="", encoding="utf-8") as src, target.open("w", newline="", encoding="utf-8") as dst:
         reader = csv.DictReader(src)
-        required = {"utc", "radio", "address", "name", "channel", "rssi_dbm", "security",
-                    "latitude", "longitude"}
-        if not reader.fieldnames or not required.issubset(reader.fieldnames):
+        shared = {"utc", "channel", "rssi_dbm", "security", "latitude", "longitude"}
+        modern = reader.fieldnames and shared.union({"radio", "address", "name"}).issubset(reader.fieldnames)
+        legacy = reader.fieldnames and shared.union({"bssid", "ssid"}).issubset(reader.fieldnames)
+        if not modern and not legacy:
             raise ValueError("Unsupported wardrive log")
         dst.write("WigleWifi-1.6,appRelease=0.6,model=Cardputer Zero,release=0.6,device=Cardputer Zero,display=LCD,board=Cardputer Zero,brand=M5Stack\n")
         writer = csv.writer(dst)
         writer.writerow(COLUMNS)
         for row in reader:
-            radio = row["radio"]
+            radio = row["radio"] if modern else "WiFi"
             if radio not in ("WiFi", "Bluetooth"):
                 continue
-            if not re.fullmatch(r"[0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5}", row["address"] or ""):
+            address = row["address"] if modern else row["bssid"]
+            name = row["name"] if modern else row["ssid"]
+            if not re.fullmatch(r"[0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5}", address or ""):
                 continue
             latitude, longitude = row["latitude"], row["longitude"]
             try:
@@ -51,7 +54,7 @@ def convert(source, target):
             observed = row["utc"] or ""
             if not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", observed):
                 continue
-            writer.writerow((row["address"], row["name"], row["security"] if radio == "WiFi" else "Misc [LE]",
+            writer.writerow((address, name, row["security"] if radio == "WiFi" else "Misc [LE]",
                              observed.replace("T", " ").removesuffix("Z"), channel, frequency,
                              row["rssi_dbm"], latitude, longitude,
                              "", "", "", "", "WIFI" if radio == "WiFi" else "BLE"))

@@ -32,6 +32,15 @@ def test_conversion():
             row = next(csv.DictReader(file))
         assert row["Frequency"] == "2437"
 
+        oldest = root / "oldest.csv"
+        oldest.write_text("utc,bssid,ssid,channel,rssi_dbm,security,latitude,longitude\n"
+                          '2026-11-27T12:00:00Z,"AA:BB:CC:DD:EE:FF",Old,11,-60,WPA2,40.5,-73.5\n')
+        assert module["convert"](oldest, target) == 1
+        with target.open(newline="") as file:
+            file.readline()
+            row = next(csv.DictReader(file))
+        assert row["SSID"] == "Old" and row["Frequency"] == "2462"
+
 
 def test_server_status():
     with tempfile.TemporaryDirectory() as directory:
