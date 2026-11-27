@@ -76,7 +76,9 @@ void MapPacksScreen::render() {
             (view_model().map_local_estimate() ? "~" + size_text(view_model().map_local_estimate()) +
                 " for 3 km   saved " + size_text(platform::maps::local_size()) : "GPS fix needed   3 km radius") :
             index >= 3 ? (installed ? "Installed " + size_text(platform::maps::area_size(index)) +
-                "   through z" + std::to_string(platform::maps::installed_zoom(index)) : "Download by area") :
+                "   through z" + std::to_string(platform::maps::installed_zoom(index)) :
+                "~" + size_text(platform::maps::area_estimate(index, view_model().map_zoom())) +
+                "   z1-" + std::to_string(view_model().map_zoom())) :
             (installed ? std::string("Installed") : "Download " + size_text(pack.archive_bytes)) +
                 "   z1-6   disk " + size_text(pack.installed_bytes);
         lv_label_set_text(row.meta, meta.c_str());
