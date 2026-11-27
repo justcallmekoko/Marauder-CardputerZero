@@ -99,7 +99,11 @@ border tiles can include nearby countries. Enter saves the zoom with the selecte
 pack. Downloads run in the background. The
 Remote ID map uses the saved style and zoom beneath aircraft paths when GPS
 has a fix. With **Censor display** enabled, the app hides map tiles so the
-operator's location cannot be inferred from the visible streets.
+operator's location cannot be inferred from the visible streets. The Remote ID
+map now states when Censor hides tiles, when a GPS fix is needed, or when the
+selected pack has no tile at the current location. To show downloaded tiles,
+turn Censor off under **Device → Display and power → Censor display** and use a
+valid GPS fix inside the pack's coverage.
 
 The compact world starter packs are useful for regional context. Their maximum
 z6 zoom does not show local streets or buildings; **Around GPS** provides local
@@ -149,7 +153,7 @@ cmake --build --preset linux-x86-64-dbg
 cmake --workflow --preset cp0-cross-package
 ```
 
-The expected artifact is `dist/Marauder_0.6.51_rev1_arm64.deb`. Debian dependencies install the runtime tools needed by the WiFi, Bluetooth, GPS, monitor, and optional map pack downloads. Packaging and deployment remain separate actions.
+The expected artifact is `dist/Marauder_0.6.52_rev1_arm64.deb`. Debian dependencies install the runtime tools needed by the WiFi, Bluetooth, GPS, monitor, and optional map pack downloads. Packaging and deployment remain separate actions.
 
 ## Safety and scope
 

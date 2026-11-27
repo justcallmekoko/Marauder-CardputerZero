@@ -262,14 +262,20 @@ void RemoteIdScreen::render() {
         return;
     }
     lv_obj_add_flag(detail_, LV_OBJ_FLAG_HIDDEN);
-    lv_label_set_text(gps_hint_, have_gps ? "" : "GPS FIX\nNEEDED");
     lv_label_set_text(range_, "");
     const auto zoom = vm.map_zoom();
     const auto center = have_gps ? map_pixel(origin_lat, origin_lon, zoom) : Pixel{};
     const auto center_tile = platform::maps::tile(vm.map_pack(), zoom,
         static_cast<unsigned>(center.x / 256), static_cast<unsigned>(center.y / 256));
-    const bool have_tiles = have_gps && !vm.censor_enabled() && platform::maps::installed(vm.map_pack()) &&
+    const bool pack_ready = platform::maps::installed(vm.map_pack());
+    const bool have_tiles = have_gps && !vm.censor_enabled() && pack_ready &&
         !center_tile.empty() && std::filesystem::is_regular_file(center_tile);
+    const char* map_hint = vm.censor_enabled() ?
+        (have_gps ? "CENSOR ON\nMAP HIDDEN" : "CENSOR ON\nMAP HIDDEN\nGPS NEEDED") :
+        !have_gps ? "GPS FIX\nNEEDED" :
+        !pack_ready ? "NO MAP PACK\nINSTALLED" :
+        !have_tiles ? "NO TILE AT\nTHIS LOCATION" : "";
+    lv_label_set_text(gps_hint_, map_hint);
     if (have_tiles) lv_obj_remove_flag(credit_, LV_OBJ_FLAG_HIDDEN);
     else lv_obj_add_flag(credit_, LV_OBJ_FLAG_HIDDEN);
     for (auto* ring : rings_) {

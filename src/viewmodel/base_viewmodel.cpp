@@ -216,7 +216,7 @@ void BaseViewModel::show_remote_id_page() {
 void BaseViewModel::show_map_packs_page() {
     map_pack_cursor_ = model_.map_pack();
     map_preview_zoom_ = model_.map_zoom();
-    map_message_ = "Choose a map pack";
+    map_message_ = model_.censor_enabled() ? "Censor On: Remote ID hides tiles" : "Choose a map pack";
     model_.set_current_page(model::AppPage::MapPacks);
     publish_navigation();
     map_generation_.set(map_generation_.value() + 1);
@@ -248,7 +248,7 @@ void BaseViewModel::select_map_pack() {
         }
     } else if (platform::maps::installed_zoom(map_pack_cursor_) >= map_preview_zoom_) {
         map_message_ = model_.set_map_zoom(map_preview_zoom_) && model_.set_map_pack(map_pack_cursor_) ?
-            "Map selected for Remote ID" : "Could not save map";
+            (model_.censor_enabled() ? "Selected; Censor hides map tiles" : "Map selected for Remote ID") : "Could not save map";
     } else {
         map_message_ = "Downloading map tiles...";
         map_download_pack_ = map_pack_cursor_;
@@ -1498,7 +1498,8 @@ void BaseViewModel::wifi_scan_timer_cb(lv_timer_t* timer) {
                     self->map_deleting_ = false;
                 } else if ((self->map_message_ == "Map installed" || self->map_message_ == "Local map installed" || self->map_message_ == "Area map installed") &&
                     self->model_.set_map_zoom(self->map_download_zoom_) && self->model_.set_map_pack(self->map_download_pack_))
-                    self->map_message_ = "Installed and selected for Remote ID";
+                    self->map_message_ = self->model_.censor_enabled() ?
+                        "Installed; Censor hides map tiles" : "Installed and selected for Remote ID";
                 ++self->map_storage_revision_;
                 self->map_generation_.set(self->map_generation_.value() + 1);
             } else if (self->model_.current_page() == model::AppPage::MapPacks &&
