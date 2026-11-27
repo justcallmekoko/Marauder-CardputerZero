@@ -4,8 +4,11 @@
 #include "bindings.h"
 #include "theme.h"
 #include "channel_survey.h"
+#include "map_packs.h"
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
+#include <filesystem>
 #include <string>
 
 namespace screen {
@@ -30,6 +33,23 @@ std::string position_text(int32_t e7) {
     char text[22];
     std::snprintf(text, sizeof(text), "%.6f", static_cast<double>(e7) / 1e7);
     return text;
+}
+struct Pixel { double x, y; };
+Pixel map_pixel(int32_t lat_e7, int32_t lon_e7, unsigned zoom) {
+    const double world = 256.0 * (1u << zoom);
+    const double latitude = std::clamp(static_cast<double>(lat_e7) / 1e7, -85.05112878, 85.05112878) * 3.141592653589793 / 180.0;
+    const double longitude = static_cast<double>(lon_e7) / 1e7;
+    return {world * (longitude + 180.0) / 360.0,
+            world * (1.0 - std::asinh(std::tan(latitude)) / 3.141592653589793) / 2.0};
+}
+RemoteIdGridPoint map_point(int32_t lat_e7, int32_t lon_e7, const Pixel& center, unsigned zoom) {
+    const auto point = map_pixel(lat_e7, lon_e7, zoom);
+    const double world = 256.0 * (1u << zoom);
+    double dx = point.x - center.x;
+    if (dx > world / 2) dx -= world;
+    if (dx < -world / 2) dx += world;
+    return {static_cast<int16_t>(std::clamp(std::lround(52 + dx), -1000l, 1000l)),
+            static_cast<int16_t>(std::clamp(std::lround(52 + point.y - center.y), -1000l, 1000l))};
 }
 }
 
@@ -61,8 +81,14 @@ void RemoteIdScreen::build_content(lv_obj_t* content) {
     lv_obj_set_style_border_width(map_, 1, 0);
     lv_obj_set_style_border_color(map_, colors.border, 0);
     lv_obj_set_style_radius(map_, 4, 0);
-    for (int diameter : {42, 82}) {
+    for (auto& tile : tiles_) {
+        tile = lv_image_create(map_);
+        lv_obj_add_flag(tile, LV_OBJ_FLAG_HIDDEN);
+    }
+    for (std::size_t index = 0; index < rings_.size(); ++index) {
+        const int diameter = index ? 82 : 42;
         auto* ring = lv_obj_create(map_);
+        rings_[index] = ring;
         lv_obj_remove_style_all(ring);
         lv_obj_set_size(ring, diameter, diameter);
         lv_obj_set_pos(ring, (104 - diameter) / 2, (104 - diameter) / 2);
@@ -81,6 +107,9 @@ void RemoteIdScreen::build_content(lv_obj_t* content) {
     lv_obj_set_style_bg_color(you, colors.success, 0);
     lv_obj_set_style_bg_opa(you, LV_OPA_COVER, 0);
     range_ = label(map_, 4, 88, 92, 10);
+    credit_ = label(map_, 24, 94, 77, 7);
+    lv_label_set_text(credit_, "© OSM contributors");
+    lv_obj_add_flag(credit_, LV_OBJ_FLAG_HIDDEN);
     gps_hint_ = label(map_, 9, 37, 88, 10);
     lv_label_set_long_mode(gps_hint_, LV_LABEL_LONG_WRAP);
     lv_obj_set_style_text_align(gps_hint_, LV_TEXT_ALIGN_CENTER, 0);
@@ -235,8 +264,41 @@ void RemoteIdScreen::render() {
     lv_obj_add_flag(detail_, LV_OBJ_FLAG_HIDDEN);
     lv_label_set_text(gps_hint_, have_gps ? "" : "GPS FIX\nNEEDED");
     lv_label_set_text(range_, "");
+    const auto zoom = vm.map_zoom();
+    const auto center = have_gps ? map_pixel(origin_lat, origin_lon, zoom) : Pixel{};
+    const auto center_tile = platform::maps::tile(vm.map_pack(), zoom,
+        static_cast<unsigned>(center.x / 256), static_cast<unsigned>(center.y / 256));
+    const bool have_tiles = have_gps && !vm.censor_enabled() && platform::maps::installed(vm.map_pack()) &&
+        !center_tile.empty() && std::filesystem::is_regular_file(center_tile);
+    if (have_tiles) lv_obj_remove_flag(credit_, LV_OBJ_FLAG_HIDDEN);
+    else lv_obj_add_flag(credit_, LV_OBJ_FLAG_HIDDEN);
+    for (auto* ring : rings_) {
+        if (have_tiles) lv_obj_add_flag(ring, LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_remove_flag(ring, LV_OBJ_FLAG_HIDDEN);
+    }
+    for (std::size_t i = 0; i < tiles_.size(); ++i) {
+        const int tx = static_cast<int>(std::floor((center.x - 52) / 256)) + static_cast<int>(i % 2);
+        const int ty = static_cast<int>(std::floor((center.y - 52) / 256)) + static_cast<int>(i / 2);
+        const auto path = have_tiles && tx >= 0 && ty >= 0 ?
+            platform::maps::tile(vm.map_pack(), zoom, static_cast<unsigned>(tx), static_cast<unsigned>(ty)) : std::filesystem::path{};
+        if (path.empty() || !std::filesystem::is_regular_file(path)) {
+            lv_obj_add_flag(tiles_[i], LV_OBJ_FLAG_HIDDEN);
+            continue;
+        }
+        const auto source = "A:" + path.string();
+        if (source != tile_paths_[i]) {
+            tile_paths_[i] = source;
+            lv_image_set_src(tiles_[i], tile_paths_[i].c_str());
+        }
+        lv_obj_set_pos(tiles_[i], static_cast<int>(std::lround(tx * 256 - center.x + 52)),
+                                static_cast<int>(std::lround(ty * 256 - center.y + 52)));
+        lv_obj_remove_flag(tiles_[i], LV_OBJ_FLAG_HIDDEN);
+    }
     float map_radius = 50.0f;
-    if (have_gps) {
+    if (have_tiles) {
+        const auto scale = "z" + std::to_string(zoom);
+        lv_label_set_text(range_, scale.c_str());
+    } else if (have_gps) {
         for (std::size_t i = 0; i < total; ++i) {
             const auto* aircraft = vm.remote_record(i);
             if (!aircraft) continue;
@@ -253,16 +315,24 @@ void RemoteIdScreen::render() {
             lv_obj_add_flag(paths_[i], LV_OBJ_FLAG_HIDDEN);
             continue;
         }
-        const auto point = remoteIdProjectToGrid(aircraft->latitudeE7, aircraft->longitudeE7,
-            origin_lat, origin_lon, 104, 104, map_radius, 6);
+        const auto point = have_tiles ? map_point(aircraft->latitudeE7, aircraft->longitudeE7, center, zoom) :
+            remoteIdProjectToGrid(aircraft->latitudeE7, aircraft->longitudeE7,
+                origin_lat, origin_lon, 104, 104, map_radius, 6);
         lv_obj_set_pos(markers_[i], point.x - 2, point.y - 2);
         lv_obj_set_style_bg_color(markers_[i], i == cursor ? colors.warning : colors.info, 0);
         lv_obj_remove_flag(markers_[i], LV_OBJ_FLAG_HIDDEN);
         auto& points = path_points_[i];
         std::size_t length{};
         for (std::size_t p = 0; p < aircraft->historyCount; ++p) {
-            const auto older = remoteIdProjectHistoryToGrid(*aircraft, aircraft->history[p],
-                origin_lat, origin_lon, 104, 104, map_radius, 6);
+            const double latitude = static_cast<double>(aircraft->latitudeE7) / 1e7 * 3.141592653589793 / 180.0;
+            const double pixels_per_meter = 256.0 * (1u << zoom) /
+                (40075017.0 * std::max(0.05, std::cos(latitude)));
+            const RemoteIdGridPoint tile_history{
+                static_cast<int16_t>(std::clamp(std::lround(point.x + aircraft->history[p].eastM * pixels_per_meter), -1000l, 1000l)),
+                static_cast<int16_t>(std::clamp(std::lround(point.y - aircraft->history[p].northM * pixels_per_meter), -1000l, 1000l))};
+            const auto older = have_tiles ? tile_history :
+                remoteIdProjectHistoryToGrid(*aircraft, aircraft->history[p],
+                    origin_lat, origin_lon, 104, 104, map_radius, 6);
             points[length++] = {static_cast<lv_value_precise_t>(older.x), static_cast<lv_value_precise_t>(older.y)};
         }
         points[length++] = {static_cast<lv_value_precise_t>(point.x), static_cast<lv_value_precise_t>(point.y)};

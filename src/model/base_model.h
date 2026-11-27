@@ -22,6 +22,7 @@ enum class AppPage {
     PcapFiles,
     RemoteId,
     GpsTool,
+    MapPacks,
 };
 
 std::string saved_gps_id();
@@ -59,6 +60,10 @@ public:
     bool set_selected_adapter_id(std::string stable_id);
     bool traffic_monitor_source() const { return traffic_monitor_source_; }
     bool cycle_traffic_source();
+    unsigned map_zoom() const { return map_zoom_; }
+    unsigned map_pack() const { return map_pack_; }
+    bool set_map_zoom(unsigned zoom);
+    bool set_map_pack(unsigned pack);
 
 private:
     unsigned brightness_{0}, dim_seconds_{0}, reserve_mib_{64};
@@ -70,6 +75,8 @@ private:
     AppPage current_page_{AppPage::Dashboard};
     std::string selected_adapter_id_;
     bool traffic_monitor_source_{true};
+    unsigned map_zoom_{6};
+    unsigned map_pack_{};
 };
 
 } // namespace model

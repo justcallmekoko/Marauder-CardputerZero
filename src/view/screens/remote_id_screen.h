@@ -13,11 +13,14 @@ private:
     void build_content(lv_obj_t* content) override;
     void render();
     struct Row { lv_obj_t *box{}, *name{}, *meta{}; };
-    lv_obj_t *title_{}, *count_{}, *map_{}, *gps_hint_{}, *range_{}, *detail_{}, *empty_{};
+    lv_obj_t *title_{}, *count_{}, *map_{}, *gps_hint_{}, *range_{}, *credit_{}, *detail_{}, *empty_{};
     std::array<Row, 4> rows_{};
     std::unique_ptr<view::widgets::FoxHuntPanel> fox_panel_;
     std::array<lv_obj_t*, 32> markers_{};
     std::array<lv_obj_t*, 32> paths_{};
+    std::array<lv_obj_t*, 4> tiles_{};
+    std::array<std::string, 4> tile_paths_{};
+    std::array<lv_obj_t*, 2> rings_{};
     std::array<std::array<lv_point_precise_t, REMOTE_ID_HISTORY_CAPACITY + 1>, 32> path_points_{};
     std::size_t first_{};
 };

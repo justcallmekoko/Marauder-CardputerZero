@@ -133,6 +133,7 @@ BaseViewModel::BaseViewModel()
 }
 
 BaseViewModel::~BaseViewModel() {
+    if (map_job_.valid()) map_job_.wait();
     bluetooth_session_.stop();
     gps_log_.stop();
     pcap_capture_.stop();
@@ -211,6 +212,48 @@ void BaseViewModel::show_remote_id_page() {
     model_.set_current_page(model::AppPage::RemoteId);
     publish_navigation();
     if (!wifi_scan_running_) start_wifi_scan();
+}
+void BaseViewModel::show_map_packs_page() {
+    map_pack_cursor_ = model_.map_pack();
+    map_message_ = "Choose a map pack";
+    model_.set_current_page(model::AppPage::MapPacks);
+    publish_navigation();
+    map_generation_.set(map_generation_.value() + 1);
+}
+void BaseViewModel::move_map_pack(int direction) {
+    if (map_job_.valid()) return;
+    map_pack_cursor_ = direction < 0 ? (map_pack_cursor_ + platform::maps::pack_count() - 1) % platform::maps::pack_count() :
+        (map_pack_cursor_ + 1) % platform::maps::pack_count();
+    if (map_pack_cursor_ == 2 && model_.map_zoom() < 10) model_.set_map_zoom(14);
+    if (map_pack_cursor_ != 2 && model_.map_zoom() > 6) model_.set_map_zoom(6);
+    map_generation_.set(map_generation_.value() + 1);
+}
+void BaseViewModel::select_map_pack() {
+    if (map_job_.valid()) return;
+    if (map_pack_cursor_ == 2) {
+        int32_t lat{}, lon{};
+        if (!remote_position(lat, lon)) map_message_ = "GPS fix required for local map";
+        else {
+            map_download_pack_ = 2;
+            map_message_ = "Downloading nearby tiles...";
+            try { map_job_ = std::async(std::launch::async, platform::maps::install_local, lat, lon, model_.map_zoom()); }
+            catch (const std::system_error&) { map_message_ = "Download worker unavailable"; }
+        }
+    } else if (platform::maps::installed(map_pack_cursor_)) {
+        map_message_ = model_.set_map_pack(map_pack_cursor_) ? "Map selected for Remote ID" : "Could not save map";
+    } else {
+        map_message_ = "Downloading map pack...";
+        map_download_pack_ = map_pack_cursor_;
+        try { map_job_ = std::async(std::launch::async, platform::maps::install, map_pack_cursor_); }
+        catch (const std::system_error&) { map_message_ = "Download worker unavailable"; }
+    }
+    map_generation_.set(map_generation_.value() + 1);
+}
+void BaseViewModel::step_map_zoom(int direction) {
+    const auto zoom = static_cast<int>(model_.map_zoom()) + direction;
+    if (zoom < (map_pack_cursor_ == 2 ? 6 : 1) || zoom > (map_pack_cursor_ == 2 ? 16 : 6)) return;
+    map_message_ = model_.set_map_zoom(static_cast<unsigned>(zoom)) ? "Remote ID map zoom saved" : "Could not save zoom";
+    map_generation_.set(map_generation_.value() + 1);
 }
 void BaseViewModel::show_pineapple_page() {
     raw_session_ = false;
@@ -615,6 +658,9 @@ void BaseViewModel::marauder_menu_activate() {
             break;
         case Action::OpenPcapFiles:
             show_pcap_files_page();
+            break;
+        case Action::OpenMapPacks:
+            show_map_packs_page();
             break;
         case Action::OpenRadioSetup:
             model_.set_current_page(model::AppPage::RadioSetup);
@@ -1403,6 +1449,13 @@ void BaseViewModel::request_quit() { quit_requested_subject_.set(true); }
 void BaseViewModel::wifi_scan_timer_cb(lv_timer_t* timer) {
     auto* self = static_cast<BaseViewModel*>(lv_timer_get_user_data(timer));
     if (self) {
+        if (self->map_job_.valid() && self->map_job_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+            self->map_message_ = self->map_job_.get();
+            if ((self->map_message_ == "Map installed" || self->map_message_ == "Local map installed") &&
+                self->model_.set_map_pack(self->map_download_pack_))
+                self->map_message_ = "Installed and selected for Remote ID";
+            self->map_generation_.set(self->map_generation_.value() + 1);
+        }
         self->idle_display();
         if (self->monitor_busy()) {
             if (self->monitor_job_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {

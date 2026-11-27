@@ -87,7 +87,7 @@ jobs:
           test -f "$RUNNER_TEMP/marauder-payload/usr/share/APPLaunch/share/images/marauder-icon-v2.png"
           grep -Fqx 'Icon=share/images/marauder-icon-v2.png' "$RUNNER_TEMP/marauder-payload/usr/share/APPLaunch/applications/marauder_cardputerzero.desktop"
           visudo -cf "$RUNNER_TEMP/marauder-payload/usr/share/marauder_cardputerzero/marauder-monitor.sudoers"
-          for dep in sudo iproute2 iw network-manager bluez gpsd python3 python3-dbus python3-gi systemd; do
+          for dep in sudo iproute2 iw network-manager bluez gpsd python3 python3-dbus python3-gi systemd curl unzip; do
             dpkg-deb -f "$package" Depends | tr ',' '\n' | grep -Eq "^[[:space:]]*${dep}([[:space:]]|$)"
           done
           dpkg-deb -f "$package"

@@ -6,7 +6,7 @@
 
 cmake_minimum_required(VERSION 3.31)
 
-project(marauder_cardputerzero VERSION 0.6.46 LANGUAGES C CXX)
+project(marauder_cardputerzero VERSION 0.6.47 LANGUAGES C CXX)
 
 include(CTest)
 find_package(Threads REQUIRED)
@@ -624,6 +624,9 @@ target_link_libraries(${PROJECT_NAME}
 )
 
 if(BUILD_TESTING AND USE_DESKTOP)
+    add_executable(map_packs_test tests/map_packs_test.cpp src/platform/map_packs.cpp)
+    target_include_directories(map_packs_test PRIVATE src/platform)
+    add_test(NAME map_packs_test COMMAND map_packs_test)
     add_executable(gps_log_test tests/gps_log_test.cpp src/platform/gps_log.cpp)
     target_include_directories(gps_log_test PRIVATE src/platform)
     add_test(NAME gps_log_test COMMAND gps_log_test)

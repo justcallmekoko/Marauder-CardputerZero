@@ -23,6 +23,7 @@
 #include "remote_id_wifi.h"
 #include "pcap_capture.h"
 #include "gps_log.h"
+#include "map_packs.h"
 
 #include <atomic>
 #include <array>
@@ -110,6 +111,20 @@ public:
     void show_wifi_scan_page();
     void show_raw_capture_page();
     void show_remote_id_page();
+    void show_map_packs_page();
+    void move_map_pack(int direction);
+    void select_map_pack();
+    void step_map_zoom(int direction);
+    unsigned map_pack_cursor() const { return map_pack_cursor_; }
+    unsigned map_pack() const { return model_.map_pack(); }
+    unsigned map_zoom() const { return model_.map_zoom(); }
+    std::uint64_t map_local_estimate() const {
+        int32_t lat{}, lon{};
+        return remote_position(lat, lon) ? platform::maps::local_estimate(lat, lon, model_.map_zoom()) : 0;
+    }
+    bool map_installing() const { return map_job_.valid(); }
+    const std::string& map_message() const { return map_message_; }
+    lv_subject_t* map_subject() { return map_generation_.native(); }
     void show_pineapple_page();
     enum class GpsTool { Info, Wardrive, Track };
     void show_gps_tool(GpsTool tool);
@@ -301,6 +316,11 @@ private:
     platform::RadioInventory radio_list_;
     std::size_t radio_cursor_{0};
     std::string resource_message_, pending_uuid_, pending_network_;
+    std::future<std::string> map_job_;
+    reactive::IntSubject map_generation_{0};
+    std::string map_message_;
+    unsigned map_pack_cursor_{};
+    unsigned map_download_pack_{};
     int original_light_{-1}, light_max_{0}, before_dim_{-1};
     bool changed_light_{false};
     uint32_t activity_tick_{};

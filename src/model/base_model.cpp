@@ -144,6 +144,24 @@ BaseModel::BaseModel() {
     if (value == "Icon") battery_display_ = BatteryDisplay::Icon;
     else if (value == "Percentage") battery_display_ = BatteryDisplay::Percent;
     censor_enabled_ = read_value("censor-display") == "on";
+    const auto zoom = read_value("map-zoom");
+    if (!zoom.empty() && zoom.size() <= 2 && zoom.find_first_not_of("0123456789") == std::string::npos) {
+        const auto value = static_cast<unsigned>(std::stoul(zoom));
+        if (value >= 1 && value <= 16) map_zoom_ = value;
+    }
+    const auto saved_pack = read_value("map-pack");
+    map_pack_ = saved_pack == "2" ? 2 : saved_pack == "1" ? 1 : 0;
+}
+
+bool BaseModel::set_map_zoom(unsigned zoom) {
+    if (zoom < 1 || zoom > 16 || !save_value("map-zoom", std::to_string(zoom))) return false;
+    map_zoom_ = zoom;
+    return true;
+}
+bool BaseModel::set_map_pack(unsigned pack) {
+    if (pack > 2 || !save_value("map-pack", std::to_string(pack))) return false;
+    map_pack_ = pack;
+    return true;
 }
 
 bool BaseModel::toggle_censor() {
@@ -200,6 +218,8 @@ void BaseModel::toggle_page() {
         case AppPage::RadioSetup:
         case AppPage::PcapFiles:
         case AppPage::RemoteId:
+        case AppPage::GpsTool:
+        case AppPage::MapPacks:
         case AppPage::Diagnostics:
             current_page_ = AppPage::Dashboard;
             break;

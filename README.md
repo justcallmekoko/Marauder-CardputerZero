@@ -77,6 +77,29 @@ Open **WiFi → Networks → Access Points** after selecting an adapter and enab
 
 On AP information, press **D** to cycle through overview, authentication, and encryption pages. The security interpreter reads the AP's beacon or probe-response advertisements. It identifies legacy WPA, RSN AKM selectors, pairwise/group/management ciphers, PMF capable/required bits, SAE H2E and SAE-PK flags, WPS IE presence, and malformed or unknown selectors. Common summaries include WPA2 Personal/Enterprise, WPA3 Personal SAE, WPA2/WPA3 Personal transition, OWE, DPP, and WPA3 Enterprise 192 when its advertised cipher and PMF profile matches. A privacy bit without a valid WPA/RSN element is reported as uncertain legacy privacy, not proven WEP. These labels describe advertised capabilities, not a client's negotiated security, Wi-Fi Alliance certification, or resistance to a particular attack. Selector mappings follow [hostap's WPA definitions](https://github.com/zephyrproject-rtos/hostap/blob/main/src/common/wpa_common.h); OWE discovery follows [RFC 8110](https://datatracker.ietf.org/doc/rfc8110/).
 
+## Offline Remote ID maps
+
+Open **Device → Storage and memory → Offline maps** to see free storage and the
+download and installed size of each optional world pack. Select **OSM Bright**
+or **Dark Matter** and press Enter to download it; once installed, Enter selects
+it for Remote ID. The **Around GPS** entry downloads dark tiles for a 3 km
+radius around the current GPS fix. Its size estimate changes with the zoom
+level. Left/Right chooses and saves map zoom: z1–z6 for world packs or z6–z16
+for nearby tiles. Downloads run in the background. The
+Remote ID map uses the saved style and zoom beneath aircraft paths when GPS
+has a fix. With **Censor display** enabled, the app hides map tiles so the
+operator's location cannot be inferred from the visible streets.
+
+The compact world starter packs are useful for regional context. Their maximum
+z6 zoom does not show local streets or buildings; **Around GPS** provides local
+detail. The world packs come from
+[Meshtastic's map starter kit](https://github.com/meshtastic/device-ui/tree/master/maps)
+at a pinned revision. Nearby tiles come from [Oxed's self-hosted tile
+service](https://download.tiles.coalition.space/faq/). Both use OpenStreetMap
+data: © OpenStreetMap contributors. Tiles are stored under
+`~/Documents/Marauder/maps`. The app never bulk downloads from the public
+OpenStreetMap tile service. Wardriving does not use map tiles.
+
 ## Architecture
 
 The project follows the official Cardputer Zero template:
@@ -115,7 +138,7 @@ cmake --build --preset linux-x86-64-dbg
 cmake --workflow --preset cp0-cross-package
 ```
 
-The expected artifact is `dist/Marauder_0.6.46_rev1_arm64.deb`. Debian dependencies install the runtime tools needed by the WiFi, Bluetooth, GPS, and monitor helpers. Packaging and deployment remain separate actions.
+The expected artifact is `dist/Marauder_0.6.47_rev1_arm64.deb`. Debian dependencies install the runtime tools needed by the WiFi, Bluetooth, GPS, monitor, and optional map pack downloads. Packaging and deployment remain separate actions.
 
 ## Safety and scope
 
