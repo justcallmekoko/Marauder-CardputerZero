@@ -328,6 +328,7 @@ void BaseViewModel::show_gps_tool(GpsTool tool) {
     }
     model_.set_current_page(model::AppPage::GpsTool);
     publish_navigation();
+    if (wardrive_session_) toggle_gps_recording();
     gps_tool_generation_.set(gps_tool_generation_.value() + 1);
 }
 std::string BaseViewModel::gps_receiver_name() const {

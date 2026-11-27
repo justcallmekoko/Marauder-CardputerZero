@@ -114,9 +114,12 @@ service](https://download.tiles.coalition.space/faq/). Both use OpenStreetMap
 data: © OpenStreetMap contributors. Tiles are stored under
 `~/Documents/Marauder/maps`. The app never bulk downloads from the public
 OpenStreetMap tile service. Wardriving uses the same selected pack and zoom in its
-map view. Press **M** to switch between the live device feed and map. The map
-plots located Wi-Fi APs and Bluetooth devices, plus a red route from GPS fixes
-recorded during the current wardrive session. The last recorded position keeps
+map view. Wardrive starts logging and Bluetooth discovery when opened; Enter
+stops or starts a new recording. Press **M** to switch between the live device feed and map. The map
+plots Wi-Fi AP and Bluetooth sightings at the Cardputer's GPS position when first
+observed, plus a red route from GPS fixes recorded during the current wardrive session.
+Coincident sightings share a colored ring rather than implying separate device
+locations. The last recorded position keeps
 the map available after GPS drops. Censor display hides both tiles and plotted
 locations; the feed remains available. The on-screen route and point history is
 bounded for responsiveness, while the CSV log retains the saved observations.
@@ -159,7 +162,7 @@ cmake --build --preset linux-x86-64-dbg
 cmake --workflow --preset cp0-cross-package
 ```
 
-The expected artifact is `dist/Marauder_0.6.53_rev1_arm64.deb`. Debian dependencies install the runtime tools needed by the WiFi, Bluetooth, GPS, monitor, and optional map pack downloads. Packaging and deployment remain separate actions.
+The expected artifact is `dist/Marauder_0.6.54_rev1_arm64.deb`. Debian dependencies install the runtime tools needed by the WiFi, Bluetooth, GPS, monitor, and optional map pack downloads. Packaging and deployment remain separate actions.
 
 ## Safety and scope
 

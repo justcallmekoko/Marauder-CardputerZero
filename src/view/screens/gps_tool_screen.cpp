@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <initializer_list>
+#include <unordered_set>
 
 namespace screen {
 namespace {
@@ -306,7 +307,9 @@ void GpsToolScreen::render_wardrive_map() {
     lv_label_set_text_fmt(map_wifi_, "WI-FI  %zu", vm.wifi_items().size());
     lv_label_set_text_fmt(map_bluetooth_, "BT  %zu", vm.bluetooth_observed_count());
     lv_label_set_text_fmt(map_total_, "TOTAL  %zu", vm.wifi_items().size() + vm.bluetooth_observed_count());
-    const auto meta = std::string(live_fix ? "GPS FIX" : have_center ? "LAST FIX" : "NO GPS") +
+    const auto meta = !vm.gps_recording() ? vm.gps_tool_message() :
+        !vm.bluetooth_scanning() ? vm.gps_tool_message() :
+        std::string(live_fix ? "GPS FIX" : have_center ? "LAST FIX" : "NO GPS") +
         "  z" + std::to_string(map_zoom_) + "  " + std::to_string(vm.wardrive_map_points().size()) + " points";
     lv_label_set_text(map_meta_, meta.c_str());
     lv_obj_invalidate(map_plot_);
@@ -336,22 +339,34 @@ void GpsToolScreen::draw_wardrive_map(lv_event_t* event) {
     for (std::size_t i = 1; i < route.size(); ++i) {
         line.p1 = projected(route[i - 1]);
         line.p2 = projected(route[i]);
+        if (line.p1.x == line.p2.x && line.p1.y == line.p2.y) continue;
         if (visible(line.p1) || visible(line.p2)) lv_draw_line(layer, &line);
     }
     lv_draw_rect_dsc_t dot;
     lv_draw_rect_dsc_init(&dot);
     dot.radius = LV_RADIUS_CIRCLE;
-    dot.bg_opa = LV_OPA_COVER;
+    dot.bg_opa = LV_OPA_TRANSP;
+    dot.border_width = 2;
+    dot.border_opa = LV_OPA_COVER;
+    std::unordered_set<unsigned> drawn;
     for (const auto& item : vm.wardrive_map_points()) {
         const auto point = projected(item);
         if (!visible(point)) continue;
-        dot.bg_color = item.bluetooth ? colors.info : colors.success;
-        const lv_area_t marker{static_cast<int32_t>(point.x) - 2, static_cast<int32_t>(point.y) - 2,
-                               static_cast<int32_t>(point.x) + 2, static_cast<int32_t>(point.y) + 2};
+        const auto x = static_cast<int>(point.x) - area.x1;
+        const auto y = static_cast<int>(point.y) - area.y1;
+        const unsigned key = (item.bluetooth ? 1u << 18 : 0u) | (static_cast<unsigned>(x + 2) << 8) |
+                             static_cast<unsigned>(y + 2);
+        if (!drawn.insert(key).second) continue;
+        dot.border_color = item.bluetooth ? colors.info : colors.success;
+        const int radius = item.bluetooth ? 7 : 5;
+        const lv_area_t marker{static_cast<int32_t>(point.x) - radius, static_cast<int32_t>(point.y) - radius,
+                               static_cast<int32_t>(point.x) + radius, static_cast<int32_t>(point.y) + radius};
         lv_draw_rect(layer, &dot, &marker);
     }
     int32_t live_lat{}, live_lon{};
     if (vm.remote_position(live_lat, live_lon)) {
+        dot.border_width = 0;
+        dot.bg_opa = LV_OPA_COVER;
         dot.bg_color = colors.warning;
         const lv_area_t here{area.x1 + 152, area.y1 + 49, area.x1 + 158, area.y1 + 55};
         lv_draw_rect(layer, &dot, &here);
