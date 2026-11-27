@@ -26,7 +26,7 @@ def main(adapter):
     loop = GLib.MainLoop()
 
     def emit(device_path, changed):
-        if "RSSI" not in changed:
+        if not {"RSSI", "ManufacturerData", "ServiceData", "UUIDs", "Name", "TxPower"}.intersection(changed):
             return
         try:
             info = dbus.Interface(bus.get_object("org.bluez", device_path),
@@ -36,8 +36,11 @@ def main(adapter):
                 return
             name = clean(info.get("Name", ""))
             kind = clean(info.get("AddressType", "unknown"))
-            print(f"device\t{address}\t{name}\t{int(changed['RSSI'])}\t{kind}", flush=True)
-        except dbus.DBusException:
+            rssi = changed.get("RSSI", info.get("RSSI"))
+            if rssi is None:
+                return
+            print(f"device\t{address}\t{name}\t{int(rssi)}\t{kind}", flush=True)
+        except (dbus.DBusException, TypeError, ValueError):
             pass
 
     def changed(interface, values, invalidated, device_path=None):

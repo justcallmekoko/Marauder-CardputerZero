@@ -263,7 +263,8 @@ void GpsToolScreen::render() {
             auto& row = feed_rows_[i];
             if (i >= sightings.size()) {
                 lv_label_set_text(row.type, i == 0 ? "--" : "");
-                lv_label_set_text(row.name, i == 0 ? "Waiting for device sightings" : "");
+                lv_label_set_text(row.name, i == 0 ?
+                    (positioned ? "Waiting for device sightings" : "Waiting for GPS fix") : "");
                 lv_label_set_text(row.address, "");
             } else {
                 const auto& sighting = sightings[sightings.size() - 1 - i];
