@@ -306,6 +306,10 @@ void BaseViewModel::show_gps_tool(GpsTool tool) {
     bluetooth_session_.stop();
     bluetooth_seen_.clear();
     wardrive_sightings_.clear();
+    wardrive_route_.clear();
+    wardrive_map_points_.clear();
+    wardrive_plotted_.clear();
+    wardrive_map_view_ = false;
     gps_log_.reset();
     stop_wifi_capture();
     gps_tool_ = tool;
@@ -351,6 +355,11 @@ void BaseViewModel::toggle_gps_recording() {
         std::string error;
         if (gps_log_.start(gps_tool_ == GpsTool::Track ? platform::gps::LogKind::Track :
                            platform::gps::LogKind::Wardrive, model_.reserve_mib(), error)) {
+            if (gps_tool_ == GpsTool::Wardrive) {
+                wardrive_route_.clear();
+                wardrive_map_points_.clear();
+                wardrive_plotted_.clear();
+            }
             gps_file_name_ = gps_log_.path().filename().string();
             gps_tool_message_ = "Recording; waiting for GPS fix";
             gps_sample_tick_ = 0;
@@ -373,12 +382,14 @@ void BaseViewModel::update_gps_tool() {
             if (bluetooth_seen_.insert(item.address_type + ":" + item.address).second)
                 add_wardrive_sighting(true, item.name, item.address);
             int32_t lat{}, lon{};
-            if (gps_session_.position(lat, lon) &&
-                !gps_log_.bluetooth_device(item.address, item.name, item.rssi,
-                                            item.address_type, lat, lon)) {
-                bluetooth_session_.stop();
-                gps_tool_message_ = "GPS file write failed";
-                break;
+            if (gps_session_.position(lat, lon)) {
+                if (!gps_log_.bluetooth_device(item.address, item.name, item.rssi,
+                                                item.address_type, lat, lon)) {
+                    bluetooth_session_.stop();
+                    gps_tool_message_ = "GPS file write failed";
+                    break;
+                }
+                add_wardrive_map_point(true, item.address_type + ":" + item.address, lat, lon);
             }
         }
         if (!bluetooth_state.empty() && bluetooth_state != "Scanning")
@@ -392,6 +403,10 @@ void BaseViewModel::update_gps_tool() {
     int32_t lat{}, lon{};
     const bool fix = gps_session_.position(lat, lon);
     if (gps_log_.active() && fix) {
+        if (wardrive_session_) {
+            if (wardrive_route_.size() == 2048) wardrive_route_.pop_front();
+            wardrive_route_.push_back({lat, lon, false});
+        }
         bool written = true;
         if (gps_tool_ == GpsTool::Track) written = gps_log_.position(lat, lon);
         if (!written) gps_tool_message_ = "GPS file write failed";
@@ -410,6 +425,17 @@ void BaseViewModel::update_gps_tool() {
 void BaseViewModel::add_wardrive_sighting(bool bluetooth, const std::string& name, const std::string& address) {
     if (wardrive_sightings_.size() == 16) wardrive_sightings_.pop_front();
     wardrive_sightings_.push_back({bluetooth, name, address});
+}
+void BaseViewModel::add_wardrive_map_point(bool bluetooth, const std::string& address, int32_t lat, int32_t lon) {
+    if (!wardrive_plotted_.insert((bluetooth ? "bt:" : "wifi:") + address).second) return;
+    if (wardrive_map_points_.size() == 1024) wardrive_map_points_.pop_front();
+    wardrive_map_points_.push_back({lat, lon, bluetooth});
+    gps_tool_generation_.set(gps_tool_generation_.value() + 1);
+}
+void BaseViewModel::toggle_wardrive_view() {
+    if (gps_tool_ != GpsTool::Wardrive) return;
+    wardrive_map_view_ = !wardrive_map_view_;
+    gps_tool_generation_.set(gps_tool_generation_.value() + 1);
 }
 void BaseViewModel::remote_move(int direction) {
     if (remote_view_ == 2) {
@@ -1648,10 +1674,12 @@ void BaseViewModel::finish_wifi_scan_if_ready() {
         ap->channel = platform::wireless::channel_number(ap->frequency_mhz);
         if (wardrive_session_ && gps_log_.active() && frame.beacon) {
             int32_t lat{}, lon{};
-            if (gps_session_.position(lat, lon) &&
-                !gps_log_.access_point(ap->bssid, ap->ssid, ap->channel,
-                                       ap->has_rssi ? ap->rssi : -128, ap->security, lat, lon))
-                gps_tool_message_ = "GPS file write failed";
+            if (gps_session_.position(lat, lon)) {
+                if (!gps_log_.access_point(ap->bssid, ap->ssid, ap->channel,
+                                           ap->has_rssi ? ap->rssi : -128, ap->security, lat, lon))
+                    gps_tool_message_ = "GPS file write failed";
+                else add_wardrive_map_point(false, ap->bssid, lat, lon);
+            }
         }
         if (frame.client.empty()) continue;
         auto client = std::find_if(ap->clients.begin(), ap->clients.end(), [&](const auto& item) { return item.mac == frame.client; });

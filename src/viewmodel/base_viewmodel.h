@@ -45,6 +45,10 @@ public:
         bool bluetooth{};
         std::string name, address;
     };
+    struct WardriveMapPoint {
+        int32_t latitude_e7{}, longitude_e7{};
+        bool bluetooth{};
+    };
     BaseViewModel();
     ~BaseViewModel();
 
@@ -143,6 +147,10 @@ public:
     std::size_t bluetooth_record_count() const { return gps_log_.bluetooth_count(); }
     std::size_t bluetooth_observed_count() const { return bluetooth_seen_.size(); }
     const std::deque<WardriveSighting>& wardrive_sightings() const { return wardrive_sightings_; }
+    const std::deque<WardriveMapPoint>& wardrive_route() const { return wardrive_route_; }
+    const std::deque<WardriveMapPoint>& wardrive_map_points() const { return wardrive_map_points_; }
+    bool wardrive_map_view() const { return wardrive_map_view_; }
+    void toggle_wardrive_view();
     bool bluetooth_scanning() const { return bluetooth_session_.active(); }
     const std::string& gps_tool_message() const { return gps_tool_message_; }
     const std::string& gps_file_name() const { return gps_file_name_; }
@@ -309,6 +317,9 @@ private:
     platform::BluetoothSession bluetooth_session_;
     std::unordered_set<std::string> bluetooth_seen_;
     std::deque<WardriveSighting> wardrive_sightings_;
+    std::deque<WardriveMapPoint> wardrive_route_, wardrive_map_points_;
+    std::unordered_set<std::string> wardrive_plotted_;
+    bool wardrive_map_view_{};
     std::string gps_id_, radio_session_;
     platform::gps::Log gps_log_;
     GpsTool gps_tool_{GpsTool::Info};
@@ -318,6 +329,7 @@ private:
     reactive::IntSubject gps_tool_generation_{0};
     void update_gps_tool();
     void add_wardrive_sighting(bool bluetooth, const std::string& name, const std::string& address);
+    void add_wardrive_map_point(bool bluetooth, const std::string& address, int32_t lat, int32_t lon);
     void finish_radio_setting();
     void load_radios(std::string key, bool enabled);
     std::future<platform::RadioInventory> radio_job_;

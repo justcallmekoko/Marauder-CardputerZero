@@ -310,6 +310,7 @@ private:
         }
 
         if (view_model_.current_page() == model::AppPage::GpsTool) {
+            if (key == 'm' || key == 'M') view_model_.toggle_wardrive_view();
             if (key == LV_KEY_ENTER) view_model_.toggle_gps_recording();
             return true;
         }
