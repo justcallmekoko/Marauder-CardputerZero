@@ -10,6 +10,7 @@ public:
     GpsToolScreen(viewmodel::BaseViewModel& model, app::AssetManager& assets);
 private:
     struct FeedRow { lv_obj_t *box{}, *type{}, *name{}, *address{}; };
+    struct ChannelRow { lv_obj_t *label{}, *track{}, *bar{}, *count{}; };
     void build_content(lv_obj_t* content) override;
     void render();
     void render_wardrive_map();
@@ -19,6 +20,8 @@ private:
              *bluetooth_count_{}, *total_count_{}, *wardrive_status_{}, *message_{}, *file_{};
     lv_obj_t *map_{}, *map_plot_{}, *map_hint_{}, *map_credit_{}, *map_meta_{},
              *map_wifi_{}, *map_bluetooth_{}, *map_total_{};
+    lv_obj_t *channels_{}, *channels_meta_{};
+    std::array<ChannelRow, 5> channel_rows_{};
     std::array<lv_obj_t*, 6> map_tiles_{};
     std::array<std::string, 6> map_tile_paths_{};
     double map_center_x_{}, map_center_y_{};

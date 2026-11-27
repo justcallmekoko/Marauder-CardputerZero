@@ -311,7 +311,13 @@ private:
 
         if (view_model_.current_page() == model::AppPage::GpsTool) {
             if (key == 'm' || key == 'M') view_model_.toggle_wardrive_view();
-            if (key == LV_KEY_ENTER) view_model_.toggle_gps_recording();
+            else if (view_model_.gps_tool() == viewmodel::BaseViewModel::GpsTool::Wardrive &&
+                     view_model_.wardrive_view() == 2 && action == NavigationAction::Previous)
+                view_model_.scroll_wardrive_channels(-1);
+            else if (view_model_.gps_tool() == viewmodel::BaseViewModel::GpsTool::Wardrive &&
+                     view_model_.wardrive_view() == 2 && action == NavigationAction::Next)
+                view_model_.scroll_wardrive_channels(1);
+            else if (key == LV_KEY_ENTER) view_model_.toggle_gps_recording();
             return true;
         }
 

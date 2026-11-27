@@ -153,6 +153,39 @@ void GpsToolScreen::build_content(lv_obj_t* content) {
     map_count(3, map_wifi_, colors.success);
     map_count(106, map_bluetooth_, colors.info);
     map_count(209, map_total_, colors.warning);
+    channels_ = lv_obj_create(content);
+    lv_obj_remove_style_all(channels_);
+    lv_obj_set_pos(channels_, 5, 19);
+    lv_obj_set_size(channels_, 310, 104);
+    lv_obj_set_style_radius(channels_, 4, 0);
+    lv_obj_set_style_bg_color(channels_, colors.surface, 0);
+    lv_obj_set_style_bg_opa(channels_, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(channels_, colors.border, 0);
+    lv_obj_set_style_border_width(channels_, 1, 0);
+    lv_obj_clear_flag(channels_, LV_OBJ_FLAG_SCROLLABLE);
+    channels_meta_ = label(channels_, 8, 3, 290, small);
+    lv_obj_set_style_text_color(channels_meta_, colors.text_disabled, 0);
+    for (std::size_t i = 0; i < channel_rows_.size(); ++i) {
+        auto& row = channel_rows_[i];
+        const int y = 20 + static_cast<int>(i) * 16;
+        row.label = label(channels_, 8, y - 3, 72, small);
+        row.track = lv_obj_create(channels_);
+        lv_obj_remove_style_all(row.track);
+        lv_obj_set_pos(row.track, 81, y);
+        lv_obj_set_size(row.track, 137, 7);
+        lv_obj_set_style_radius(row.track, 2, 0);
+        lv_obj_set_style_bg_color(row.track, colors.border, 0);
+        lv_obj_set_style_bg_opa(row.track, LV_OPA_COVER, 0);
+        lv_obj_clear_flag(row.track, LV_OBJ_FLAG_SCROLLABLE);
+        row.bar = lv_obj_create(row.track);
+        lv_obj_remove_style_all(row.bar);
+        lv_obj_set_size(row.bar, 1, 7);
+        lv_obj_set_style_radius(row.bar, 2, 0);
+        lv_obj_set_style_bg_opa(row.bar, LV_OPA_COVER, 0);
+        row.count = label(channels_, 225, y - 3, 75, small);
+        lv_obj_set_style_text_align(row.count, LV_TEXT_ALIGN_RIGHT, 0);
+        lv_obj_set_style_text_color(row.count, colors.text, 0);
+    }
     message_ = label(content, 9, 96, 302, small);
     file_ = label(content, 9, 110, 302, small);
     reactive::observe_obj(content, view_model().gps_tool_subject(), [](lv_observer_t* observer, lv_subject_t*) {
@@ -163,16 +196,18 @@ void GpsToolScreen::render() {
     auto& vm = view_model();
     const auto colors = view::palette(vm.is_dark_mode());
     const bool wardrive = vm.gps_tool() == viewmodel::BaseViewModel::GpsTool::Wardrive;
-    const bool map_view = wardrive && vm.wardrive_map_view();
+    const bool map_view = wardrive && vm.wardrive_view() == 1;
+    const bool channel_view = wardrive && vm.wardrive_view() == 2;
+    const bool feed_view = wardrive && vm.wardrive_view() == 0;
     const bool track = vm.gps_tool() == viewmodel::BaseViewModel::GpsTool::Track;
     const bool record = vm.gps_recording();
     if (wardrive) {
         lv_obj_add_flag(summary_card_, LV_OBJ_FLAG_HIDDEN);
         for (auto* obj : {wifi_card_, bluetooth_card_, total_card_, wardrive_status_})
-            if (map_view) lv_obj_add_flag(obj, LV_OBJ_FLAG_HIDDEN);
+            if (!feed_view) lv_obj_add_flag(obj, LV_OBJ_FLAG_HIDDEN);
             else lv_obj_remove_flag(obj, LV_OBJ_FLAG_HIDDEN);
         for (auto& row : feed_rows_)
-            if (map_view) lv_obj_add_flag(row.box, LV_OBJ_FLAG_HIDDEN);
+            if (!feed_view) lv_obj_add_flag(row.box, LV_OBJ_FLAG_HIDDEN);
             else lv_obj_remove_flag(row.box, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(message_, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(file_, LV_OBJ_FLAG_HIDDEN);
@@ -186,7 +221,10 @@ void GpsToolScreen::render() {
     }
     if (map_view) lv_obj_remove_flag(map_, LV_OBJ_FLAG_HIDDEN);
     else lv_obj_add_flag(map_, LV_OBJ_FLAG_HIDDEN);
-    lv_label_set_text(heading_, wardrive ? (map_view ? "Wardrive / map" : "Wardrive / unique seen") :
+    if (channel_view) lv_obj_remove_flag(channels_, LV_OBJ_FLAG_HIDDEN);
+    else lv_obj_add_flag(channels_, LV_OBJ_FLAG_HIDDEN);
+    lv_label_set_text(heading_, wardrive ? (map_view ? "Wardrive / map" :
+                      channel_view ? "Wardrive / channels" : "Wardrive / unique seen") :
                       track ? "GPS / Track" : "GPS / Receiver");
     lv_label_set_text(state_, record ? wardrive ?
         (vm.bluetooth_scanning() ? "REC Wi+BT" : "REC Wi") : "REC" :
@@ -238,6 +276,43 @@ void GpsToolScreen::render() {
             lv_obj_set_style_text_color(row.address, colors.text_disabled, 0);
         }
         if (map_view) render_wardrive_map();
+        if (channel_view) {
+            const auto distribution = vm.wardrive_channel_distribution();
+            const auto offset = std::min(vm.wardrive_channel_offset(),
+                distribution.size() > channel_rows_.size() ? distribution.size() - channel_rows_.size() : 0);
+            const auto total = vm.wardrive_wifi_count();
+            const auto summary = "APs by primary channel  " + std::to_string(total) +
+                " Wi-Fi  /  " + std::to_string(vm.bluetooth_observed_count()) + " BT";
+            lv_label_set_text(channels_meta_, summary.c_str());
+            std::size_t maximum = 1;
+            for (const auto& item : distribution) maximum = std::max(maximum, item.access_points);
+            for (std::size_t i = 0; i < channel_rows_.size(); ++i) {
+                auto& row = channel_rows_[i];
+                if (offset + i >= distribution.size()) {
+                    lv_label_set_text(row.label, i == 0 && distribution.empty() ? "No APs yet" : "");
+                    lv_label_set_text(row.count, "");
+                    lv_obj_add_flag(row.track, LV_OBJ_FLAG_HIDDEN);
+                    continue;
+                }
+                const auto& item = distribution[offset + i];
+                const char* band = item.frequency_mhz >= 5955 ? "6G" :
+                                   item.frequency_mhz >= 5000 ? "5G" :
+                                   item.frequency_mhz >= 2400 ? "2G" : "?";
+                const auto name = item.channel ?
+                    std::string(band) + " CH " + std::to_string(item.channel) : "UNKNOWN";
+                lv_label_set_text(row.label, name.c_str());
+                const auto percent = total ? (item.access_points * 100 / total) : 0;
+                const auto metric = std::to_string(item.access_points) + "  " + std::to_string(percent) + "%";
+                lv_label_set_text(row.count, metric.c_str());
+                lv_obj_set_width(row.bar, static_cast<int>(std::max<std::size_t>(2,
+                    item.access_points * 137 / maximum)));
+                const auto accent = item.frequency_mhz >= 5955 ? colors.warning :
+                    item.frequency_mhz >= 5000 ? colors.info : colors.success;
+                lv_obj_set_style_bg_color(row.bar, accent, 0);
+                lv_obj_set_style_text_color(row.label, accent, 0);
+                lv_obj_remove_flag(row.track, LV_OBJ_FLAG_HIDDEN);
+            }
+        }
     } else if (track) detail = std::to_string(vm.gps_record_count()) + " positions saved";
     else detail = vm.gps_receiver_id().empty() ? "Device > Radios and GPS > Radio setup" :
                   vm.gps_receiver_name();
@@ -253,8 +328,10 @@ void GpsToolScreen::render() {
     lv_obj_set_style_text_color(detail_, colors.info, 0);
     lv_obj_set_style_text_color(message_, colors.text_disabled, 0);
     lv_obj_set_style_text_color(file_, colors.text_disabled, 0);
-    set_key_guide(wardrive ? (map_view ? (record ? "M Feed  Enter Stop  Esc Back" :
-                                          "M Feed  Enter New log  Esc Back") :
+    set_key_guide(wardrive ? (channel_view ? (record ? "M Feed  ↑↓ Scroll  Enter Stop  Esc Back" :
+                                                "M Feed  ↑↓ Scroll  Enter Log  Esc Back") :
+                              map_view ? (record ? "M Channels  Enter Stop  Esc Back" :
+                                                   "M Channels  Enter Log  Esc Back") :
                               record ? "M Map  Enter Stop  Esc Back" :
                                        "M Map  Enter New log  Esc Back") :
                   track ? "Enter Start/Stop  Esc Save & Back  P PCAP" : "Esc Back  P PCAP");

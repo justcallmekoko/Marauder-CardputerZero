@@ -305,12 +305,13 @@ void BaseViewModel::show_pineapple_page() {
 void BaseViewModel::show_gps_tool(GpsTool tool) {
     bluetooth_session_.stop();
     bluetooth_seen_.clear();
-    wardrive_seen_wifi_.clear();
+    wardrive_channels_.clear();
     wardrive_sightings_.clear();
     wardrive_route_.clear();
     wardrive_map_points_.clear();
     wardrive_plotted_.clear();
-    wardrive_map_view_ = false;
+    wardrive_view_ = 0;
+    wardrive_channel_offset_ = 0;
     gps_log_.reset();
     stop_wifi_capture();
     gps_tool_ = tool;
@@ -364,7 +365,8 @@ void BaseViewModel::toggle_gps_recording() {
                            platform::gps::LogKind::Wardrive, model_.reserve_mib(), error)) {
             if (gps_tool_ == GpsTool::Wardrive) {
                 bluetooth_seen_.clear();
-                wardrive_seen_wifi_.clear();
+                wardrive_channels_.clear();
+                wardrive_channel_offset_ = 0;
                 wardrive_sightings_.clear();
                 wardrive_route_.clear();
                 wardrive_map_points_.clear();
@@ -444,7 +446,15 @@ void BaseViewModel::add_wardrive_map_point(bool bluetooth, const std::string& ad
 }
 void BaseViewModel::toggle_wardrive_view() {
     if (gps_tool_ != GpsTool::Wardrive) return;
-    wardrive_map_view_ = !wardrive_map_view_;
+    wardrive_view_ = (wardrive_view_ + 1) % 3;
+    gps_tool_generation_.set(gps_tool_generation_.value() + 1);
+}
+void BaseViewModel::scroll_wardrive_channels(int direction) {
+    if (gps_tool_ != GpsTool::Wardrive || wardrive_view_ != 2) return;
+    const auto count = wardrive_channels_.distribution().size();
+    const auto maximum = count > 5 ? count - 5 : 0;
+    if (direction > 0 && wardrive_channel_offset_ < maximum) ++wardrive_channel_offset_;
+    else if (direction < 0 && wardrive_channel_offset_) --wardrive_channel_offset_;
     gps_tool_generation_.set(gps_tool_generation_.value() + 1);
 }
 void BaseViewModel::remote_move(int direction) {
@@ -1645,7 +1655,10 @@ void BaseViewModel::finish_wifi_scan_if_ready() {
     for (const auto& frame : incoming) {
         // The bounded recon list must not limit a wardrive's counts or CSV rows.
         if (wardrive_session_ && gps_log_.active() && frame.beacon) {
-            if (wardrive_seen_wifi_.insert(frame.bssid).second) {
+            const auto frequency = frame.advertised_frequency_mhz ?
+                frame.advertised_frequency_mhz : frame.frequency_mhz;
+            if (wardrive_channels_.observe(frame.bssid, frequency,
+                                           frame.advertised_frequency_mhz != 0)) {
                 add_wardrive_sighting(false, frame.ssid.empty() ? "[hidden/unknown]" : frame.ssid,
                                       frame.bssid);
                 wardrive_feed_changed = true;

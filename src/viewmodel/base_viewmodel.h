@@ -16,6 +16,7 @@
 #include "lvgl.h"
 
 #include "wireless_adapters.h"
+#include "wardrive_channels.h"
 #include "wireless_scan.h"
 #include "radio_power.h"
 #include "raw_wifi.h"
@@ -146,12 +147,17 @@ public:
     std::size_t gps_record_count() const { return gps_log_.count(); }
     std::size_t bluetooth_record_count() const { return gps_log_.bluetooth_count(); }
     std::size_t bluetooth_observed_count() const { return bluetooth_seen_.size(); }
-    std::size_t wardrive_wifi_count() const { return wardrive_seen_wifi_.size(); }
+    std::size_t wardrive_wifi_count() const { return wardrive_channels_.size(); }
+    std::vector<platform::wireless::WardriveChannel> wardrive_channel_distribution() const {
+        return wardrive_channels_.distribution();
+    }
     const std::deque<WardriveSighting>& wardrive_sightings() const { return wardrive_sightings_; }
     const std::deque<WardriveMapPoint>& wardrive_route() const { return wardrive_route_; }
     const std::deque<WardriveMapPoint>& wardrive_map_points() const { return wardrive_map_points_; }
-    bool wardrive_map_view() const { return wardrive_map_view_; }
+    unsigned wardrive_view() const { return wardrive_view_; }
     void toggle_wardrive_view();
+    void scroll_wardrive_channels(int direction);
+    std::size_t wardrive_channel_offset() const { return wardrive_channel_offset_; }
     bool bluetooth_scanning() const { return bluetooth_session_.active(); }
     const std::string& gps_tool_message() const { return gps_tool_message_; }
     const std::string& gps_file_name() const { return gps_file_name_; }
@@ -317,11 +323,12 @@ private:
     platform::GpsSession gps_session_;
     platform::BluetoothSession bluetooth_session_;
     std::unordered_set<std::string> bluetooth_seen_;
-    std::unordered_set<std::string> wardrive_seen_wifi_;
+    platform::wireless::WardriveChannels wardrive_channels_;
     std::deque<WardriveSighting> wardrive_sightings_;
     std::deque<WardriveMapPoint> wardrive_route_, wardrive_map_points_;
     std::unordered_set<std::string> wardrive_plotted_;
-    bool wardrive_map_view_{};
+    unsigned wardrive_view_{};
+    std::size_t wardrive_channel_offset_{};
     std::string gps_id_, radio_session_;
     platform::gps::Log gps_log_;
     GpsTool gps_tool_{GpsTool::Info};
