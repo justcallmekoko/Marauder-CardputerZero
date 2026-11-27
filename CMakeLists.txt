@@ -6,7 +6,7 @@
 
 cmake_minimum_required(VERSION 3.31)
 
-project(marauder_cardputerzero VERSION 0.6.57 LANGUAGES C CXX)
+project(marauder_cardputerzero VERSION 0.6.58 LANGUAGES C CXX)
 
 include(CTest)
 find_package(Threads REQUIRED)
@@ -642,6 +642,11 @@ if(BUILD_TESTING AND USE_DESKTOP)
     add_executable(gps_log_test tests/gps_log_test.cpp src/platform/gps_log.cpp)
     target_include_directories(gps_log_test PRIVATE src/platform)
     add_test(NAME gps_log_test COMMAND gps_log_test)
+    add_executable(wardrive_files_test tests/wardrive_files_test.cpp
+        src/platform/wardrive_files.cpp src/platform/gps_log.cpp)
+    target_include_directories(wardrive_files_test PRIVATE src/platform)
+    target_compile_definitions(wardrive_files_test PRIVATE USE_DESKTOP=1)
+    add_test(NAME wardrive_files_test COMMAND wardrive_files_test)
     add_executable(censor_text_test tests/censor_text_test.cpp src/model/censor_text.cpp)
     target_include_directories(censor_text_test PRIVATE src/model)
     add_test(NAME censor_text_test COMMAND censor_text_test)

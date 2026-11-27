@@ -163,6 +163,7 @@ BaseViewModel::BaseViewModel()
 
 BaseViewModel::~BaseViewModel() {
     if (map_job_.valid()) { map_progress_.cancel = true; map_job_.wait(); }
+    if (wardrive_upload_job_.valid()) wardrive_upload_job_.wait();
     bluetooth_session_.stop();
     gps_log_.stop();
     pcap_capture_.stop();
@@ -568,6 +569,93 @@ void BaseViewModel::toggle_pcap_details() {
     pcap_files_generation_.set(pcap_files_generation_.value() + 1);
 }
 
+std::string BaseViewModel::selected_pcap_name() const {
+    return pcap_cursor_ < pcap_files_.size() ? pcap_files_[pcap_cursor_].name : "";
+}
+
+std::string BaseViewModel::delete_selected_pcap() {
+    const auto name = selected_pcap_name();
+    if (name.empty()) return "No capture selected";
+    const auto path = platform::pcap::directory() / name;
+    if (pcap_capture_.active() && pcap_capture_.path() == path.string()) return "Stop recording first";
+    std::error_code ec;
+    if (!std::filesystem::is_regular_file(path, ec) || std::filesystem::is_symlink(path, ec) ||
+        !std::filesystem::remove(path, ec) || ec) return "Could not delete capture";
+    pcap_details_ = false;
+    pcap_message_ = "Capture deleted";
+    refresh_pcap_files();
+    return pcap_message_;
+}
+
+void BaseViewModel::show_wardrive_files_page() {
+    stop_wifi_capture();
+    refresh_wardrive_files();
+    wardrive_details_ = false;
+    model_.set_current_page(model::AppPage::WardriveFiles);
+    publish_navigation();
+}
+
+void BaseViewModel::refresh_wardrive_files() {
+    wardrive_files_ = platform::wardrive::list_files();
+    if (wardrive_cursor_ >= wardrive_files_.size())
+        wardrive_cursor_ = wardrive_files_.empty() ? 0 : wardrive_files_.size() - 1;
+    wardrive_files_generation_.set(wardrive_files_generation_.value() + 1);
+}
+
+void BaseViewModel::move_wardrive_file(int direction) {
+    if (wardrive_details_ || wardrive_files_.empty()) return;
+    if (direction < 0 && wardrive_cursor_) --wardrive_cursor_;
+    if (direction > 0 && wardrive_cursor_ + 1 < wardrive_files_.size()) ++wardrive_cursor_;
+    wardrive_files_generation_.set(wardrive_files_generation_.value() + 1);
+}
+
+void BaseViewModel::toggle_wardrive_details() {
+    if (wardrive_files_.empty()) return;
+    wardrive_details_ = !wardrive_details_;
+    wardrive_files_generation_.set(wardrive_files_generation_.value() + 1);
+}
+
+std::string BaseViewModel::selected_wardrive_name() const {
+    return wardrive_cursor_ < wardrive_files_.size() ? wardrive_files_[wardrive_cursor_].name : "";
+}
+
+std::string BaseViewModel::delete_selected_wardrive() {
+    const auto name = selected_wardrive_name();
+    if (name.empty()) return "No log selected";
+    if (wardrive_upload_job_.valid()) return "Upload in progress";
+    if (gps_log_.active() && gps_log_.path().filename() == name) return "Stop wardrive first";
+    std::string error;
+    if (!platform::wardrive::erase(name, error)) return error;
+    wardrive_details_ = false;
+    wardrive_message_ = "Wardrive log deleted";
+    refresh_wardrive_files();
+    return wardrive_message_;
+}
+
+std::string BaseViewModel::upload_selected_wardrive(const std::string& service) {
+    const auto name = selected_wardrive_name();
+    if (name.empty()) return "No log selected";
+    if (wardrive_upload_job_.valid()) return "Upload in progress";
+    if (gps_log_.active() && gps_log_.path().filename() == name) return "Stop wardrive first";
+    const auto active = active_wifi_profile();
+    if (active.first.empty()) return "Connect to WiFi first";
+    if (!model_.trusted_profile().empty() && active.first != model_.trusted_profile())
+        return "Connect to trusted WiFi";
+    if (service == "wigle" && (!model::credential_saved(model::Credential::WigleName) ||
+                                !model::credential_saved(model::Credential::WigleToken)))
+        return "Set WiGLE credentials first";
+    if (service == "wdg" && !model::credential_saved(model::Credential::WdgKey))
+        return "Set WDGWars API key first";
+    try {
+        wardrive_upload_job_ = std::async(std::launch::async, [name, service] {
+            return platform::wardrive::upload(name, service);
+        });
+    } catch (const std::system_error&) { return "Could not start upload"; }
+    wardrive_message_ = service == "wigle" ? "Uploading to WiGLE..." : "Uploading to WDGWars...";
+    wardrive_files_generation_.set(wardrive_files_generation_.value() + 1);
+    return wardrive_message_;
+}
+
 std::string BaseViewModel::toggle_pcap_capture() {
     if (pcap_capture_.active()) {
         const auto path = pcap_capture_.stop();
@@ -781,6 +869,9 @@ void BaseViewModel::marauder_menu_activate() {
             break;
         case Action::OpenPcapFiles:
             show_pcap_files_page();
+            break;
+        case Action::OpenWardriveFiles:
+            show_wardrive_files_page();
             break;
         case Action::OpenMapPacks:
             show_map_packs_page();
@@ -1743,6 +1834,11 @@ void BaseViewModel::request_quit() { quit_requested_subject_.set(true); }
 void BaseViewModel::wifi_scan_timer_cb(lv_timer_t* timer) {
     auto* self = static_cast<BaseViewModel*>(lv_timer_get_user_data(timer));
     if (self) {
+        if (self->wardrive_upload_job_.valid() &&
+            self->wardrive_upload_job_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+            self->wardrive_message_ = self->wardrive_upload_job_.get();
+            self->refresh_wardrive_files();
+        }
         if (self->map_job_.valid()) {
             if (self->map_job_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
                 self->map_message_ = self->map_job_.get();
@@ -1896,6 +1992,7 @@ void BaseViewModel::finish_wifi_scan_if_ready() {
                 if (!gps_log_.access_point(frame.bssid,
                                            frame.ssid.empty() ? "[hidden/unknown]" : frame.ssid,
                                            platform::wireless::channel_number(frequency),
+                                           frequency,
                                            frame.has_rssi ? frame.rssi : -128, frame.security, lat, lon))
                     gps_tool_message_ = "GPS file write failed";
                 else {

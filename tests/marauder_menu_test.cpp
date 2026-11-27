@@ -100,7 +100,8 @@ int main() {
          MarauderMenuAction::CycleTrafficSource, MarauderMenuAction::None},
         {MarauderMenuAction::Brightness, MarauderMenuAction::DimDelay, MarauderMenuAction::CycleBatteryDisplay,
          MarauderMenuAction::CycleCensor},
-        {MarauderMenuAction::CycleStorage, MarauderMenuAction::OpenPcapFiles, MarauderMenuAction::OpenMapPacks,
+        {MarauderMenuAction::CycleStorage, MarauderMenuAction::OpenPcapFiles, MarauderMenuAction::OpenWardriveFiles,
+         MarauderMenuAction::OpenMapPacks,
          MarauderMenuAction::Reserve, MarauderMenuAction::CycleCache},
         {MarauderMenuAction::UploadPolicy, MarauderMenuAction::WigleName, MarauderMenuAction::WigleToken, MarauderMenuAction::WdgKey}
     };

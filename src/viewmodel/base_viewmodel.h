@@ -24,6 +24,7 @@
 #include "remote_id_wifi.h"
 #include "pcap_capture.h"
 #include "gps_log.h"
+#include "wardrive_files.h"
 #include "map_packs.h"
 
 #include <atomic>
@@ -91,6 +92,21 @@ public:
     bool pcap_details() const { return pcap_details_; }
     const auto& pcap_message() const { return pcap_message_; }
     lv_subject_t* pcap_files_subject() { return pcap_files_generation_.native(); }
+    std::string selected_pcap_name() const;
+    std::string delete_selected_pcap();
+    void show_wardrive_files_page();
+    void refresh_wardrive_files();
+    void move_wardrive_file(int direction);
+    void toggle_wardrive_details();
+    std::string selected_wardrive_name() const;
+    std::string delete_selected_wardrive();
+    std::string upload_selected_wardrive(const std::string& service);
+    bool wardrive_uploading() const { return wardrive_upload_job_.valid(); }
+    const auto& wardrive_files() const { return wardrive_files_; }
+    std::size_t wardrive_cursor() const { return wardrive_cursor_; }
+    bool wardrive_details() const { return wardrive_details_; }
+    const auto& wardrive_message() const { return wardrive_message_; }
+    lv_subject_t* wardrive_files_subject() { return wardrive_files_generation_.native(); }
 
     bool is_dark_mode() const;
     bool censor_enabled() const { return model_.censor_enabled(); }
@@ -399,6 +415,12 @@ private:
     std::size_t pcap_cursor_{};
     bool pcap_details_{};
     std::string pcap_message_;
+    reactive::IntSubject wardrive_files_generation_{0};
+    std::vector<platform::wardrive::FileInfo> wardrive_files_;
+    std::size_t wardrive_cursor_{};
+    bool wardrive_details_{};
+    std::string wardrive_message_;
+    std::future<std::string> wardrive_upload_job_;
     model::SystemInfoModel system_info_;
     platform::diagnostics::Snapshot diagnostics_snapshot_;
     std::vector<platform::wireless::AdapterInfo> adapters_;

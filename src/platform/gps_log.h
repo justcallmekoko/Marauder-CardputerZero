@@ -14,7 +14,7 @@ public:
     bool start(LogKind kind, unsigned reserve_mib, std::string& error);
     bool position(int32_t latitude_e7, int32_t longitude_e7);
     bool access_point(const std::string& bssid, const std::string& ssid,
-                      int channel, int rssi, const std::string& security,
+                      int channel, int frequency_mhz, int rssi, const std::string& security,
                       int32_t latitude_e7, int32_t longitude_e7);
     bool bluetooth_device(const std::string& address, const std::string& name,
                           int rssi, const std::string& address_type,
@@ -27,7 +27,7 @@ public:
     const std::filesystem::path& path() const { return path_; }
     static std::filesystem::path directory();
 private:
-    bool write_position(int32_t latitude_e7, int32_t longitude_e7);
+    bool write_position(int32_t latitude_e7, int32_t longitude_e7, int frequency_mhz = 0);
     std::ofstream file_;
     std::filesystem::path path_;
     std::unordered_set<std::string> seen_;

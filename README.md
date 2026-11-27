@@ -59,11 +59,13 @@ The menu text uses the classic 5×7 glyphs from the Cardputer firmware. Under **
 
 Adapter Setup remembers monitor mode choices by stable adapter ID. At app exit, Marauder restores the original radio mode; at its next launch, it attempts to re-enable monitor mode for each remembered adapter that is present and idle. A connected adapter is left alone.
 
-**Device → Accounts and uploads** stores a WiGLE API name and token and a WDGWars API key in separate owner-only files under the app configuration directory. Type a replacement and press Enter to save, or Esc to cancel. Del followed by Enter removes a saved field.
+**Device → Accounts and uploads** stores a WiGLE API name and token and a WDGWars API key in separate owner-only files under the app configuration directory. Type a replacement and press Enter to save, or Esc to cancel. Del followed by Enter removes a saved field. Uploads require an active Wi-Fi connection.
+
+**Device → Storage and memory → Saved captures** lists PCAP files. Select one and press `D`, then confirm, to delete it. **Wardrive logs** in the same menu lists saved GPS-tagged CSVs with size, date, and separate WiGLE/WDGWars status. `U` uploads the selected log to WiGLE; `W` uploads it to WDGWars; `D` deletes it after confirmation. Enter shows full details. Upload converts the app's CSV to WiGLE 1.6 format while preserving the original. A server-confirmed result is shown as **Uploaded**. A queued WDGWars response is shown as **Accepted**, not completed. Older logs have no observed frequency, so their upload derives conventional 2.4/5 GHz frequency from channel and cannot disambiguate 6 GHz. New logs save observed frequency.
 
 Display and power offers System, 25%, 50%, 75%, and 100% brightness. Idle dimming defaults to Never. The first key wakes the screen and exiting restores the entry brightness.
 Storage and memory groups the screenshot destination, free-space reserve (64 MiB by default), and image cache. Screenshots check the destination volume before writing.
-Accounts and uploads defaults to Manual. Select Upload policy, review the active NetworkManager WiFi profile, and press Enter again to trust it for future automatic uploads. Select the policy again to revert to Manual. This version stores the policy locally and has no uploader or survey logger.
+Accounts and uploads defaults to Manual. Select Upload policy, review the active NetworkManager WiFi profile, and press Enter again to trust it for uploads. Select the policy again to revert to Manual. Uploads remain manual in both modes; a trusted policy restricts them to that Wi-Fi profile.
 
 The GPS badge shows Off, Wait, No data, Busy, or the number of satellites used in the current fix. It shows Fix until the receiver supplies a count. A valid sentence can confirm a receiver even before a satellite fix. USB serial bridges appear as candidates until receiver data is recognized.
 
@@ -166,7 +168,7 @@ cmake --build --preset linux-x86-64-dbg
 cmake --workflow --preset cp0-cross-package
 ```
 
-The expected artifact is `dist/Marauder_0.6.57_rev1_arm64.deb`. Debian dependencies install the runtime tools needed by the WiFi, Bluetooth, GPS, monitor, and optional map pack downloads. Packaging and deployment remain separate actions.
+The expected artifact is `dist/Marauder_0.6.58_rev1_arm64.deb`. Debian dependencies install the runtime tools needed by the WiFi, Bluetooth, GPS, monitor, and optional map pack downloads. Packaging and deployment remain separate actions.
 
 ## Safety and scope
 

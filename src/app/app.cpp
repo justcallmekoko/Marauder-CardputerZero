@@ -75,7 +75,8 @@ public:
     }
 
 private:
-    enum class DialogAction { Exit, SelectAdapter, OpenAdapters, DeleteMap };
+    enum class DialogAction { Exit, SelectAdapter, OpenAdapters, DeleteMap, DeletePcap,
+                              DeleteWardrive, UploadWigle, UploadWdg };
     DialogAction dialog_action_{DialogAction::Exit};
     void show_confirmation(const std::string& message, const char* accept, DialogAction action) {
         dialog_action_ = action;
@@ -133,6 +134,15 @@ private:
                     if (dialog_action_ == DialogAction::Exit) view_model_.request_quit();
                     else if (dialog_action_ == DialogAction::OpenAdapters) view_model_.show_adapters_page();
                     else if (dialog_action_ == DialogAction::DeleteMap) view_model_.delete_map_pack(pending_map_pack_);
+                    else if (dialog_action_ == DialogAction::DeletePcap || dialog_action_ == DialogAction::DeleteWardrive ||
+                             dialog_action_ == DialogAction::UploadWigle || dialog_action_ == DialogAction::UploadWdg) {
+                        const auto result = dialog_action_ == DialogAction::DeletePcap ? view_model_.delete_selected_pcap() :
+                            dialog_action_ == DialogAction::DeleteWardrive ? view_model_.delete_selected_wardrive() :
+                            view_model_.upload_selected_wardrive(dialog_action_ == DialogAction::UploadWigle ? "wigle" : "wdg");
+                        const bool okay = result == "Capture deleted" || result == "Wardrive log deleted" ||
+                            result.rfind("Uploading to ", 0) == 0;
+                        toast_->show(result, okay ? view::widgets::ToastTone::Success : view::widgets::ToastTone::Error, 3200);
+                    }
                     else {
                         const auto& radios = view_model_.adapters();
                         const auto cursor = view_model_.adapter_cursor();
@@ -235,6 +245,10 @@ private:
                 view_model_.toggle_pcap_details();
                 return true;
             }
+            if (view_model_.current_page() == model::AppPage::WardriveFiles && view_model_.wardrive_details()) {
+                view_model_.toggle_wardrive_details();
+                return true;
+            }
             if (view_model_.current_page() == model::AppPage::WifiScan &&
                 (view_model_.wifi_details_open() || (view_model_.raw_session() && view_model_.wifi_view() == 0))) {
                 view_model_.wifi_back();
@@ -290,7 +304,27 @@ private:
             if (action == NavigationAction::Previous) { view_model_.move_pcap_file(-1); return true; }
             if (action == NavigationAction::Next) { view_model_.move_pcap_file(1); return true; }
             if (key == LV_KEY_ENTER) { view_model_.toggle_pcap_details(); return true; }
-            if (action == NavigationAction::Details) { view_model_.refresh_pcap_files(); return true; }
+            if (action == NavigationAction::Details && !view_model_.selected_pcap_name().empty()) {
+                show_confirmation("Delete selected capture?", "Enter  Delete", DialogAction::DeletePcap);
+                return true;
+            }
+        }
+
+        if (view_model_.current_page() == model::AppPage::WardriveFiles) {
+            if (action == NavigationAction::Previous) { view_model_.move_wardrive_file(-1); return true; }
+            if (action == NavigationAction::Next) { view_model_.move_wardrive_file(1); return true; }
+            if (key == LV_KEY_ENTER) { view_model_.toggle_wardrive_details(); return true; }
+            if (view_model_.selected_wardrive_name().empty()) return true;
+            if (action == NavigationAction::Details) {
+                show_confirmation("Delete selected wardrive log?", "Enter  Delete", DialogAction::DeleteWardrive);
+                return true;
+            }
+            if (key == 'u' || key == 'U' || key == 'w' || key == 'W') {
+                const bool wigle = key == 'u' || key == 'U';
+                show_confirmation(wigle ? "Upload this log to WiGLE?" : "Upload this log to WDGWars?",
+                                  "Enter  Upload", wigle ? DialogAction::UploadWigle : DialogAction::UploadWdg);
+                return true;
+            }
         }
 
         if (view_model_.current_page() == model::AppPage::MapPacks) {

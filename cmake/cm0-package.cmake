@@ -30,7 +30,7 @@ if(APP_INSTALL_SYSTEMD_SERVICE)
     )
 endif()
 
-install(PROGRAMS src/platform/helpers/radio-inventory src/platform/helpers/gps-session src/platform/helpers/monitor-session src/platform/helpers/bluetooth-session DESTINATION lib/marauder)
+install(PROGRAMS src/platform/helpers/radio-inventory src/platform/helpers/gps-session src/platform/helpers/monitor-session src/platform/helpers/bluetooth-session src/platform/helpers/wardrive-upload DESTINATION lib/marauder)
 
 install(TARGETS ${PROJECT_NAME}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}

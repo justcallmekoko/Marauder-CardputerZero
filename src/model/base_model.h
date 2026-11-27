@@ -21,6 +21,7 @@ enum class AppPage {
     RadioSetup,
     Traffic,
     PcapFiles,
+    WardriveFiles,
     RemoteId,
     GpsTool,
     MapPacks,

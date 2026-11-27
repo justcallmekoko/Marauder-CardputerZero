@@ -119,6 +119,7 @@ void ScreenManager::flush_requested_page() {
             has_loaded_page_ = true;
             return;
         case model::AppPage::PcapFiles:
+        case model::AppPage::WardriveFiles:
             load_screen(std::make_unique<screen::PcapFilesScreen>(view_model_, assets_));
             loaded_page_ = requested_page_;
             has_loaded_page_ = true;

@@ -37,6 +37,7 @@ enum class MarauderMenuAction {
     OpenPineapple,
     OpenTraffic,
     OpenPcapFiles,
+    OpenWardriveFiles,
     OpenMapPacks,
     CycleTrafficSource,
     OpenAdapters,

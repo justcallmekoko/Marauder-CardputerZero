@@ -62,13 +62,13 @@ bool Log::start(LogKind kind, unsigned reserve_mib, std::string& error) {
         std::filesystem::perms::owner_write, std::filesystem::perm_options::replace, ec);
     if (ec) { stop(); std::filesystem::remove(path_); error = "Cannot protect GPS file"; return false; }
     file_ << (kind == LogKind::Track ? "utc,latitude,longitude\n" :
-             "utc,radio,address,name,channel,rssi_dbm,security,address_type,latitude,longitude\n");
+             "utc,radio,address,name,channel,rssi_dbm,security,address_type,latitude,longitude,frequency_mhz\n");
     file_.flush();
     if (!file_) { stop(); error = "Cannot write GPS file"; return false; }
     error.clear();
     return true;
 }
-bool Log::write_position(int32_t latitude_e7, int32_t longitude_e7) {
+bool Log::write_position(int32_t latitude_e7, int32_t longitude_e7, int frequency_mhz) {
     if (!file_) return false;
     if (count_ % 32 == 0) {
         std::error_code ec;
@@ -77,7 +77,12 @@ bool Log::write_position(int32_t latitude_e7, int32_t longitude_e7) {
             { stop(); return false; }
     }
     file_ << std::fixed << std::setprecision(7) << static_cast<double>(latitude_e7) / 1e7 << ','
-          << static_cast<double>(longitude_e7) / 1e7 << '\n';
+          << static_cast<double>(longitude_e7) / 1e7;
+    if (kind_ == LogKind::Wardrive) {
+        file_ << ',';
+        if (frequency_mhz > 0) file_ << frequency_mhz;
+    }
+    file_ << '\n';
     file_.flush();
     if (!file_) { stop(); return false; }
     ++count_;
@@ -89,7 +94,7 @@ bool Log::position(int32_t latitude_e7, int32_t longitude_e7) {
     return write_position(latitude_e7, longitude_e7);
 }
 bool Log::access_point(const std::string& bssid, const std::string& ssid,
-                       int channel, int rssi, const std::string& security,
+                       int channel, int frequency_mhz, int rssi, const std::string& security,
                        int32_t latitude_e7, int32_t longitude_e7) {
     if (!active() || kind_ != LogKind::Wardrive || bssid.empty()) return false;
     if (!seen_.insert("wifi:" + bssid).second) return true;
@@ -97,7 +102,7 @@ bool Log::access_point(const std::string& bssid, const std::string& ssid,
           << ',' << channel << ',';
     if (rssi > -128) file_ << rssi;
     file_ << ',' << quote(security) << ",,";
-    return write_position(latitude_e7, longitude_e7);
+    return write_position(latitude_e7, longitude_e7, frequency_mhz);
 }
 bool Log::bluetooth_device(const std::string& address, const std::string& name,
                            int rssi, const std::string& address_type,

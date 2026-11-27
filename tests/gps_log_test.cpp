@@ -21,8 +21,8 @@ int main() {
     std::string error;
     assert(log.start(platform::gps::LogKind::Wardrive, 0, error));
     const auto wardrive = log.path();
-    assert(log.access_point("AA:BB:CC:DD:EE:FF", "Test,\"AP\"", 6, -52, "WPA2", 407123456, -740123456));
-    assert(log.access_point("AA:BB:CC:DD:EE:FF", "Test", 6, -60, "WPA2", 407123456, -740123456));
+    assert(log.access_point("AA:BB:CC:DD:EE:FF", "Test,\"AP\"", 6, 2437, -52, "WPA2", 407123456, -740123456));
+    assert(log.access_point("AA:BB:CC:DD:EE:FF", "Test", 6, 2437, -60, "WPA2", 407123456, -740123456));
     assert(log.bluetooth_device("11:22:33:44:55:66", "Sensor", -68, "random", 407123456, -740123456));
     assert(log.bluetooth_device("11:22:33:44:55:66", "Sensor", -62, "random", 407123456, -740123456));
     assert(log.count() == 2 && log.bluetooth_count() == 1);
@@ -32,9 +32,9 @@ int main() {
     assert(log.count() == 0);
     std::ifstream file(wardrive);
     const std::string text((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-    assert(text.find("utc,radio,address,name,channel,rssi_dbm,security,address_type,latitude,longitude") != std::string::npos);
-    assert(text.find("WiFi,\"AA:BB:CC:DD:EE:FF\",\"Test,\"\"AP\"\"\",6,-52,\"WPA2\",,40.7123456,-74.0123456") != std::string::npos);
-    assert(text.find("Bluetooth,\"11:22:33:44:55:66\",\"Sensor\",,-68,,\"random\",40.7123456,-74.0123456") != std::string::npos);
+    assert(text.find("utc,radio,address,name,channel,rssi_dbm,security,address_type,latitude,longitude,frequency_mhz") != std::string::npos);
+    assert(text.find("WiFi,\"AA:BB:CC:DD:EE:FF\",\"Test,\"\"AP\"\"\",6,-52,\"WPA2\",,40.7123456,-74.0123456,2437") != std::string::npos);
+    assert(text.find("Bluetooth,\"11:22:33:44:55:66\",\"Sensor\",,-68,,\"random\",40.7123456,-74.0123456,") != std::string::npos);
     assert(log.start(platform::gps::LogKind::Track, 0, error));
     assert(log.position(407123456, -740123456));
     assert(log.position(407123457, -740123456));

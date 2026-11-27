@@ -43,7 +43,9 @@ jobs:
         run: ctest --test-dir build/linux-x86-64 -C Debug --output-on-failure
 
       - name: Check Bluetooth discovery helper
-        run: python3 -m py_compile src/platform/helpers/bluetooth-session
+        run: |
+          python3 -m py_compile src/platform/helpers/bluetooth-session src/platform/helpers/wardrive-upload
+          python3 tests/wardrive_upload_test.py
 
       - name: Validate store manifest
         run: cmake -P .agents/skills/cardputerzero-package-release/scripts/validate_app_builder.cmake
@@ -84,6 +86,7 @@ jobs:
           test -x "$RUNNER_TEMP/marauder-control/postinst"
           test -x "$RUNNER_TEMP/marauder-control/postrm"
           test -x "$RUNNER_TEMP/marauder-payload/usr/lib/marauder/bluetooth-session"
+          test -x "$RUNNER_TEMP/marauder-payload/usr/lib/marauder/wardrive-upload"
           test -f "$RUNNER_TEMP/marauder-payload/usr/share/APPLaunch/share/images/marauder-icon-v2.png"
           grep -Fqx 'Icon=share/images/marauder-icon-v2.png' "$RUNNER_TEMP/marauder-payload/usr/share/APPLaunch/applications/marauder_cardputerzero.desktop"
           visudo -cf "$RUNNER_TEMP/marauder-payload/usr/share/marauder_cardputerzero/marauder-monitor.sudoers"

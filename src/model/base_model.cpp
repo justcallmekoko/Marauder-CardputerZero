@@ -255,6 +255,7 @@ void BaseModel::toggle_page() {
         case AppPage::Traffic:
         case AppPage::RadioSetup:
         case AppPage::PcapFiles:
+        case AppPage::WardriveFiles:
         case AppPage::RemoteId:
         case AppPage::GpsTool:
         case AppPage::MapPacks:

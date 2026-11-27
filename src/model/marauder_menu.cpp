@@ -89,6 +89,7 @@ const std::vector<Item>& items_for(Id menu) {
     static const std::vector<Item> files_memory = {
         {"Screenshots", Color::Blue, Action::CycleStorage, Id::Main, false, true},
         {"Saved captures", Color::Red, Action::OpenPcapFiles, Id::Main, false, true},
+        {"Wardrive logs", Color::Green, Action::OpenWardriveFiles, Id::Main, false, true},
         {"Offline maps", Color::Cyan, Action::OpenMapPacks, Id::Main, false, true},
         {"Keep free", Color::Blue, Action::Reserve, Id::Main, false, true},
         {"Image cache", Color::Purple, Action::CycleCache, Id::Main, false, true},
