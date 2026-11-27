@@ -6,6 +6,8 @@
 #include <string>
 
 namespace platform::maps {
+// shortcut: tile size varies by detail and filesystem, recalibrate with broader pack measurements.
+constexpr std::uint64_t kEstimatedTileBytes = 20480;
 struct Pack {
     const char* name;
     const char* directory;

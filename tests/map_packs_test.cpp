@@ -18,7 +18,8 @@ int main() {
     assert(platform::maps::pack(3).name == std::string("North America"));
     assert(platform::maps::area_estimate(16, 7) > platform::maps::area_estimate(16, 6));
     assert(platform::maps::area_estimate(3, 10) > 2000ULL * 40960);
-    assert(platform::maps::area_estimate(9, 10) > 800ULL * 1048576);
+    assert(platform::maps::area_estimate(9, 10) > 400ULL * 1048576);
+    assert(platform::maps::area_estimate(9, 10) < 600ULL * 1048576);
     assert(platform::maps::area_estimate(26, 11) == 0);
     assert(platform::maps::tile(26, 10, 100, 100).filename() == "100.png");
     if (std::getenv("MARAUDER_MAP_SMOKE")) {
@@ -28,6 +29,21 @@ int main() {
         assert(platform::maps::installed(18));
         assert(platform::maps::installed_zoom(18) == 2);
         assert(platform::maps::area_size(18) > 0);
+        const auto saved_tile = platform::maps::tile(18, 2, 2, 1);
+        const auto partial_tile = std::filesystem::path(saved_tile.string() + ".part");
+        std::filesystem::rename(saved_tile, partial_tile);
+        const auto saved_time = std::filesystem::last_write_time(partial_tile);
+        platform::maps::Progress resumed;
+        assert(platform::maps::install_area(18, 2, &resumed) == "Area map installed");
+        assert(resumed.done == resumed.total);
+        assert(std::filesystem::last_write_time(saved_tile) == saved_time);
+        assert(!std::filesystem::exists(partial_tile));
+        std::filesystem::rename(saved_tile, partial_tile);
+        std::filesystem::resize_file(partial_tile, 12);
+        platform::maps::Progress repaired;
+        assert(platform::maps::install_area(18, 2, &repaired) == "Area map installed");
+        assert(repaired.done == repaired.total);
+        assert(std::filesystem::file_size(saved_tile) > 12);
         assert(platform::maps::erase(18) == "Map deleted");
         assert(!platform::maps::installed(18));
         assert(platform::maps::storage_size(18) == 0);

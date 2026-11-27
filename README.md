@@ -90,6 +90,9 @@ states in the Dark Matter style. These range from z1–z10; the displayed estima
 changes with zoom. Downloads require enough free storage for the estimate plus
 working space. A progress bar shows completed tiles (or bytes for the starter
 world packs); **Esc** pauses a download and **Enter** resumes it from saved tiles.
+Regional downloads reuse complete partial files and retry only failed tiles;
+the storage estimate allows about 20 KiB per tile. Large regions still contain
+many thousands of requests and may take several minutes.
 **D** opens a confirmation before deleting the highlighted pack, including a
 partial pack, to reclaim its storage. The packs use geographic rectangles, so
 border tiles can include nearby countries. Enter saves the zoom with the selected
@@ -146,7 +149,7 @@ cmake --build --preset linux-x86-64-dbg
 cmake --workflow --preset cp0-cross-package
 ```
 
-The expected artifact is `dist/Marauder_0.6.50_rev1_arm64.deb`. Debian dependencies install the runtime tools needed by the WiFi, Bluetooth, GPS, monitor, and optional map pack downloads. Packaging and deployment remain separate actions.
+The expected artifact is `dist/Marauder_0.6.51_rev1_arm64.deb`. Debian dependencies install the runtime tools needed by the WiFi, Bluetooth, GPS, monitor, and optional map pack downloads. Packaging and deployment remain separate actions.
 
 ## Safety and scope
 

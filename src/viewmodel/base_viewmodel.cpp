@@ -241,7 +241,7 @@ void BaseViewModel::select_map_pack() {
         else {
             map_download_pack_ = 2;
             map_download_zoom_ = map_preview_zoom_;
-            map_progress_.total = map_local_estimate() / 40960;
+            map_progress_.total = map_local_estimate() / platform::maps::kEstimatedTileBytes;
             map_message_ = "Downloading nearby tiles...";
             try { map_job_ = std::async(std::launch::async, platform::maps::install_local, lat, lon, map_download_zoom_, &map_progress_); }
             catch (const std::system_error&) { map_message_ = "Download worker unavailable"; }
@@ -253,7 +253,7 @@ void BaseViewModel::select_map_pack() {
         map_message_ = "Downloading map tiles...";
         map_download_pack_ = map_pack_cursor_;
         map_download_zoom_ = map_preview_zoom_;
-        map_progress_.total = map_download_pack_ >= 3 ? map_area_estimate() / 40960 :
+        map_progress_.total = map_download_pack_ >= 3 ? map_area_estimate() / platform::maps::kEstimatedTileBytes :
             platform::maps::pack(map_download_pack_).archive_bytes;
         try {
             if (map_pack_cursor_ >= 3) map_job_ = std::async(std::launch::async, platform::maps::install_area, map_pack_cursor_, map_download_zoom_, &map_progress_);
