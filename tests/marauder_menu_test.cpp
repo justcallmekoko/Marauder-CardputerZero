@@ -87,7 +87,8 @@ int main() {
         {MarauderMenuAction::OpenRadioSetup, MarauderMenuAction::OpenAdapters, MarauderMenuAction::CycleTrafficSource},
         {MarauderMenuAction::Brightness, MarauderMenuAction::DimDelay, MarauderMenuAction::CycleBatteryDisplay,
          MarauderMenuAction::CycleCensor},
-        {MarauderMenuAction::CycleStorage, MarauderMenuAction::OpenPcapFiles, MarauderMenuAction::Reserve, MarauderMenuAction::CycleCache},
+        {MarauderMenuAction::CycleStorage, MarauderMenuAction::OpenPcapFiles, MarauderMenuAction::OpenMapPacks,
+         MarauderMenuAction::Reserve, MarauderMenuAction::CycleCache},
         {MarauderMenuAction::UploadPolicy, MarauderMenuAction::WigleName, MarauderMenuAction::WigleToken, MarauderMenuAction::WdgKey}
     };
     for (const auto& group : groups) {

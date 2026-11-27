@@ -117,10 +117,10 @@ public:
     void step_map_zoom(int direction);
     unsigned map_pack_cursor() const { return map_pack_cursor_; }
     unsigned map_pack() const { return model_.map_pack(); }
-    unsigned map_zoom() const { return model_.map_zoom(); }
+    unsigned map_zoom() const { return model_.current_page() == model::AppPage::MapPacks ? map_preview_zoom_ : model_.map_zoom(); }
     std::uint64_t map_local_estimate() const {
         int32_t lat{}, lon{};
-        return remote_position(lat, lon) ? platform::maps::local_estimate(lat, lon, model_.map_zoom()) : 0;
+        return remote_position(lat, lon) ? platform::maps::local_estimate(lat, lon, map_preview_zoom_) : 0;
     }
     bool map_installing() const { return map_job_.valid(); }
     const std::string& map_message() const { return map_message_; }
@@ -321,6 +321,7 @@ private:
     std::string map_message_;
     unsigned map_pack_cursor_{};
     unsigned map_download_pack_{};
+    unsigned map_preview_zoom_{6}, map_download_zoom_{6};
     int original_light_{-1}, light_max_{0}, before_dim_{-1};
     bool changed_light_{false};
     uint32_t activity_tick_{};

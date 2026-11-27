@@ -84,8 +84,8 @@ download and installed size of each optional world pack. Select **OSM Bright**
 or **Dark Matter** and press Enter to download it; once installed, Enter selects
 it for Remote ID. The **Around GPS** entry downloads dark tiles for a 3 km
 radius around the current GPS fix. Its size estimate changes with the zoom
-level. Left/Right chooses and saves map zoom: z1–z6 for world packs or z6–z16
-for nearby tiles. Downloads run in the background. The
+level. Left/Right chooses map zoom: z1–z6 for world packs or z6–z16
+for nearby tiles. Enter saves the zoom with the selected pack. Downloads run in the background. The
 Remote ID map uses the saved style and zoom beneath aircraft paths when GPS
 has a fix. With **Censor display** enabled, the app hides map tiles so the
 operator's location cannot be inferred from the visible streets.
