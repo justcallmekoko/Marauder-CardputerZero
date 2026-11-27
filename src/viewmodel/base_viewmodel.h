@@ -115,6 +115,8 @@ public:
     void move_map_pack(int direction);
     void select_map_pack();
     void step_map_zoom(int direction);
+    void cancel_map_download();
+    void delete_map_pack(unsigned index);
     unsigned map_pack_cursor() const { return map_pack_cursor_; }
     unsigned map_pack() const { return model_.map_pack(); }
     unsigned map_zoom() const { return model_.current_page() == model::AppPage::MapPacks ? map_preview_zoom_ : model_.map_zoom(); }
@@ -124,6 +126,11 @@ public:
     }
     std::uint64_t map_area_estimate() const { return platform::maps::area_estimate(map_pack_cursor_, map_preview_zoom_); }
     bool map_installing() const { return map_job_.valid(); }
+    bool map_deleting() const { return map_deleting_; }
+    std::uint64_t map_progress_done() const { return map_progress_.done.load(); }
+    std::uint64_t map_progress_total() const { return map_progress_.total.load(); }
+    bool map_progress_bytes() const { return map_download_pack_ < 2; }
+    unsigned map_storage_revision() const { return map_storage_revision_; }
     const std::string& map_message() const { return map_message_; }
     lv_subject_t* map_subject() { return map_generation_.native(); }
     void show_pineapple_page();
@@ -318,8 +325,12 @@ private:
     std::size_t radio_cursor_{0};
     std::string resource_message_, pending_uuid_, pending_network_;
     std::future<std::string> map_job_;
+    platform::maps::Progress map_progress_;
     reactive::IntSubject map_generation_{0};
     std::string map_message_;
+    bool map_deleting_{false};
+    unsigned map_storage_revision_{};
+    uint32_t map_progress_tick_{};
     unsigned map_pack_cursor_{};
     unsigned map_download_pack_{};
     unsigned map_preview_zoom_{6}, map_download_zoom_{6};

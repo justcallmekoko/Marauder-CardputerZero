@@ -4,8 +4,12 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <chrono>
+#include <cerrno>
+#include <csignal>
 #include <filesystem>
 #include <fstream>
+#include <thread>
 #include <vector>
 #ifndef _WIN32
 #include <sys/wait.h>
@@ -74,7 +78,9 @@ bool png(const std::filesystem::path& path) {
     return file.gcount() == 8 && std::string(signature, 8) == "\x89PNG\r\n\x1a\n";
 }
 #ifndef _WIN32
-bool run(const std::vector<std::string>& arguments) {
+bool run(const std::vector<std::string>& arguments, Progress* progress = nullptr,
+         const std::filesystem::path& output = {}) {
+    if (progress && progress->cancel.load()) return false;
     std::vector<char*> args;
     for (const auto& arg : arguments) args.push_back(const_cast<char*>(arg.c_str()));
     args.push_back(nullptr);
@@ -82,7 +88,22 @@ bool run(const std::vector<std::string>& arguments) {
     if (child == 0) { execvp(args[0], args.data()); _exit(127); }
     if (child < 0) return false;
     int status{};
-    return waitpid(child, &status, 0) == child && WIFEXITED(status) && WEXITSTATUS(status) == 0;
+    for (;;) {
+        const auto result = waitpid(child, &status, WNOHANG);
+        if (result == child) return WIFEXITED(status) && WEXITSTATUS(status) == 0;
+        if (result < 0) { if (errno == EINTR) continue; return false; }
+        if (progress && progress->cancel.load()) {
+            kill(child, SIGTERM);
+            waitpid(child, &status, 0);
+            return false;
+        }
+        if (progress && !output.empty()) {
+            std::error_code error;
+            const auto bytes = std::filesystem::file_size(output, error);
+            if (!error) progress->done.store(std::min(bytes, progress->total.load()));
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
 }
 #endif
 }
@@ -118,10 +139,11 @@ std::uint64_t free_bytes() {
     const auto capacity = std::filesystem::space(probe, error);
     return error ? 0 : capacity.available;
 }
-std::string install(unsigned index) {
+std::string install(unsigned index, Progress* progress) {
     if (index >= 2 || root().empty()) return "Map storage unavailable";
     if (installed(index)) return "Already installed";
     const auto& selected = pack(index);
+    if (progress) { progress->done = 0; progress->total = selected.archive_bytes; }
     if (free_bytes() < selected.archive_bytes + selected.installed_bytes + 64u * 1024u * 1024u)
         return "Not enough free space";
 #ifdef _WIN32
@@ -136,18 +158,24 @@ std::string install(unsigned index) {
     std::filesystem::remove_all(stage, error);
     std::filesystem::create_directories(stage, error);
     if (error) return "Cannot prepare download";
-    const bool fetched = run({"curl", "--fail", "--location", "--silent", "--show-error", "--retry", "2", "--max-time", "180", "--output", temp.string(), selected.url});
+    const bool fetched = run({"curl", "--fail", "--location", "--silent", "--show-error", "--retry", "2", "--max-time", "180", "--output", temp.string(), selected.url}, progress, temp);
     if (!fetched || std::filesystem::file_size(temp, error) != selected.archive_bytes || error) {
         std::filesystem::remove(temp, error);
         std::filesystem::remove_all(stage, error);
-        return "Map download failed";
+        return progress && progress->cancel ? "Download paused" : "Map download failed";
     }
-    const bool extracted = run({"unzip", "-q", temp.string(), "-d", stage.string()});
+    if (progress) progress->done = progress->total.load();
+    const bool extracted = run({"unzip", "-q", temp.string(), "-d", stage.string()}, progress);
     const auto source = stage / "maps" / selected.directory;
     if (!extracted || !std::filesystem::is_regular_file(source / "1/0/0.png")) {
         std::filesystem::remove(temp, error);
         std::filesystem::remove_all(stage, error);
-        return "Map pack invalid";
+        return progress && progress->cancel ? "Download paused" : "Map pack invalid";
+    }
+    if (progress && progress->cancel) {
+        std::filesystem::remove(temp, error);
+        std::filesystem::remove_all(stage, error);
+        return "Download paused";
     }
     std::filesystem::rename(source, root() / selected.directory, error);
     std::filesystem::remove(temp, error);
@@ -167,26 +195,19 @@ std::uint64_t local_estimate(int32_t lat_e7, int32_t lon_e7, unsigned max_zoom) 
     return tiles * 40960;
 }
 std::uint64_t local_size() {
-    const auto directory = root() / "local";
-    std::error_code error;
-    std::uint64_t total{};
-    if (!std::filesystem::exists(directory, error)) return 0;
-    for (auto it = std::filesystem::recursive_directory_iterator(directory, error);
-         !error && it != std::filesystem::recursive_directory_iterator(); it.increment(error)) {
-        if (it->is_regular_file(error) && it->path().extension() == ".png")
-            total += it->file_size(error);
-    }
-    return total;
+    return storage_size(2);
 }
-std::string install_local(int32_t lat_e7, int32_t lon_e7, unsigned max_zoom) {
+std::string install_local(int32_t lat_e7, int32_t lon_e7, unsigned max_zoom, Progress* progress) {
     const auto estimate = local_estimate(lat_e7, lon_e7, max_zoom);
     if (!estimate) return "GPS fix required";
+    if (progress) { progress->done = 0; progress->total = estimate / 40960; }
     if (free_bytes() < estimate + 64u * 1024u * 1024u) return "Not enough free space";
 #ifdef _WIN32
     return "Download on the Cardputer";
 #else
     std::error_code error;
     for (unsigned zoom = 6; zoom <= max_zoom; ++zoom) {
+        if (progress && progress->cancel) return "Download paused";
         const auto bounds = local_bounds(lat_e7, lon_e7, zoom);
         std::vector<std::string> args = {"curl", "--parallel", "--parallel-immediate", "--parallel-max", "4",
             "--fail", "--location", "--silent", "--show-error", "--retry", "2", "--max-time", "30"};
@@ -194,7 +215,7 @@ std::string install_local(int32_t lat_e7, int32_t lon_e7, unsigned max_zoom) {
         for (int y = bounds.min_y; y <= bounds.max_y; ++y) for (int x = bounds.min_x; x <= bounds.max_x; ++x) {
             const unsigned wrapped_x = static_cast<unsigned>((x % (1 << zoom) + (1 << zoom)) % (1 << zoom));
             const auto final = tile(2, zoom, wrapped_x, static_cast<unsigned>(y));
-            if (png(final)) continue;
+            if (png(final)) { if (progress) ++progress->done; continue; }
             std::filesystem::create_directories(final.parent_path(), error);
             if (error) return "Cannot create map folder";
             const auto temp = final.string() + ".part";
@@ -203,13 +224,16 @@ std::string install_local(int32_t lat_e7, int32_t lon_e7, unsigned max_zoom) {
                 std::string(pack(2).url) + "/" + std::to_string(zoom) + "/" +
                 std::to_string(wrapped_x) + "/" + std::to_string(y) + ".png"});
         }
-        if (!pending.empty() && !run(args)) return "Tile download failed; retry to resume";
+        if (!pending.empty() && !run(args, progress))
+            return progress && progress->cancel ? "Download paused" : "Tile download failed; retry to resume";
         for (const auto& [temp, final] : pending) {
             if (!png(temp)) return "Tile download invalid; retry";
             std::filesystem::rename(temp, final, error);
             if (error) return "Could not save map tile";
+            if (progress) ++progress->done;
         }
     }
+    if (progress && progress->cancel) return "Download paused";
     std::ofstream ready(root() / "local/.ready");
     ready << max_zoom << "\nOpenStreetMap contributors\n";
     return ready ? "Local map installed" : "Could not finish map pack";
@@ -226,21 +250,44 @@ std::uint64_t area_estimate(unsigned index, unsigned max_zoom) {
     return count * 40960;
 }
 std::uint64_t area_size(unsigned index) {
-    if (index < 3 || index >= packs.size()) return 0;
+    return index >= 3 ? storage_size(index) : 0;
+}
+std::uint64_t storage_size(unsigned index) {
+    if (index >= packs.size() || root().empty()) return 0;
     std::error_code error;
     const auto directory = root() / pack(index).directory;
-    if (!std::filesystem::exists(directory, error)) return 0;
     std::uint64_t total{};
-    for (auto it = std::filesystem::recursive_directory_iterator(directory, error);
-         !error && it != std::filesystem::recursive_directory_iterator(); it.increment(error)) {
-        if (it->is_regular_file(error) && it->path().extension() == ".png") total += it->file_size(error);
+    if (std::filesystem::exists(directory, error)) {
+        for (auto it = std::filesystem::recursive_directory_iterator(directory, error);
+             !error && it != std::filesystem::recursive_directory_iterator(); it.increment(error)) {
+            if (it->is_regular_file(error)) total += it->file_size(error);
+        }
+    }
+    if (index < 2) {
+        const auto partial = root() / (std::string(pack(index).directory) + ".part.zip");
+        const auto bytes = std::filesystem::file_size(partial, error);
+        if (!error) total += bytes;
     }
     return total;
 }
-std::string install_area(unsigned index, unsigned max_zoom) {
+std::string erase(unsigned index) {
+    if (index >= packs.size() || root().empty()) return "Map storage unavailable";
+    std::error_code error;
+    const auto directory = root() / pack(index).directory;
+    auto removed = std::filesystem::remove_all(directory, error);
+    if (error) return "Could not delete map";
+    if (index < 2) {
+        removed += std::filesystem::remove(root() / (std::string(pack(index).directory) + ".part.zip"), error) ? 1 : 0;
+        if (error) return "Could not delete map";
+        removed += std::filesystem::remove_all(root() / (std::string(pack(index).directory) + ".staging"), error);
+        if (error) return "Could not delete map";
+    }
+    return removed ? "Map deleted" : "No map files to delete";
+}
+std::string install_area(unsigned index, unsigned max_zoom, Progress* progress) {
     const auto estimate = area_estimate(index, max_zoom);
     if (!estimate || root().empty()) return "Map area unavailable";
-    if (estimate > 2000ULL * 40960) return "Area too large; lower zoom";
+    if (progress) { progress->done = 0; progress->total = estimate / 40960; }
     if (free_bytes() < estimate + 64ULL * 1024 * 1024) return "Not enough free space";
 #ifdef _WIN32
     return "Download on the Cardputer";
@@ -260,25 +307,29 @@ std::string install_area(unsigned index, unsigned max_zoom) {
                 args.insert(args.end(), {"--output", temp.string(),
                     "https://tiles.coalition.space/raster/styles/dark-matter/" + std::to_string(zoom) + "/" + x + "/" + y + ".png"});
             }
-            if (!run(args)) return false;
+            if (!run(args, progress)) return false;
             for (const auto& [temp, final] : pending) {
                 if (!png(temp)) return false;
                 std::filesystem::rename(temp, final, error);
                 if (error) return false;
+                if (progress) ++progress->done;
             }
             pending.clear();
             return true;
         };
         for (int y = bounds.min_y; y <= bounds.max_y; ++y) for (int x = bounds.min_x; x <= bounds.max_x; ++x) {
+            if (progress && progress->cancel) return "Download paused";
             const auto final = tile(index, zoom, static_cast<unsigned>(x), static_cast<unsigned>(y));
-            if (png(final)) continue;
+            if (png(final)) { if (progress) ++progress->done; continue; }
             std::filesystem::create_directories(final.parent_path(), error);
             if (error) return "Cannot create map folder";
             pending.emplace_back(final.string() + ".part", final);
-            if (pending.size() == 32 && !fetch()) return "Tile download failed; retry to resume";
+            if (pending.size() == 32 && !fetch())
+                return progress && progress->cancel ? "Download paused" : "Tile download failed; retry to resume";
         }
-        if (!fetch()) return "Tile download failed; retry to resume";
+        if (!fetch()) return progress && progress->cancel ? "Download paused" : "Tile download failed; retry to resume";
     }
+    if (progress && progress->cancel) return "Download paused";
     std::ofstream marker(root() / selected.directory / ".ready");
     marker << max_zoom << "\nOpenStreetMap contributors\n";
     return marker ? "Area map installed" : "Could not finish map pack";

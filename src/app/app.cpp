@@ -11,6 +11,7 @@
 #include "help_popup.h"
 #include "logger.h"
 #include "linux_input.h"
+#include "map_packs.h"
 #include "screenshot_service.h"
 #include "screen_manager.h"
 #include "shortcut_policy.h"
@@ -74,7 +75,7 @@ public:
     }
 
 private:
-    enum class DialogAction { Exit, SelectAdapter, OpenAdapters };
+    enum class DialogAction { Exit, SelectAdapter, OpenAdapters, DeleteMap };
     DialogAction dialog_action_{DialogAction::Exit};
     void show_confirmation(const std::string& message, const char* accept, DialogAction action) {
         dialog_action_ = action;
@@ -131,6 +132,7 @@ private:
                 if (key == LV_KEY_ENTER) {
                     if (dialog_action_ == DialogAction::Exit) view_model_.request_quit();
                     else if (dialog_action_ == DialogAction::OpenAdapters) view_model_.show_adapters_page();
+                    else if (dialog_action_ == DialogAction::DeleteMap) view_model_.delete_map_pack(pending_map_pack_);
                     else {
                         const auto& radios = view_model_.adapters();
                         const auto cursor = view_model_.adapter_cursor();
@@ -221,6 +223,10 @@ private:
         }
 
         if (key == LV_KEY_ESC && !long_pressed) {
+            if (view_model_.current_page() == model::AppPage::MapPacks && view_model_.map_installing()) {
+                view_model_.cancel_map_download();
+                return true;
+            }
             if (view_model_.current_page() == model::AppPage::RemoteId && view_model_.remote_details()) {
                 view_model_.remote_back();
                 return true;
@@ -288,11 +294,17 @@ private:
         }
 
         if (view_model_.current_page() == model::AppPage::MapPacks) {
+            if (view_model_.map_installing()) return true;
             if (action == NavigationAction::Previous) view_model_.move_map_pack(-1);
             else if (action == NavigationAction::Next) view_model_.move_map_pack(1);
             else if (action == NavigationAction::Back) view_model_.step_map_zoom(-1);
             else if (action == NavigationAction::Primary && key != LV_KEY_ENTER) view_model_.step_map_zoom(1);
             else if (key == LV_KEY_ENTER) view_model_.select_map_pack();
+            else if (action == NavigationAction::Details) {
+                pending_map_pack_ = view_model_.map_pack_cursor();
+                show_confirmation(std::string("Delete ") + platform::maps::pack(pending_map_pack_).name + " map?",
+                                  "Enter  Delete", DialogAction::DeleteMap);
+            }
             else return false;
             return true;
         }
@@ -404,6 +416,7 @@ private:
     viewmodel::BaseViewModel& view_model_;
     AssetManager& assets_;
     std::string pending_adapter_;
+    unsigned pending_map_pack_{};
     lv_obj_t* confirmation_ = nullptr;
     std::unique_ptr<view::widgets::Toast> toast_;
     std::unique_ptr<view::widgets::HelpPopup> help_popup_;

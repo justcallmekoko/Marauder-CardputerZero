@@ -87,11 +87,13 @@ radius around the current GPS fix. Its size estimate changes with the zoom
 level. Z/C chooses map zoom: z1–z6 for world packs or z6–z16
 for nearby tiles. The scrolling list also offers regions, countries, and US
 states in the Dark Matter style. These range from z1–z10; the displayed estimate
-changes with zoom. Large selections are limited to 2,000 tiles per pack, so
-lower the zoom if prompted. Regional downloads resume from saved tiles after
-an interruption. The packs use geographic rectangles, so border tiles can
-include nearby countries. Enter saves the zoom with the selected pack. Downloads
-run in the background. The
+changes with zoom. Downloads require enough free storage for the estimate plus
+working space. A progress bar shows completed tiles (or bytes for the starter
+world packs); **Esc** pauses a download and **Enter** resumes it from saved tiles.
+**D** opens a confirmation before deleting the highlighted pack, including a
+partial pack, to reclaim its storage. The packs use geographic rectangles, so
+border tiles can include nearby countries. Enter saves the zoom with the selected
+pack. Downloads run in the background. The
 Remote ID map uses the saved style and zoom beneath aircraft paths when GPS
 has a fix. With **Censor display** enabled, the app hides map tiles so the
 operator's location cannot be inferred from the visible streets.
@@ -144,7 +146,7 @@ cmake --build --preset linux-x86-64-dbg
 cmake --workflow --preset cp0-cross-package
 ```
 
-The expected artifact is `dist/Marauder_0.6.49_rev1_arm64.deb`. Debian dependencies install the runtime tools needed by the WiFi, Bluetooth, GPS, monitor, and optional map pack downloads. Packaging and deployment remain separate actions.
+The expected artifact is `dist/Marauder_0.6.50_rev1_arm64.deb`. Debian dependencies install the runtime tools needed by the WiFi, Bluetooth, GPS, monitor, and optional map pack downloads. Packaging and deployment remain separate actions.
 
 ## Safety and scope
 
