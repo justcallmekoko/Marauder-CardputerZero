@@ -84,7 +84,7 @@ download and installed size of each optional world pack. Select **OSM Bright**
 or **Dark Matter** and press Enter to download it; once installed, Enter selects
 it for Remote ID. The **Around GPS** entry downloads dark tiles for a 3 km
 radius around the current GPS fix. Its size estimate changes with the zoom
-level. Left/Right chooses map zoom: z1–z6 for world packs or z6–z16
+level. Z/C chooses map zoom: z1–z6 for world packs or z6–z16
 for nearby tiles. The scrolling list also offers regions, countries, and US
 states in the Dark Matter style. These range from z1–z10; the displayed estimate
 changes with zoom. Large selections are limited to 2,000 tiles per pack, so
@@ -144,7 +144,7 @@ cmake --build --preset linux-x86-64-dbg
 cmake --workflow --preset cp0-cross-package
 ```
 
-The expected artifact is `dist/Marauder_0.6.48_rev1_arm64.deb`. Debian dependencies install the runtime tools needed by the WiFi, Bluetooth, GPS, monitor, and optional map pack downloads. Packaging and deployment remain separate actions.
+The expected artifact is `dist/Marauder_0.6.49_rev1_arm64.deb`. Debian dependencies install the runtime tools needed by the WiFi, Bluetooth, GPS, monitor, and optional map pack downloads. Packaging and deployment remain separate actions.
 
 ## Safety and scope
 

@@ -30,8 +30,9 @@ void MapPacksScreen::build_content(lv_obj_t* content) {
         lv_label_set_long_mode(obj, LV_LABEL_LONG_CLIP);
         return obj;
     };
-    title_ = label(content, 8, 1, 125, 13);
-    space_ = label(content, 134, 3, 178, 10);
+    title_ = label(content, 8, 1, 128, 13);
+    index_ = label(content, 139, 3, 52, 10);
+    space_ = label(content, 196, 3, 116, 10);
     lv_obj_set_style_text_align(space_, LV_TEXT_ALIGN_RIGHT, 0);
     for (std::size_t i = 0; i < rows_.size(); ++i) {
         auto& row = rows_[i];
@@ -53,9 +54,11 @@ void MapPacksScreen::build_content(lv_obj_t* content) {
 }
 void MapPacksScreen::render() {
     const auto colors = view::palette(view_model().is_dark_mode());
-    const auto title = "OFFLINE MAPS " + std::to_string(view_model().map_pack_cursor() + 1) + "/" +
+    lv_label_set_text(title_, "OFFLINE MAPS");
+    const auto index = std::to_string(view_model().map_pack_cursor() + 1) + "/" +
         std::to_string(platform::maps::pack_count());
-    lv_label_set_text(title_, title.c_str());
+    lv_label_set_text(index_, index.c_str());
+    lv_obj_set_style_text_color(index_, colors.info, 0);
     const auto free = "Free " + size_text(platform::maps::free_bytes());
     lv_label_set_text(space_, free.c_str());
     lv_obj_set_style_text_color(space_, colors.info, 0);
@@ -91,6 +94,6 @@ void MapPacksScreen::render() {
     lv_obj_set_style_text_color(zoom_, colors.info, 0);
     lv_label_set_text(message_, view_model().map_message().c_str());
     lv_obj_set_style_text_color(message_, colors.text_disabled, 0);
-    set_key_guide("F/X Maps  Enter Download/Use  Left/Right Zoom  Esc Back");
+    set_key_guide("F/X Maps  Z/C Zoom  Enter Download/Use  Esc Back");
 }
 }

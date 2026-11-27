@@ -264,7 +264,13 @@ void BaseViewModel::select_map_pack() {
 }
 void BaseViewModel::step_map_zoom(int direction) {
     const auto zoom = static_cast<int>(map_preview_zoom_) + direction;
-    if (zoom < (map_pack_cursor_ == 2 ? 6 : 1) || zoom > (map_pack_cursor_ == 2 ? 16 : map_pack_cursor_ >= 3 ? 10 : 6)) return;
+    const int min_zoom = map_pack_cursor_ == 2 ? 6 : 1;
+    const int max_zoom = map_pack_cursor_ == 2 ? 16 : map_pack_cursor_ >= 3 ? 10 : 6;
+    if (zoom < min_zoom || zoom > max_zoom) {
+        map_message_ = "Zoom limit z" + std::to_string(min_zoom) + "-" + std::to_string(max_zoom);
+        map_generation_.set(map_generation_.value() + 1);
+        return;
+    }
     map_preview_zoom_ = static_cast<unsigned>(zoom);
     map_message_ = "Zoom saved when pack is selected";
     map_generation_.set(map_generation_.value() + 1);
