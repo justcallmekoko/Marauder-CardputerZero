@@ -47,9 +47,12 @@ const std::vector<Item>& items_for(Id menu) {
         {"Saved Networks", Color::LightGrey, Action::None, Id::Main, false, false},
     };
     static const std::vector<Item> bluetooth = {
-        {"Advertisement feed", Color::Cyan, Action::OpenBluetoothRaw, Id::Main, false, true},
+        {"Raw feed", Color::Cyan, Action::OpenBluetoothRaw, Id::Main, false, true},
         {"Find My", Color::Green, Action::OpenBluetoothFindMy, Id::Main, false, true},
         {"iBeacon", Color::Blue, Action::OpenBluetoothIBeacon, Id::Main, false, true},
+        {"Device types", Color::Magenta, Action::None, Id::BluetoothDevices, true, true},
+    };
+    static const std::vector<Item> bluetooth_devices = {
         {"Flipper", Color::Magenta, Action::OpenBluetoothFlipper, Id::Main, false, true},
         {"Flock", Color::Orange, Action::OpenBluetoothFlock, Id::Main, false, true},
         {"Meta", Color::Purple, Action::OpenBluetoothMeta, Id::Main, false, true},
@@ -111,6 +114,7 @@ const std::vector<Item>& items_for(Id menu) {
         case Id::WifiAttacks: return wifi_attacks;
         case Id::WifiGeneral: return wifi_general;
         case Id::Bluetooth: return bluetooth;
+        case Id::BluetoothDevices: return bluetooth_devices;
         case Id::Gps: return gps;
         case Id::Device: return device;
         case Id::Radios: return radios;
@@ -130,6 +134,7 @@ const char* title_for(Id menu) {
         case Id::WifiAttacks: return "WiFi > Attacks";
         case Id::WifiGeneral: return "WiFi > General";
         case Id::Bluetooth: return "Bluetooth";
+        case Id::BluetoothDevices: return "Bluetooth > Device types";
         case Id::Gps: return "GPS";
         case Id::Device: return "Device";
         case Id::Radios: return "Radios and GPS";
@@ -163,7 +168,6 @@ std::size_t MarauderMenuModel::columns() const {
         case MarauderMenuId::Device:
         case MarauderMenuId::FilesAndMemory:
         case MarauderMenuId::Accounts: return 1;
-        case MarauderMenuId::Bluetooth: return 1;
         default: return 2;
     }
 }

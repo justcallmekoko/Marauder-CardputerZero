@@ -41,18 +41,31 @@ int main() {
     MarauderMenuModel gps;
     MarauderMenuModel bluetooth;
     select_index(bluetooth, 1);
-    if (bluetooth.activate() != MarauderMenuAction::None || bluetooth.columns() != 1 ||
-        bluetooth.item_count() != 7) return 76;
+    if (bluetooth.activate() != MarauderMenuAction::None || bluetooth.columns() != 2 ||
+        bluetooth.item_count() != 4 || std::string(bluetooth.title()) != "Bluetooth") return 76;
     const MarauderMenuAction bluetooth_actions[] = {
         MarauderMenuAction::OpenBluetoothRaw, MarauderMenuAction::OpenBluetoothFindMy,
-        MarauderMenuAction::OpenBluetoothIBeacon, MarauderMenuAction::OpenBluetoothFlipper,
-        MarauderMenuAction::OpenBluetoothFlock, MarauderMenuAction::OpenBluetoothMeta,
-        MarauderMenuAction::OpenBluetoothSerial
+        MarauderMenuAction::OpenBluetoothIBeacon
     };
-    for (std::size_t i = 0; i < bluetooth.item_count(); ++i) {
+    for (std::size_t i = 0; i < 3; ++i) {
         if (bluetooth.activate() != bluetooth_actions[i]) return 77;
         bluetooth.next();
     }
+    if (bluetooth.activate() != MarauderMenuAction::None || bluetooth.columns() != 2 ||
+        bluetooth.item_count() != 4 || std::string(bluetooth.title()) != "Bluetooth > Device types") return 78;
+    const MarauderMenuAction device_actions[] = {
+        MarauderMenuAction::OpenBluetoothFlipper, MarauderMenuAction::OpenBluetoothFlock,
+        MarauderMenuAction::OpenBluetoothMeta, MarauderMenuAction::OpenBluetoothSerial
+    };
+    for (std::size_t i = 0; i < 4; ++i) {
+        if (bluetooth.activate() != device_actions[i]) return 79;
+        bluetooth.next();
+    }
+    bluetooth.move(0, -1);
+    if (bluetooth.selected_index() != 2) return 80;
+    bluetooth.move(1, 0);
+    if (bluetooth.selected_index() != 3 || !bluetooth.back() ||
+        bluetooth.selected_index() != 3 || bluetooth.columns() != 2) return 81;
     select_index(gps, 2);
     gps.activate();
     gps.move(0, -1);

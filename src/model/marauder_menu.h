@@ -17,6 +17,7 @@ enum class MarauderMenuId {
     WifiAttacks,
     WifiGeneral,
     Bluetooth,
+    BluetoothDevices,
     Gps,
     Device,
     Accounts,
