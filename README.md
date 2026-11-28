@@ -22,7 +22,7 @@ Native C++17/LVGL 9.5 port of ESP32 Marauder for the ARM64 Linux-based Cardputer
 - **WiFi → Activity → Pineapple scan** builds a live list of candidate devices from beacon frames. The detector follows ESP32 Marauder's OUI and short-beacon clues; a matching fingerprint is not proof that the hardware is a Wi-Fi Pineapple, since OUIs and beacon contents can be shared or spoofed. Select a candidate for Information (identity, vendor, security, channel, RSSI, beacon count, and match evidence), a channel-pinned traffic filter, Fox hunt, or target PCAP recording. The dedicated list scans supported channels; the candidate's actions pin its advertised primary channel. `D` restarts the list.
 - **WiFi → Activity → Remote ID** listens for Wi-Fi Beacon and NAN aircraft broadcasts on the selected monitor-mode adapter. A live list shows aircraft ID, channel, signal and distance when the Cardputer has a fresh GPS fix. The relative-position map centers on the Cardputer and shows aircraft positions and recent paths; without a fix it shows a clear GPS prompt while collection continues. `F`/`X` selects an aircraft; Enter opens its Information and Fox hunt actions. Information has identity, position and operator tabs; `F`/`X` changes tabs, and Esc steps back through actions to the map. Bluetooth Remote ID is not collected. The app does not provide offline map tiles or terrain. The Remote ID display depends on receiving an aircraft broadcast on a channel the adapter visits and on the aircraft broadcasting its own location.
 - The Wi-Fi Remote ID decoder and relative-position math are adapted from ESP32 Marauder's MIT-licensed `RemoteIdDecoder` and `RemoteIdModel`; the original license is included in `REMOTE_ID_MIT_LICENSE.txt`. The Pineapple Pager Remote ID monitor was consulted for its Wi-Fi transport handling.
-- Direct menu navigation with the printed `Z`/`X`/`C`/`F` arrow cluster, `Enter` for the primary action, and `D` for details on supported screens
+- Direct menu navigation with the printed `Z`/`X`/`C`/`F` arrow cluster, `Enter` for the primary action, and `D` for details on supported screens. Lists wrap from first to last and last to first; tile menus wrap across rows and columns.
 - Context key guides highlight the key names in muted blue, separate from their action descriptions. Adapter mode changes show the observed interface state while the helper finishes and update the adapter screen without rerunning a full capability scan on the UI thread.
 - APPLaunch icon uses the white JCMK LLC mark on a black background
 - Read-only inventory of:
@@ -168,7 +168,7 @@ cmake --build --preset linux-x86-64-dbg
 cmake --workflow --preset cp0-cross-package
 ```
 
-The expected artifact is `dist/Marauder_0.6.60_rev1_arm64.deb`. Debian dependencies install the runtime tools needed by the WiFi, Bluetooth, GPS, monitor, and optional map pack downloads. Packaging and deployment remain separate actions.
+The expected artifact is `dist/Marauder_0.6.61_rev1_arm64.deb`. Debian dependencies install the runtime tools needed by the WiFi, Bluetooth, GPS, monitor, and optional map pack downloads. Packaging and deployment remain separate actions.
 
 ## Safety and scope
 

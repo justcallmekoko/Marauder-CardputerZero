@@ -33,6 +33,21 @@ int main() {
     if (wardrive_settings.activate() != MarauderMenuAction::CycleWardrivePriority) return 64;
     select_index(wardrive_settings, 2);
     if (wardrive_settings.activate() != MarauderMenuAction::CycleWardriveAdapters) return 65;
+    wardrive_settings.move(0, 1);
+    if (wardrive_settings.selected_index() != 0) return 66;
+    wardrive_settings.move(0, -1);
+    if (wardrive_settings.selected_index() != 2) return 67;
+
+    MarauderMenuModel gps;
+    select_index(gps, 2);
+    gps.activate();
+    gps.move(0, -1);
+    if (gps.selected_index() != 2) return 68;
+    gps.move(0, 1);
+    if (gps.selected_index() != 0) return 69;
+    gps.move(1, 0);
+    gps.move(0, 1); // The last row has no right-hand tile.
+    if (gps.selected_index() != 1) return 70;
     if (menu.item_count() != 4 || menu.selected_index() != 0 || menu.depth() != 1) return 1;
     if (std::string(menu.title()) != "MARAUDER") return 21;
     const MarauderMenuColor root_colors[] = {
@@ -45,10 +60,23 @@ int main() {
         if (menu.item(index).color != root_colors[index]) return 22;
     }
     menu.move(-1, 0);
-    if (menu.selected_index() != 0) return 30;
+    if (menu.selected_index() != 1) return 30;
     menu.move(1, 0);
+    if (menu.selected_index() != 0) return 33;
+    menu.move(0, -1);
+    if (menu.selected_index() != 2) return 34;
     menu.move(0, 1);
+    if (menu.selected_index() != 0) return 35;
+    menu.move(0, 1);
+    menu.move(1, 0);
     if (menu.selected_index() != 3 || menu.depth() != 1) return 31;
+    menu.move(1, 0);
+    if (menu.selected_index() != 2) return 36;
+    menu.move(-1, 0);
+    if (menu.selected_index() != 3) return 37;
+    menu.move(0, 1);
+    if (menu.selected_index() != 1) return 38;
+    menu.move(0, -1);
     menu.move(-1, 0);
     menu.move(0, -1);
     if (menu.selected_index() != 0) return 32;
@@ -72,7 +100,10 @@ int main() {
     menu.move(0, 1);
     if (menu.activate() != MarauderMenuAction::OpenPineapple) return 45;
     menu.move(1, 0);
-    menu.move(0, 1); // Remote ID.
+    if (menu.selected_index() != 3) return 46;
+    menu.move(0, 1);
+    if (menu.selected_index() != 1) return 47;
+    menu.move(0, -1); // Remote ID.
     if (menu.activate() != MarauderMenuAction::OpenRemoteId) return 44;
     menu.back();
     menu.move(-1, 0);
@@ -95,6 +126,10 @@ int main() {
     select_index(menu, 3);
     menu.activate();
     if (menu.columns() != 1 || menu.item_count() != 5) return 16;
+    menu.move(0, -1);
+    if (menu.selected_index() != 4) return 71;
+    menu.move(0, 1);
+    if (menu.selected_index() != 0) return 72;
     const std::vector<std::vector<MarauderMenuAction>> groups = {
         {MarauderMenuAction::OpenRadioSetup, MarauderMenuAction::OpenAdapters,
          MarauderMenuAction::CycleTrafficSource, MarauderMenuAction::None},

@@ -4,6 +4,7 @@
 
 #include "marauder_menu.h"
 
+#include <algorithm>
 #include <stdexcept>
 
 namespace model {
@@ -164,13 +165,28 @@ std::size_t MarauderMenuModel::columns() const {
 void MarauderMenuModel::move(int dx, int dy) {
     const int width = static_cast<int>(columns());
     const int count = static_cast<int>(item_count());
+    if (!count) return;
     const int current = static_cast<int>(selected_index());
-    const int row = current / width + dy;
-    const int col = current % width + dx;
-    if (row < 0 || row * width >= count || col < 0 || col >= width) return;
-    const int next = row * width + col;
-    if (next < count) stack_.back().selected = next;
-    else if (dy != 0) stack_.back().selected = count - 1;
+    const auto wrap = [](int value, int size) { return (value % size + size) % size; };
+    if (width == 1) {
+        if (dy) stack_.back().selected = wrap(current + dy, count);
+        return;
+    }
+    if (dx) {
+        const int first = current / width * width;
+        const int cells = std::min(width, count - first);
+        stack_.back().selected = first + wrap(current - first + dx, cells);
+    } else if (dy) {
+        const int rows = (count + width - 1) / width;
+        const int column = current % width;
+        for (int step = 1; step <= rows; ++step) {
+            const int candidate = wrap(current / width + dy * step, rows) * width + column;
+            if (candidate < count) {
+                stack_.back().selected = candidate;
+                break;
+            }
+        }
+    }
 }
 
 void MarauderMenuModel::previous() {
