@@ -22,6 +22,7 @@ private:
     std::array<lv_obj_t*, 3> rows_{};
     std::array<lv_obj_t*, 3> labels_{};
     void render();
+    void render_bluetooth();
     static void changed(lv_observer_t* observer, lv_subject_t*);
     void build_content(lv_obj_t* content) override;
 };

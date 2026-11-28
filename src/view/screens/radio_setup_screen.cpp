@@ -3,8 +3,6 @@
 #include "asset_manager.h"
 #include "bindings.h"
 #include "theme.h"
-#include <algorithm>
-#include <vector>
 
 namespace screen {
 namespace {
@@ -60,45 +58,40 @@ void RadioSetupScreen::changed(lv_observer_t* observer, lv_subject_t*) {
 void RadioSetupScreen::render() {
     auto& vm = view_model();
     const auto& devices = vm.radios();
-    const bool picker = vm.current_page() == model::AppPage::BluetoothAdapters;
-    const auto indices = picker ? vm.bluetooth_adapter_indices() : std::vector<std::size_t>{};
-    const auto count = picker ? indices.size() : devices.size();
     auto colors = view::palette(vm.is_dark_mode());
     auto put = [](lv_obj_t* obj, const std::string& text, lv_color_t color) {
         lv_label_set_text(obj, text.c_str());
         lv_obj_set_style_text_color(obj, color, 0);
     };
-    put(heading_, picker ? "Bluetooth adapter" : "Radio setup", colors.text);
-    const auto cursor = picker ? vm.bluetooth_adapter_cursor() : vm.radio_cursor();
-    put(count_, vm.radio_message() == "Ready" ? std::to_string(count) + (picker ? " adapters" : " devices") :
+    put(heading_, "Radio setup", colors.text);
+    const auto cursor = vm.radio_cursor();
+    put(count_, vm.radio_message() == "Ready" ? std::to_string(devices.size()) + " devices" :
         vm.radio_message(), colors.text_disabled);
     const auto first = cursor < rows_.size() ? 0 : cursor + 1 - rows_.size();
     for (std::size_t i = 0; i < rows_.size(); ++i) {
         auto& row = rows_[i];
         const auto index = first + i;
-        if (index >= count) { lv_obj_add_flag(row.box, LV_OBJ_FLAG_HIDDEN); continue; }
+        if (index >= devices.size()) { lv_obj_add_flag(row.box, LV_OBJ_FLAG_HIDDEN); continue; }
         lv_obj_remove_flag(row.box, LV_OBJ_FLAG_HIDDEN);
-        const auto& d = devices[picker ? indices[index] : index];
+        const auto& d = devices[index];
         const auto tint = accent(d.kind);
         lv_obj_set_style_bg_color(row.box, index == cursor ? colors.button : colors.surface, 0);
         lv_obj_set_style_border_width(row.box, 1, 0);
         lv_obj_set_style_border_color(row.box, index == cursor ? tint : colors.border, 0);
         put(row.icon, d.kind == "WiFi" ? LV_SYMBOL_WIFI : d.kind == "Bluetooth" ? LV_SYMBOL_BLUETOOTH : LV_SYMBOL_GPS, tint);
         put(row.name, d.name, colors.text);
-        const bool selected = picker && d.id == vm.selected_bluetooth_id();
-        put(row.state, selected ? "PICKED" : d.state, selected || d.state == "On" ? tint : colors.text_disabled);
+        put(row.state, d.state, d.state == "On" ? tint : colors.text_disabled);
     }
-    if (!count) {
-        put(type_, vm.radio_busy() ? "Finding devices..." : picker ? "No Bluetooth adapters" : "No devices available", colors.text);
+    if (devices.empty()) {
+        put(type_, vm.radio_busy() ? "Finding devices..." : "No devices available", colors.text);
         for (auto* field : {product_, location_, driver_, detail_}) lv_label_set_text(field, "");
         set_key_guide("D Refresh    Esc Back");
         return;
     }
-    const auto& d = devices[picker ? indices[std::min(cursor, count - 1)] : std::min(cursor, count - 1)];
+    const auto& d = devices[cursor];
     const bool gps = d.kind == "GPS";
     const auto band_label = d.bands.empty() ? "Bands unknown" : d.bands;
-    put(type_, picker ? d.id == vm.selected_bluetooth_id() ? "Bluetooth / Selected" : "Bluetooth / Available" :
-        d.kind == "WiFi" ? band_label : gps && d.state == "On" ? "GPS / Selected" : d.kind, accent(d.kind));
+    put(type_, d.kind == "WiFi" ? band_label : gps && d.state == "On" ? "GPS / Selected" : d.kind, accent(d.kind));
     lv_obj_set_style_bg_color(type_, accent(d.kind), 0);
     lv_obj_set_style_bg_opa(type_, d.kind == "WiFi" ? LV_OPA_20 : LV_OPA_TRANSP, 0);
     lv_obj_set_style_pad_left(type_, d.kind == "WiFi" ? 4 : 0, 0);
@@ -108,12 +101,10 @@ void RadioSetupScreen::render() {
     const bool verified = gps && d.state == "On" && (receiver_state == "No fix" ||
         receiver_state == "Fix" || receiver_state.find(" sat") != std::string::npos);
     put(driver_, verified ? "GPS receiver" : d.driver, colors.text_disabled);
-    put(detail_, picker ? d.state == "On" ? "Ready for collection" : "Enable in Radio setup" :
-        vm.screen_text(d.detail), colors.text_disabled);
+    put(detail_, vm.screen_text(d.detail), colors.text_disabled);
     const char* action = d.state == "On" ? "Disable" :
                          d.state == "Off" ? "Enable" : "";
-    const std::string guide = picker ? std::string("F/X Browse   ") +
-        (d.state == "On" && !vm.radio_busy() ? "Enter Select   " : "") + "D Refresh   Esc Back" : std::string("F/X Browse   ") +
+    const std::string guide = std::string("F/X Browse   ") +
         (!vm.radio_busy() && *action ? std::string("Enter ") + action + "   " : "") + "D Refresh   Esc Back";
     set_key_guide(guide.c_str());
 }

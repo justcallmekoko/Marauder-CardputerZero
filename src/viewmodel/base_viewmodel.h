@@ -154,6 +154,8 @@ public:
     void select_bluetooth_adapter();
     std::vector<std::size_t> bluetooth_adapter_indices() const;
     std::size_t bluetooth_adapter_cursor() const { return bluetooth_radio_cursor_; }
+    bool bluetooth_adapter_details_open() const { return bluetooth_adapter_details_expanded_; }
+    void toggle_bluetooth_adapter_details();
     const std::string& selected_bluetooth_id() const { return model_.selected_bluetooth_id(); }
     void bluetooth_start_stop();
     void bluetooth_toggle_builder();
@@ -410,6 +412,7 @@ private:
     std::string bluetooth_adapter_name_;
     unsigned bluetooth_hci_retries_{};
     std::size_t bluetooth_radio_cursor_{};
+    bool bluetooth_adapter_details_expanded_{};
     const platform::RadioDevice* collection_bluetooth_radio() const;
     model::FoxHunt bluetooth_fox_;
     uint32_t bluetooth_filter_{};

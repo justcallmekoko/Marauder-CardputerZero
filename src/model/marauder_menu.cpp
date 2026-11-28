@@ -47,7 +47,6 @@ const std::vector<Item>& items_for(Id menu) {
         {"Saved Networks", Color::LightGrey, Action::None, Id::Main, false, false},
     };
     static const std::vector<Item> bluetooth = {
-        {"Collection adapter", Color::Blue, Action::OpenBluetoothAdapters, Id::Main, false, true},
         {"Advertisement feed", Color::Cyan, Action::OpenBluetoothRaw, Id::Main, false, true},
         {"Find My", Color::Green, Action::OpenBluetoothFindMy, Id::Main, false, true},
         {"iBeacon", Color::Blue, Action::OpenBluetoothIBeacon, Id::Main, false, true},
@@ -71,6 +70,7 @@ const std::vector<Item>& items_for(Id menu) {
     static const std::vector<Item> radios = {
         {"Radio setup", Color::Cyan, Action::OpenRadioSetup, Id::Main, false, true},
         {"WiFi adapter", Color::Green, Action::OpenAdapters, Id::Main, false, true},
+        {"Bluetooth adapter", Color::Blue, Action::OpenBluetoothAdapters, Id::Main, false, true},
         {"Graph source", Color::Yellow, Action::CycleTrafficSource, Id::Main, false, true},
         {"Wardrive setup", Color::Orange, Action::None, Id::WardriveSettings, true, true},
     };

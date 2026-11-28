@@ -290,6 +290,7 @@ void BaseViewModel::show_bluetooth_adapters_page() {
     bluetooth_radio_cursor_ = 0;
     for (std::size_t i = 0; i < indices.size(); ++i)
         if (radios()[indices[i]].id == model_.selected_bluetooth_id()) bluetooth_radio_cursor_ = i;
+    bluetooth_adapter_details_expanded_ = false;
     model_.set_current_page(model::AppPage::BluetoothAdapters);
     publish_navigation();
     refresh_radios();
@@ -297,6 +298,10 @@ void BaseViewModel::show_bluetooth_adapters_page() {
 void BaseViewModel::move_bluetooth_adapter(int direction) {
     const auto count = bluetooth_adapter_indices().size();
     if (count) bluetooth_radio_cursor_ = (bluetooth_radio_cursor_ + count + (direction < 0 ? count - 1 : 1)) % count;
+    marauder_menu_generation_subject_.set(marauder_menu_generation_subject_.value() + 1);
+}
+void BaseViewModel::toggle_bluetooth_adapter_details() {
+    bluetooth_adapter_details_expanded_ = !bluetooth_adapter_details_expanded_;
     marauder_menu_generation_subject_.set(marauder_menu_generation_subject_.value() + 1);
 }
 void BaseViewModel::select_bluetooth_adapter() {
@@ -1257,14 +1262,6 @@ std::string BaseViewModel::setting_value(model::MarauderMenuAction action) const
     if (action == Action::DimDelay) return model_.dim_seconds() ? std::to_string(model_.dim_seconds()) + " sec" : "Never";
     if (action == Action::Reserve) return model_.reserve_mib() ? std::to_string(model_.reserve_mib()) + " MiB" : "Off";
     if (action == Action::CycleTrafficSource) return model_.traffic_monitor_source() ? "Monitor" : "Adapter";
-    if (action == Action::OpenBluetoothAdapters) {
-        const auto& selected = model_.selected_bluetooth_id();
-        if (selected.empty()) return "Auto";
-        const auto it = std::find_if(radios().begin(), radios().end(), [&](const auto& radio) {
-            return radio.kind == "Bluetooth" && radio.id == selected;
-        });
-        return it == radios().end() ? "Missing" : it->name;
-    }
     if (action == Action::CycleWardriveDwell) return std::to_string(model_.wardrive_dwell_ms()) + " ms";
     if (action == Action::CycleWardriveAdapters)
         return model_.wardrive_all_idle_adapters() ? "All idle" : "Selected";

@@ -70,7 +70,7 @@ void ScreenManager::show_dashboard_screen() {
 
 void ScreenManager::show_adapters_screen() {
     load_screen(std::make_unique<screen::AdaptersScreen>(view_model_, assets_));
-    loaded_page_ = model::AppPage::Adapters;
+    loaded_page_ = requested_page_;
     has_loaded_page_ = true;
 }
 
@@ -136,12 +136,12 @@ void ScreenManager::flush_requested_page() {
             has_loaded_page_ = true;
             return;
         case model::AppPage::RadioSetup:
-        case model::AppPage::BluetoothAdapters:
             load_screen(std::make_unique<screen::RadioSetupScreen>(view_model_, assets_));
             loaded_page_ = requested_page_;
             has_loaded_page_ = true;
             return;
         case model::AppPage::Adapters:
+        case model::AppPage::BluetoothAdapters:
             show_adapters_screen();
             return;
         case model::AppPage::WifiScan:

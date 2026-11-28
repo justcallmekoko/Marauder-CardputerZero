@@ -8,6 +8,7 @@
 #include "bindings.h"
 #include "theme.h"
 
+#include <algorithm>
 #include <string>
 
 namespace screen {
@@ -51,8 +52,8 @@ void AdaptersScreen::build_content(lv_obj_t* content) {
     lv_obj_set_pos(expanded_, 7, 2);
     lv_obj_set_width(expanded_, 306);
     lv_obj_set_style_text_font(expanded_, small ? small : &lv_font_montserrat_10, 0);
-    lv_label_bind_text(expanded_, view_model().adapter_detail_subject(), nullptr);
     reactive::observe_obj(content, view_model().adapter_detail_subject(), changed, this);
+    reactive::observe_obj(content, view_model().marauder_menu_generation_subject(), changed, this);
     reactive::observe_obj(content, view_model().dark_mode_subject(), changed, this);
 }
 
@@ -62,6 +63,10 @@ void AdaptersScreen::changed(lv_observer_t* observer, lv_subject_t*) {
 
 void AdaptersScreen::render() {
     auto& vm = view_model();
+    if (vm.current_page() == model::AppPage::BluetoothAdapters) {
+        render_bluetooth();
+        return;
+    }
     const auto colors = view::palette(vm.is_dark_mode());
     const auto& radios = vm.adapters();
     const auto cursor = vm.adapter_cursor();
@@ -75,6 +80,7 @@ void AdaptersScreen::render() {
         "F/X Browse  Enter Use  M Monitor  D Info  Esc Back" :
         "F/X Browse  Enter Use  M Monitor  D List  Esc Back");
     visible(expanded_, !summary);
+    lv_label_set_text(expanded_, lv_subject_get_string(vm.adapter_detail_subject()));
     visible(heading_, summary);
     visible(info_, summary);
     visible(bands_, summary);
@@ -109,5 +115,65 @@ void AdaptersScreen::render() {
     lv_obj_set_style_text_color(bands_, colors.success, 0);
     lv_label_set_text(info_, description.c_str());
     lv_obj_set_style_text_color(info_, colors.text, 0);
+}
+
+void AdaptersScreen::render_bluetooth() {
+    auto& vm = view_model();
+    const auto colors = view::palette(vm.is_dark_mode());
+    const auto indices = vm.bluetooth_adapter_indices();
+    const auto& radios = vm.radios();
+    const auto count = indices.size();
+    const auto cursor = count ? std::min(vm.bluetooth_adapter_cursor(), count - 1) : 0;
+    const bool summary = count && !vm.bluetooth_adapter_details_open();
+    const auto first = cursor - cursor % rows_.size();
+    auto visible = [](lv_obj_t* obj, bool show) {
+        if (show) lv_obj_remove_flag(obj, LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_add_flag(obj, LV_OBJ_FLAG_HIDDEN);
+    };
+    visible(expanded_, !summary);
+    visible(heading_, summary);
+    visible(info_, summary);
+    visible(bands_, summary);
+    lv_obj_set_style_text_color(expanded_, colors.text, 0);
+    for (std::size_t i = 0; i < rows_.size(); ++i) {
+        const auto index = first + i;
+        visible(rows_[i], summary && index < count);
+        if (!summary || index >= count) continue;
+        const auto& radio = radios[indices[index]];
+        const bool active = radio.id == vm.selected_bluetooth_id();
+        const auto name = (active ? "* " : "") + radio.name;
+        lv_label_set_text(labels_[i], name.c_str());
+        lv_obj_set_style_text_color(labels_[i], colors.text, 0);
+        lv_obj_set_style_bg_color(rows_[i], colors.button, 0);
+        lv_obj_set_style_border_width(rows_[i], index == cursor ? 2 : 1, 0);
+        lv_obj_set_style_border_color(rows_[i], index == cursor ? colors.info : colors.border, 0);
+    }
+    if (!count) {
+        lv_label_set_text(expanded_, vm.radio_busy() ? "Finding Bluetooth adapters..." : "No Bluetooth adapters found");
+        set_key_guide("Esc Back");
+        return;
+    }
+    const auto& radio = radios[indices[cursor]];
+    const bool active = radio.id == vm.selected_bluetooth_id();
+    const auto title = "Radio adapters    " + std::to_string(cursor + 1) + " / " + std::to_string(count);
+    lv_label_set_text(heading_, vm.radio_message() == "Ready" ? title.c_str() : vm.radio_message().c_str());
+    lv_obj_set_style_text_color(heading_, colors.text_disabled, 0);
+    const auto description = std::string(active ? "SELECTED" : "AVAILABLE") + "\n" +
+        radio.product + "\n" + radio.location + "  " + radio.state + "\n" + radio.driver;
+    lv_label_set_text(info_, description.c_str());
+    lv_obj_set_style_text_color(info_, colors.text, 0);
+    lv_label_set_text(bands_, "LE collection");
+    lv_obj_set_style_bg_color(bands_, colors.info, 0);
+    lv_obj_set_style_bg_opa(bands_, LV_OPA_20, 0);
+    lv_obj_set_style_text_color(bands_, colors.info, 0);
+    const auto details = std::string(active ? "SELECTED" : "AVAILABLE") + "  " + radio.name + "\n" +
+        radio.product + "\n" + radio.location + "  " + radio.state + "\n" + radio.driver +
+        (radio.detail.empty() ? "" : "\n" + vm.screen_text(radio.detail)) +
+        (radio.state == "On" ? "\nEnter to use for collection" : "\nEnable in Radio setup");
+    lv_label_set_text(expanded_, details.c_str());
+    set_key_guide(radio.state == "On" && !vm.radio_busy() ?
+        (summary ? "F/X Browse  Enter Use  D Info  Esc Back" :
+                   "F/X Browse  Enter Use  D List  Esc Back") :
+        (summary ? "F/X Browse  D Info  Esc Back" : "F/X Browse  D List  Esc Back"));
 }
 } // namespace screen

@@ -10,7 +10,7 @@ Native C++17/LVGL 9.5 port of ESP32 Marauder for the ARM64 Linux-based Cardputer
 - 320x170 LVGL interface with a four-tile keyboard launcher
 - Dashboard, wireless-adapter selection, and five bounded keyboard-reachable System Info pages
 - Read-only wireless adapter catalog with interface, driver, PHY, bus, VID/PID, MAC, stable identity, and explicit monitor/injection verification state
-- Keyboard-driven adapter browsing and in-app selection without changing interface state
+- Keyboard-driven adapter browsing and in-app selection without changing interface state. WiFi and Bluetooth adapter choices sit together under Device → Radios and GPS and use the same list and detail view.
 - Viewport-safe summary/details paging for adapter information (`D` toggles pages)
 - Read-only kernel capability probing for monitor-mode support; injection remains unverified until an explicit hardware test
 - Live C++ radiotap and 802.11 frame parsing on the selected monitor-mode adapter, with scrolling AP and observed-client lists, RSSI, frame counts, and offline vendor lookup
@@ -168,7 +168,7 @@ cmake --build --preset linux-x86-64-dbg
 cmake --workflow --preset cp0-cross-package
 ```
 
-The expected artifact is `dist/Marauder_0.6.67_rev1_arm64.deb`. Debian dependencies install the runtime tools needed by the WiFi, Bluetooth, GPS, monitor, and optional map pack downloads. Packaging and deployment remain separate actions.
+The expected artifact is `dist/Marauder_0.6.68_rev1_arm64.deb`. Debian dependencies install the runtime tools needed by the WiFi, Bluetooth, GPS, monitor, and optional map pack downloads. Packaging and deployment remain separate actions.
 
 ## Safety and scope
 
