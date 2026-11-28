@@ -51,6 +51,21 @@ struct BluetoothObservation {
     std::string address, name, address_type;
     int rssi{-128};
     std::string manufacturer_data, service_data, advertising_data, uuids;
+    std::string raw_ad;
+};
+class BluetoothHciSession {
+public:
+    BluetoothHciSession() = default;
+    BluetoothHciSession(const BluetoothHciSession&) = delete;
+    BluetoothHciSession& operator=(const BluetoothHciSession&) = delete;
+    ~BluetoothHciSession();
+    bool start(const std::string& adapter);
+    void stop();
+    std::vector<BluetoothObservation> poll(std::string& status);
+    bool active() const { return socket_ >= 0; }
+private:
+    int socket_{-1}, child_{-1};
+    std::string pending_;
 };
 class BluetoothSession {
 public:

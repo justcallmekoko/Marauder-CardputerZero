@@ -33,5 +33,12 @@ int main() {
     item.manufacturer_data.clear();
     item.name = "HC-05";
     assert(classify(item).matches & bit(Kind::SerialModule));
+    const auto raw = decode_report("AA:BB:CC:DD:EE:FF", "random", -52,
+        "0201061AFF4C00021500112233445566778899AABBCCDDEEFF00010002C5");
+    assert(raw.raw_ad.size() == 60);
+    assert(raw.manufacturer_data == "004C:021500112233445566778899AABBCCDDEEFF00010002C5");
+    assert(classify(raw).matches & bit(Kind::IBeacon));
+    const auto named = decode_report("AA:BB:CC:DD:EE:FF", "public", -61, "0709426561636F6E");
+    assert(named.name == "Beacon");
     return 0;
 }

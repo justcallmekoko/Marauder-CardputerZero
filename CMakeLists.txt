@@ -6,7 +6,7 @@
 
 cmake_minimum_required(VERSION 3.31)
 
-project(marauder_cardputerzero VERSION 0.6.63 LANGUAGES C CXX)
+project(marauder_cardputerzero VERSION 0.6.64 LANGUAGES C CXX)
 
 include(CTest)
 find_package(Threads REQUIRED)
@@ -741,4 +741,8 @@ if(BUILD_TESTING AND USE_DESKTOP)
 endif()
 
 # Package deb
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT USE_DESKTOP)
+    add_executable(marauder_ble_hci_monitor src/platform/helpers/ble-hci-monitor.cc)
+    set_target_properties(marauder_ble_hci_monitor PROPERTIES OUTPUT_NAME ble-hci-monitor)
+endif()
 include(cmake/cm0-package.cmake)

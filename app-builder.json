@@ -2,11 +2,11 @@
   "app_name": "Marauder",
   "package_name": "marauder",
   "bin_name": "marauder_cardputerzero",
-  "version": "0.6.63",
+  "version": "0.6.64",
   "description": "Marauder system and radio toolkit for Cardputer Zero",
   "store": {
     "summary": "System diagnostics and radio toolkit for Cardputer Zero",
-    "description": "A native C++ and LVGL Marauder port for Cardputer Zero with system diagnostics, radio setup, and live monitor-mode Wi-Fi reconnaissance. Access points and observed clients appear from raw 802.11 frames, with advertised security suites, four-way frame progress, and PMKID sightings. GPS wardriving records nearby Wi-Fi APs and Bluetooth devices.",
+    "description": "A native C++ and LVGL Marauder port for Cardputer Zero with system diagnostics, radio setup, and live monitor-mode Wi-Fi reconnaissance. Access points and observed clients appear from raw 802.11 frames, with advertised security suites, four-way frame progress, and PMKID sightings. Passive Bluetooth HCI advertisement collection offers live device lists, filters, and signal views. GPS wardriving records nearby Wi-Fi APs and Bluetooth devices.",
     "categories": [
       "Security",
       "System Tools"

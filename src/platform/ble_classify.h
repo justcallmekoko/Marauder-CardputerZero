@@ -16,4 +16,6 @@ struct Classification {
     std::string detail;
 };
 Classification classify(const BluetoothObservation& observation);
+BluetoothObservation decode_report(std::string address, std::string address_type,
+                                   int rssi, const std::string& raw_hex);
 } // namespace platform::ble

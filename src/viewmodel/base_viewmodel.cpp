@@ -166,6 +166,7 @@ BaseViewModel::~BaseViewModel() {
     if (wardrive_upload_job_.valid()) wardrive_upload_job_.wait();
     if (credential_check_job_.valid()) credential_check_job_.wait();
     bluetooth_session_.stop();
+    bluetooth_hci_session_.stop();
     gps_log_.stop();
     pcap_capture_.stop();
     if (changed_light_) set_light(original_light_);
@@ -200,6 +201,7 @@ bool BaseViewModel::is_dark_mode() const { return model_.dark_mode(); }
 model::AppPage BaseViewModel::current_page() const { return model_.current_page(); }
 void BaseViewModel::show_dashboard_page() {
     bluetooth_session_.stop();
+    bluetooth_hci_session_.stop();
     gps_log_.stop();
     wardrive_session_ = false;
     stop_wifi_capture();
@@ -214,6 +216,7 @@ void BaseViewModel::show_diagnostics_page() {
 }
 void BaseViewModel::show_adapters_page() {
     bluetooth_session_.stop();
+    bluetooth_hci_session_.stop();
     gps_log_.stop();
     wardrive_session_ = false;
     stop_wifi_capture();
@@ -245,6 +248,7 @@ void BaseViewModel::show_bluetooth_page(uint32_t filter) {
     gps_log_.stop();
     wardrive_session_ = false;
     bluetooth_session_.stop();
+    bluetooth_hci_session_.stop();
     bluetooth_feed_.clear();
     const auto radio = std::find_if(radio_list_.devices.begin(), radio_list_.devices.end(),
         [](const auto& item) { return item.kind == "Bluetooth" && item.state == "On"; });
@@ -268,14 +272,20 @@ void BaseViewModel::show_bluetooth_page(uint32_t filter) {
     bluetooth_generation_.set(bluetooth_generation_.value() + 1);
 }
 void BaseViewModel::bluetooth_start_stop() {
-    if (bluetooth_session_.active()) {
+    if (bluetooth_session_.active() || bluetooth_hci_session_.active()) {
         bluetooth_session_.stop();
+        bluetooth_hci_session_.stop();
         bluetooth_status_ = "Paused";
     } else {
         const auto radio = std::find_if(radio_list_.devices.begin(), radio_list_.devices.end(),
             [](const auto& item) { return item.kind == "Bluetooth" && item.state == "On"; });
         if (radio == radio_list_.devices.end()) bluetooth_status_ = "Enable Bluetooth in Device > Radio setup";
-        else bluetooth_status_ = bluetooth_session_.start(radio->name, true) ? "Listening" : "Bluetooth scan unavailable";
+        else if (!bluetooth_hci_session_.start(radio->name))
+            bluetooth_status_ = "Raw Bluetooth helper unavailable";
+        else if (!bluetooth_session_.start(radio->name, true)) {
+            bluetooth_hci_session_.stop();
+            bluetooth_status_ = "Bluetooth discovery unavailable";
+        } else bluetooth_status_ = "Raw HCI reports";
     }
     bluetooth_generation_.set(bluetooth_generation_.value() + 1);
 }
@@ -342,10 +352,18 @@ void BaseViewModel::bluetooth_back() {
     bluetooth_generation_.set(bluetooth_generation_.value() + 1);
 }
 void BaseViewModel::update_bluetooth_capture() {
-    if (model_.current_page() != model::AppPage::BluetoothCapture || !bluetooth_session_.active()) return;
+    if (model_.current_page() != model::AppPage::BluetoothCapture || !bluetooth_running()) return;
     std::string state;
+    bluetooth_session_.poll(state); // BlueZ drives scanning; HCI delivers the uncoalesced reports below.
+    if (!bluetooth_session_.active()) {
+        bluetooth_hci_session_.stop();
+        bluetooth_status_ = state.empty() ? "Bluetooth discovery ended" : state;
+        bluetooth_generation_.set(bluetooth_generation_.value() + 1);
+        return;
+    }
+    std::string raw_state;
     bool changed = false;
-    for (auto& sighting : bluetooth_session_.poll(state)) {
+    for (auto& sighting : bluetooth_hci_session_.poll(raw_state)) {
         ++bluetooth_total_;
         const auto classified = platform::ble::classify(sighting);
         if (!bluetooth_filter_ || (classified.matches & bluetooth_filter_)) {
@@ -359,7 +377,9 @@ void BaseViewModel::update_bluetooth_capture() {
             if (known != bluetooth_index_.end()) {
                 auto& record = bluetooth_devices_[known->second];
                 const auto prior = record.classification;
+                const auto prior_name = record.observation.name;
                 record.observation = sighting;
+                if (record.observation.name.empty()) record.observation.name = prior_name;
                 record.classification = classified;
                 record.classification.matches |= prior.matches;
                 if (!classified.matches && prior.matches) {
@@ -379,7 +399,11 @@ void BaseViewModel::update_bluetooth_capture() {
         if (bluetooth_view_ == 5)
             bluetooth_fox_.observe(sighting.address, 0, sighting.rssi, true, lv_tick_get());
     }
-    if (!state.empty() && state != "Scanning") { bluetooth_status_ = state; changed = true; }
+    if (!raw_state.empty()) {
+        bluetooth_session_.stop();
+        bluetooth_status_ = raw_state;
+        changed = true;
+    } else if (!state.empty() && state != "Scanning") { bluetooth_status_ = state; changed = true; }
     if (changed) bluetooth_generation_.set(bluetooth_generation_.value() + 1);
 }
 void BaseViewModel::show_remote_id_page() {

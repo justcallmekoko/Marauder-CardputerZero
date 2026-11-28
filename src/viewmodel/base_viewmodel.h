@@ -157,7 +157,7 @@ public:
     void bluetooth_select();
     void bluetooth_back();
     unsigned bluetooth_view() const { return bluetooth_view_; }
-    bool bluetooth_running() const { return bluetooth_session_.active(); }
+    bool bluetooth_running() const { return bluetooth_hci_session_.active() && bluetooth_session_.active(); }
     bool bluetooth_builder() const { return bluetooth_builder_; }
     uint32_t bluetooth_filter() const { return bluetooth_filter_; }
     std::size_t bluetooth_cursor() const { return bluetooth_cursor_; }
@@ -393,6 +393,7 @@ private:
     uint32_t monitor_status_tick_{};
     platform::GpsSession gps_session_;
     platform::BluetoothSession bluetooth_session_;
+    platform::BluetoothHciSession bluetooth_hci_session_;
     reactive::IntSubject bluetooth_generation_{0};
     std::deque<BluetoothRecord> bluetooth_feed_;
     std::vector<BluetoothRecord> bluetooth_devices_;

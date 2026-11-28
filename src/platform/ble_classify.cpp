@@ -9,6 +9,7 @@
 namespace platform::ble {
 namespace {
 struct Field { std::string key; std::vector<uint8_t> bytes; };
+uint16_t le16(const uint8_t* data) { return uint16_t(data[0]) | (uint16_t(data[1]) << 8); }
 
 std::vector<Field> fields(const std::string& text) {
     std::vector<Field> result;
@@ -58,7 +59,96 @@ std::string company_vendor(unsigned id) {
         }
     }
 }
+std::string hex_bytes(const uint8_t* data, size_t length) {
+    static constexpr char digits[] = "0123456789ABCDEF";
+    std::string result;
+    result.reserve(length * 2);
+    for (size_t i = 0; i < length; ++i) {
+        result += digits[data[i] >> 4];
+        result += digits[data[i] & 15];
+    }
+    return result;
+}
+void add_field(std::string& target, const std::string& key, const uint8_t* data, size_t length) {
+    if (target.size() > 500) return;
+    if (!target.empty()) target += ',';
+    target += key + ':' + hex_bytes(data, length);
+}
+std::string uuid16(uint16_t value) {
+    char text[37];
+    std::snprintf(text, sizeof(text), "0000%04X-0000-1000-8000-00805F9B34FB", value);
+    return text;
+}
+std::string uuid128(const uint8_t* little_endian) {
+    const auto bytes = hex_bytes(little_endian, 16);
+    std::string result;
+    result.reserve(36);
+    for (int i = 15; i >= 0; --i) {
+        if (i == 11 || i == 9 || i == 7 || i == 5) result += '-';
+        result += bytes[2 * i];
+        result += bytes[2 * i + 1];
+    }
+    return result;
+}
 } // namespace
+
+BluetoothObservation decode_report(std::string address, std::string address_type,
+                                   int rssi, const std::string& raw_hex) {
+    BluetoothObservation item;
+    item.address = std::move(address);
+    item.address_type = std::move(address_type);
+    item.rssi = rssi;
+    if (raw_hex.size() > 510 || raw_hex.size() % 2) return item;
+    std::vector<uint8_t> bytes;
+    bytes.reserve(raw_hex.size() / 2);
+    for (size_t i = 0; i < raw_hex.size(); i += 2) {
+        if (!std::isxdigit(static_cast<unsigned char>(raw_hex[i])) ||
+            !std::isxdigit(static_cast<unsigned char>(raw_hex[i + 1]))) return item;
+        unsigned value{};
+        if (std::sscanf(raw_hex.c_str() + i, "%2x", &value) != 1) return item;
+        bytes.push_back(static_cast<uint8_t>(value));
+    }
+    item.raw_ad = hex_bytes(bytes.data(), bytes.size());
+    for (size_t i = 0; i < bytes.size();) {
+        const size_t size = bytes[i++];
+        if (!size) break;
+        if (i + size > bytes.size()) break;
+        const auto type = bytes[i++];
+        const auto* value = bytes.data() + i;
+        const auto length = size - 1;
+        if ((type == 0x08 || type == 0x09) && item.name.empty()) {
+            for (size_t j = 0; j < length && item.name.size() < 48; ++j) {
+                const auto c = value[j];
+                item.name += c >= 32 && c < 127 ? static_cast<char>(c) : ' ';
+            }
+        } else if (type == 0xff && length >= 2) {
+            const auto company = le16(value);
+            char key[5];
+            std::snprintf(key, sizeof(key), "%04X", company);
+            add_field(item.manufacturer_data, key, value + 2, length - 2);
+        } else if (type == 0x16 && length >= 2) {
+            add_field(item.service_data, uuid16(le16(value)), value + 2, length - 2);
+        } else if (type == 0x21 && length >= 16) {
+            add_field(item.service_data, uuid128(value), value + 16, length - 16);
+        } else if ((type == 0x02 || type == 0x03) && length >= 2) {
+            for (size_t j = 0; j + 1 < length; j += 2) {
+                if (!item.uuids.empty()) item.uuids += ',';
+                item.uuids += uuid16(le16(value + j));
+            }
+        } else if ((type == 0x06 || type == 0x07) && length >= 16) {
+            for (size_t j = 0; j + 15 < length; j += 16) {
+                if (!item.uuids.empty()) item.uuids += ',';
+                item.uuids += uuid128(value + j);
+            }
+        } else {
+            char key[5];
+            std::snprintf(key, sizeof(key), "%04X", type);
+            add_field(item.advertising_data, key, value, length);
+        }
+        i += length;
+    }
+    return item;
+}
 
 const char* label(Kind kind) {
     static constexpr std::array<const char*, 6> names = {

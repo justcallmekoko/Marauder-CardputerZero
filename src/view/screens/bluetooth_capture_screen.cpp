@@ -14,6 +14,7 @@ lv_color_t accent(const platform::ble::Classification& item, const view::ThemePa
     if (item.matches & platform::ble::bit(Kind::IBeacon)) return colors.info;
     if (item.matches & platform::ble::bit(Kind::Flipper)) return colors.primary;
     if (item.matches & platform::ble::bit(Kind::Flock)) return colors.warning;
+    if (item.matches & platform::ble::bit(Kind::Meta)) return lv_color_hex(0xAD9CC9);
     if (item.matches & platform::ble::bit(Kind::SerialModule)) return colors.error;
     return colors.text_disabled;
 }
@@ -74,7 +75,7 @@ void BluetoothCaptureScreen::render() {
         devices ? "Bluetooth / devices" : actions ? "Device operations" :
         info ? "Device information" : "Fox hunt";
     lv_label_set_text(title_, title.c_str());
-    const std::string count = std::to_string(vm.bluetooth_total()) + " seen  " +
+    const std::string count = std::to_string(vm.bluetooth_total()) + " reports  " +
         std::to_string(visible.size()) + " devices";
     lv_label_set_text(counts_, count.c_str());
     lv_obj_set_style_text_color(counts_, colors.info, 0);
@@ -96,7 +97,8 @@ void BluetoothCaptureScreen::render() {
         const std::string detail = vm.screen_name(observed.name.empty() ? "Unnamed device" : observed.name) +
             "\n" + vm.screen_mac(observed.address) + "  " + observed.address_type +
             "\nType: " + classified.type + "  Vendor: " + classified.vendor +
-            "\nRSSI " + std::to_string(observed.rssi) + " dBm   " +
+            "\nRSSI " + (observed.rssi >= -127 && observed.rssi <= 0 ?
+                           std::to_string(observed.rssi) + " dBm" : "unknown") + "   " +
             std::to_string(selected->sightings) + " sightings" +
             (classified.detail.empty() ? "" : vm.censor_enabled() ? "\nSignature details hidden" : "\n" + classified.detail) +
             (classified.evidence.empty() ? "" : "\n" + classified.evidence);
@@ -130,15 +132,14 @@ void BluetoothCaptureScreen::render() {
             meta = index ? "SIGNAL" : "VIEW";
         } else if (record) {
             name = vm.screen_name(record->observation.name.empty() ? record->classification.type : record->observation.name);
-            meta = std::to_string(record->observation.rssi) + " dBm  " +
+            meta = (record->observation.rssi >= -127 && record->observation.rssi <= 0 ?
+                    std::to_string(record->observation.rssi) + " dBm" : "RSSI ?") + "  " +
                 (feed ? record->classification.type : std::to_string(record->sightings) + " seen");
         }
         lv_label_set_text(row.name, name.c_str());
         lv_label_set_text(row.meta, meta.c_str());
         const std::string data = record && (feed || devices) ? vm.screen_mac(record->observation.address) +
-            (feed ? vm.censor_enabled() ? "  [bytes hidden]" : "  " + (record->observation.manufacturer_data.empty() ?
-                record->observation.advertising_data.empty() ? record->observation.service_data :
-                record->observation.advertising_data : record->observation.manufacturer_data) :
+            (feed ? vm.censor_enabled() ? "  [bytes hidden]" : "  " + record->observation.raw_ad :
              "  " + record->classification.type + " / " + record->classification.vendor) : "";
         lv_label_set_text(row.data, data.c_str());
         lv_obj_set_style_text_color(row.name, record ? tint : colors.text, 0);
