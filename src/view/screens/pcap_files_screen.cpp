@@ -39,6 +39,24 @@ void PcapFilesScreen::build_content(lv_obj_t* content) {
     lv_obj_set_width(message_, 300);
     lv_label_set_long_mode(message_, LV_LABEL_LONG_WRAP);
     lv_obj_set_style_text_font(message_, regular ? regular : LV_FONT_DEFAULT, 0);
+    upload_label_ = lv_label_create(content);
+    lv_obj_set_pos(upload_label_, 9, 29);
+    lv_obj_set_width(upload_label_, 300);
+    lv_label_set_long_mode(upload_label_, LV_LABEL_LONG_DOT);
+    lv_obj_set_style_text_font(upload_label_, regular ? regular : LV_FONT_DEFAULT, 0);
+    upload_bar_ = lv_bar_create(content);
+    lv_obj_set_pos(upload_bar_, 9, 55);
+    lv_obj_set_size(upload_bar_, 300, 10);
+    lv_bar_set_range(upload_bar_, 0, 100);
+    batch_label_ = lv_label_create(content);
+    lv_obj_set_pos(batch_label_, 9, 81);
+    lv_obj_set_style_text_font(batch_label_, regular ? regular : LV_FONT_DEFAULT, 0);
+    batch_bar_ = lv_bar_create(content);
+    lv_obj_set_pos(batch_bar_, 9, 107);
+    lv_obj_set_size(batch_bar_, 300, 8);
+    lv_bar_set_range(batch_bar_, 0, 100);
+    for (auto* part : {upload_label_, upload_bar_, batch_label_, batch_bar_})
+        lv_obj_add_flag(part, LV_OBJ_FLAG_HIDDEN);
     for (std::size_t i = 0; i < rows_.size(); ++i) {
         auto& row = rows_[i];
         row.box = lv_obj_create(content);
@@ -73,30 +91,57 @@ void PcapFilesScreen::render() {
     if (wardrive) {
         const auto& files = view_model().wardrive_files();
         const auto cursor = view_model().wardrive_cursor();
-        const bool details = view_model().wardrive_details() && cursor < files.size();
-        lv_label_set_text(title_, details ? "Wardrive details" : "Wardrive logs");
+        const bool uploading = view_model().wardrive_uploading();
+        const bool details = !uploading && view_model().wardrive_details() && cursor < files.size();
+        const bool summary = !uploading && !details && !files.empty() && !view_model().wardrive_message().empty();
+        lv_label_set_text(title_, uploading ? "Uploading logs" : details ? "Wardrive details" : "Wardrive logs");
         const auto count = std::to_string(files.size()) + " logs";
         lv_label_set_text(count_, count.c_str());
         lv_obj_set_style_text_color(title_, colors.text, 0);
         lv_obj_set_style_text_color(count_, colors.success, 0);
-        if (details || files.empty() || view_model().wardrive_uploading()) lv_obj_remove_flag(message_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_pos(message_, 9, summary ? 102 : 25);
+        lv_label_set_long_mode(message_, summary ? LV_LABEL_LONG_DOT : LV_LABEL_LONG_WRAP);
+        if (details || files.empty() || summary) lv_obj_remove_flag(message_, LV_OBJ_FLAG_HIDDEN);
         else lv_obj_add_flag(message_, LV_OBJ_FLAG_HIDDEN);
         if (details) {
             const auto& item = files[cursor];
             const auto detail = view_model().screen_capture_name(item.name) + "\n" +
                 size_label(item.bytes) + "  " + item.modified + "\n" +
-                "WiGLE  " + item.wigle + "\nWDGWars  " + item.wdg +
+                "WiGLE  " + item.wigle + "\nWDGWars  " +
+                (item.wdg == "Queued" ? "Queued (unconfirmed)" : item.wdg) +
                 "\n" + view_model().wardrive_message();
             lv_label_set_text(message_, detail.c_str());
         } else if (files.empty()) lv_label_set_text(message_, "No wardrive logs saved yet.");
         else lv_label_set_text(message_, view_model().wardrive_message().c_str());
         lv_obj_set_style_text_color(message_, colors.text_disabled, 0);
+        for (auto* part : {upload_label_, upload_bar_, batch_label_, batch_bar_}) {
+            if (uploading) lv_obj_remove_flag(part, LV_OBJ_FLAG_HIDDEN);
+            else lv_obj_add_flag(part, LV_OBJ_FLAG_HIDDEN);
+        }
+        if (uploading) {
+            const auto sent = view_model().wardrive_upload_percent();
+            lv_label_set_text(upload_label_, view_model().wardrive_upload_label().c_str());
+            lv_bar_set_value(upload_bar_, static_cast<int32_t>(sent), LV_ANIM_OFF);
+            lv_obj_set_style_bg_color(upload_bar_, colors.surface, LV_PART_MAIN);
+            lv_obj_set_style_bg_color(upload_bar_, colors.success, LV_PART_INDICATOR);
+            const auto total = view_model().wardrive_upload_total();
+            const auto done = view_model().wardrive_upload_current();
+            const auto batch = total ? static_cast<unsigned>(std::min<std::size_t>(100, done * 100 / total)) : 0;
+            const auto transfer = "Transfer  " + std::to_string(sent) + "%";
+            const auto summary = "Batch  " + std::to_string(done) + "/" + std::to_string(total);
+            lv_label_set_text(count_, transfer.c_str());
+            lv_label_set_text(batch_label_, summary.c_str());
+            lv_bar_set_value(batch_bar_, static_cast<int32_t>(batch), LV_ANIM_OFF);
+            lv_obj_set_style_bg_color(batch_bar_, colors.surface, LV_PART_MAIN);
+            lv_obj_set_style_bg_color(batch_bar_, colors.warning, LV_PART_INDICATOR);
+        }
+        const auto visible = rows_.size() - static_cast<std::size_t>(summary);
         if (cursor < first_) first_ = cursor;
-        if (cursor >= first_ + rows_.size()) first_ = cursor + 1 - rows_.size();
+        if (cursor >= first_ + visible) first_ = cursor + 1 - visible;
         for (std::size_t i = 0; i < rows_.size(); ++i) {
             auto& row = rows_[i];
             const auto index = first_ + i;
-            if (details || view_model().wardrive_uploading() || index >= files.size()) {
+            if (details || uploading || (summary && i == rows_.size() - 1) || index >= files.size()) {
                 lv_obj_add_flag(row.box, LV_OBJ_FLAG_HIDDEN); continue;
             }
             lv_obj_remove_flag(row.box, LV_OBJ_FLAG_HIDDEN);
@@ -106,16 +151,22 @@ void PcapFilesScreen::render() {
             const auto name = view_model().screen_capture_name(files[index].name);
             lv_label_set_text(row.name, name.c_str());
             const auto meta = files[index].modified + "  " + size_label(files[index].bytes) +
-                "  W:" + (files[index].wigle == "Uploaded" ? "OK" : files[index].wigle == "Accepted" ? "WAIT" : files[index].wigle == "Failed" ? "ERR" : "-") +
-                " D:" + (files[index].wdg == "Uploaded" ? "OK" : files[index].wdg == "Accepted" ? "WAIT" : files[index].wdg == "Failed" ? "ERR" : "-");
+                "  W:" + (files[index].wigle == "Uploaded" ? "OK" : files[index].wigle == "Queued" ? "QUEUE" : files[index].wigle == "Failed" ? "ERR" : "-") +
+                " D:" + (files[index].wdg == "Uploaded" ? "OK" : files[index].wdg == "Queued" ? "QUEUE" : files[index].wdg == "Failed" ? "ERR" : "-");
             lv_label_set_text(row.meta, meta.c_str());
             lv_obj_set_style_text_color(row.name, colors.text, 0);
             lv_obj_set_style_text_color(row.meta, focus ? colors.success : colors.text_disabled, 0);
         }
-        set_key_guide("F/X Logs  Enter Info  U WiGLE  W WDG  D Delete  Esc Back");
+        set_key_guide(uploading ? "Esc Back  Upload continues" :
+            details ? "U WiGLE  W WDG  B Both  A All  D Del  Esc List" :
+                      "F/X Move  Enter Info  U WiGLE  W WDG  B Both  A All");
         return;
     }
+    for (auto* part : {upload_label_, upload_bar_, batch_label_, batch_bar_})
+        lv_obj_add_flag(part, LV_OBJ_FLAG_HIDDEN);
     const auto& files = view_model().pcap_files();
+    lv_obj_set_pos(message_, 9, 25);
+    lv_label_set_long_mode(message_, LV_LABEL_LONG_WRAP);
     const auto cursor = view_model().pcap_cursor();
     const bool details = view_model().pcap_details() && cursor < files.size();
     lv_label_set_text(title_, details ? "Capture details" : "Saved captures");

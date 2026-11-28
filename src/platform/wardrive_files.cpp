@@ -4,6 +4,9 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cerrno>
+#include <cstdio>
+#include <cstring>
 #include <ctime>
 #include <filesystem>
 #include <fstream>
@@ -40,6 +43,12 @@ std::vector<FileInfo> list_files() {
         FileInfo item;
         item.name = name;
         item.bytes = it->file_size(ec);
+        {
+            std::ifstream log(it->path());
+            std::string header, first_row;
+            item.eligible = static_cast<bool>(std::getline(log, header) &&
+                                               std::getline(log, first_row) && !first_row.empty());
+        }
         const auto when = it->last_write_time(ec);
         if (ec) { ec.clear(); continue; }
         const auto stamp = modified_time(when);
@@ -58,8 +67,8 @@ std::vector<FileInfo> list_files() {
         std::string wigle, wdg;
         status >> size >> time >> wigle >> wdg;
         if (status && size == item.bytes && std::abs(std::difftime(time, stamp)) <= 1) {
-            if (wigle == "uploaded" || wigle == "accepted") item.wigle = wigle == "uploaded" ? "Uploaded" : "Accepted";
-            if (wdg == "uploaded" || wdg == "accepted") item.wdg = wdg == "uploaded" ? "Uploaded" : "Accepted";
+            if (wigle == "uploaded" || wigle == "accepted") item.wigle = wigle == "uploaded" ? "Uploaded" : "Queued";
+            if (wdg == "uploaded" || wdg == "accepted") item.wdg = wdg == "uploaded" ? "Uploaded" : "Queued";
             if (wigle == "failed") item.wigle = "Failed";
             if (wdg == "failed") item.wdg = "Failed";
         }
@@ -81,14 +90,11 @@ bool erase(const std::string& name, std::string& error) {
     return true;
 }
 
-std::string upload(const std::string& name, const std::string& service) {
-    if (!safe_name(name) || (service != "wigle" && service != "wdg")) return "Invalid upload request";
-    const auto path = path_for(name);
-    std::error_code ec;
-    if (!fs::is_regular_file(path, ec) || fs::is_symlink(path, ec)) return "Log is missing";
+namespace {
+Result run_helper(const std::string& path, const std::string& service, Progress* progress) {
 #if defined(__linux__) && !USE_DESKTOP
     int output[2];
-    if (pipe(output) != 0) return "Upload unavailable";
+    if (pipe(output) != 0) return {false, "Network check unavailable"};
     const pid_t child = fork();
     if (child == 0) {
         close(output[0]);
@@ -100,19 +106,44 @@ std::string upload(const std::string& name, const std::string& service) {
         _exit(127);
     }
     close(output[1]);
-    if (child < 0) { close(output[0]); return "Upload unavailable"; }
+    if (child < 0) { close(output[0]); return {false, "Network check unavailable"}; }
     std::string message;
-    char buffer[256];
-    ssize_t count;
-    while ((count = read(output[0], buffer, sizeof(buffer))) > 0)
-        if (message.size() < 256) message.append(buffer, std::min<std::size_t>(static_cast<std::size_t>(count), 256 - message.size()));
-    close(output[0]);
+    FILE* stream = fdopen(output[0], "r");
+    if (stream) {
+        char line[512];
+        while (std::fgets(line, sizeof(line), stream)) {
+            unsigned long long sent{}, total{};
+            if (progress && std::sscanf(line, "PROGRESS %llu %llu", &sent, &total) == 2) {
+                progress->sent = sent;
+                progress->total = total;
+            } else if (std::strncmp(line, "PROGRESS ", 9) != 0) message = line;
+        }
+        fclose(stream);
+    } else close(output[0]);
     int status{};
-    waitpid(child, &status, 0);
+    while (waitpid(child, &status, 0) < 0 && errno == EINTR) {}
     while (!message.empty() && (message.back() == '\n' || message.back() == '\r')) message.pop_back();
-    return message.empty() ? (WIFEXITED(status) && WEXITSTATUS(status) == 0 ? "Uploaded" : "Upload failed") : message;
+    const bool okay = WIFEXITED(status) && WEXITSTATUS(status) == 0;
+    return {okay, message.empty() ? (okay ? "Completed" : "Request failed") : message.substr(0, 180)};
 #else
-    return "Uploads require the Cardputer";
+    (void)path; (void)service; (void)progress;
+    return {false, "Network checks require the Cardputer"};
 #endif
+}
+
+}
+
+Result upload(const std::string& name, const std::string& service, Progress* progress) {
+    if (!safe_name(name) || (service != "wigle" && service != "wdg"))
+        return {false, "Invalid upload request"};
+    const auto path = path_for(name);
+    std::error_code ec;
+    if (!fs::is_regular_file(path, ec) || fs::is_symlink(path, ec)) return {false, "Log is missing"};
+    return run_helper(path.string(), service, progress);
+}
+
+Result check_credentials(const std::string& service) {
+    if (service != "wigle" && service != "wdg") return {false, "Invalid service"};
+    return run_helper("--check", service, nullptr);
 }
 }

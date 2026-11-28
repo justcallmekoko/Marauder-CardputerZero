@@ -76,7 +76,7 @@ public:
 
 private:
     enum class DialogAction { Exit, SelectAdapter, OpenAdapters, DeleteMap, DeletePcap,
-                              DeleteWardrive, UploadWigle, UploadWdg };
+                              DeleteWardrive, UploadWigle, UploadWdg, UploadBoth, UploadAll };
     DialogAction dialog_action_{DialogAction::Exit};
     void show_confirmation(const std::string& message, const char* accept, DialogAction action) {
         dialog_action_ = action;
@@ -135,12 +135,15 @@ private:
                     else if (dialog_action_ == DialogAction::OpenAdapters) view_model_.show_adapters_page();
                     else if (dialog_action_ == DialogAction::DeleteMap) view_model_.delete_map_pack(pending_map_pack_);
                     else if (dialog_action_ == DialogAction::DeletePcap || dialog_action_ == DialogAction::DeleteWardrive ||
-                             dialog_action_ == DialogAction::UploadWigle || dialog_action_ == DialogAction::UploadWdg) {
+                             dialog_action_ == DialogAction::UploadWigle || dialog_action_ == DialogAction::UploadWdg ||
+                             dialog_action_ == DialogAction::UploadBoth || dialog_action_ == DialogAction::UploadAll) {
                         const auto result = dialog_action_ == DialogAction::DeletePcap ? view_model_.delete_selected_pcap() :
                             dialog_action_ == DialogAction::DeleteWardrive ? view_model_.delete_selected_wardrive() :
-                            view_model_.upload_selected_wardrive(dialog_action_ == DialogAction::UploadWigle ? "wigle" : "wdg");
+                            dialog_action_ == DialogAction::UploadAll ? view_model_.upload_pending_wardrive() :
+                            view_model_.upload_selected_wardrive(dialog_action_ == DialogAction::UploadWigle ? "wigle" :
+                                                                 dialog_action_ == DialogAction::UploadWdg ? "wdg" : "both");
                         const bool okay = result == "Capture deleted" || result == "Wardrive log deleted" ||
-                            result.rfind("Uploading to ", 0) == 0;
+                            result.rfind("Uploading ", 0) == 0;
                         toast_->show(result, okay ? view::widgets::ToastTone::Success : view::widgets::ToastTone::Error, 3200);
                     }
                     else {
@@ -311,9 +314,17 @@ private:
         }
 
         if (view_model_.current_page() == model::AppPage::WardriveFiles) {
+            if (view_model_.wardrive_uploading()) return true;
             if (action == NavigationAction::Previous) { view_model_.move_wardrive_file(-1); return true; }
             if (action == NavigationAction::Next) { view_model_.move_wardrive_file(1); return true; }
             if (key == LV_KEY_ENTER) { view_model_.toggle_wardrive_details(); return true; }
+            if (key == 'a' || key == 'A') {
+                const auto count = view_model_.pending_wardrive_count();
+                if (!count) toast_->show("No pending uploads", view::widgets::ToastTone::Success, 2400);
+                else show_confirmation("Upload " + std::to_string(count) + " pending items?",
+                                       "Enter  Upload", DialogAction::UploadAll);
+                return true;
+            }
             if (view_model_.selected_wardrive_name().empty()) return true;
             if (action == NavigationAction::Details) {
                 show_confirmation("Delete selected wardrive log?", "Enter  Delete", DialogAction::DeleteWardrive);
@@ -323,6 +334,10 @@ private:
                 const bool wigle = key == 'u' || key == 'U';
                 show_confirmation(wigle ? "Upload this log to WiGLE?" : "Upload this log to WDGWars?",
                                   "Enter  Upload", wigle ? DialogAction::UploadWigle : DialogAction::UploadWdg);
+                return true;
+            }
+            if (key == 'b' || key == 'B') {
+                show_confirmation("Upload this log to both?", "Enter  Upload", DialogAction::UploadBoth);
                 return true;
             }
         }

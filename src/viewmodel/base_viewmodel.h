@@ -101,7 +101,13 @@ public:
     std::string selected_wardrive_name() const;
     std::string delete_selected_wardrive();
     std::string upload_selected_wardrive(const std::string& service);
+    std::string upload_pending_wardrive();
+    std::size_t pending_wardrive_count() const;
     bool wardrive_uploading() const { return wardrive_upload_job_.valid(); }
+    std::size_t wardrive_upload_current() const { return wardrive_upload_index_.load(); }
+    std::size_t wardrive_upload_total() const { return wardrive_upload_tasks_.size(); }
+    unsigned wardrive_upload_percent() const;
+    std::string wardrive_upload_label() const;
     const auto& wardrive_files() const { return wardrive_files_; }
     std::size_t wardrive_cursor() const { return wardrive_cursor_; }
     bool wardrive_details() const { return wardrive_details_; }
@@ -394,6 +400,8 @@ private:
     bool set_light(int value);
     void idle_display();
     void choose_upload_policy();
+    std::string start_wardrive_upload(std::vector<std::pair<std::string, std::string>> tasks);
+    void check_credentials(const std::string& service);
     std::string resource_error_;
     model::BaseModel model_;
     model::MarauderMenuModel marauder_menu_;
@@ -421,6 +429,13 @@ private:
     bool wardrive_details_{};
     std::string wardrive_message_;
     std::future<std::string> wardrive_upload_job_;
+    std::vector<std::pair<std::string, std::string>> wardrive_upload_tasks_;
+    platform::wardrive::Progress wardrive_progress_;
+    std::atomic<std::size_t> wardrive_upload_index_{0};
+    std::future<platform::wardrive::Result> credential_check_job_;
+    std::string credential_check_service_;
+    std::string wigle_check_{"Not checked"}, wdg_check_{"Not checked"};
+    uint32_t wardrive_progress_tick_{};
     model::SystemInfoModel system_info_;
     platform::diagnostics::Snapshot diagnostics_snapshot_;
     std::vector<platform::wireless::AdapterInfo> adapters_;

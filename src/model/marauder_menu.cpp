@@ -84,6 +84,8 @@ const std::vector<Item>& items_for(Id menu) {
         {"WiGLE API name", Color::Cyan, Action::WigleName, Id::Main, false, true},
         {"WiGLE API token", Color::Cyan, Action::WigleToken, Id::Main, false, true},
         {"WDGWars API key", Color::Magenta, Action::WdgKey, Id::Main, false, true},
+        {"Check WiGLE login", Color::Cyan, Action::CheckWigle, Id::Main, false, true},
+        {"Check WDGWars key", Color::Magenta, Action::CheckWdg, Id::Main, false, true},
     };
 
     static const std::vector<Item> files_memory = {

@@ -54,24 +54,74 @@ def test_server_status():
         source.write_text("data")
 
         class Response:
-            status = 200
-            def read(self, _): return b'{"success":true}'
+            def __init__(self, status, data): self.status, self.data = status, data
+            def read(self, _): return self.data
 
         class Connection:
             def __init__(self, host, timeout): self.host = host
-            def putrequest(self, *_): pass
+            def putrequest(self, method, endpoint): self.method, self.endpoint = method, endpoint
+            def request(self, method, endpoint, headers): self.putrequest(method, endpoint)
             def putheader(self, *_): pass
             def endheaders(self): pass
             def send(self, *_): pass
-            def getresponse(self): return Response()
+            def getresponse(self):
+                if self.endpoint == "/api/v2/profile/user": return Response(200, b'{"success":true}')
+                if self.endpoint == "/api/me": return Response(200, b'{"ok":true}')
+                if self.endpoint == "/api/upload-csv": return Response(200, b'{"ok":true,"accepted":2}')
+                return Response(200, b'{"success":true}')
             def close(self): pass
 
         with mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": str(root / ".config")}), \
              mock.patch.object(module["http"].client, "HTTPSConnection", Connection):
-            assert module["upload_file"](source, "wigle", root) == "uploaded"
-            Response.status = 202
-            Response.read = lambda self, _: b'{"ok":true,"job_id":"123"}'
-            assert module["upload_file"](source, "wdg", root) == "accepted"
+            progress = []
+            assert module["upload_file"](source, "wigle", root, lambda sent, total: progress.append((sent, total))) == "uploaded"
+            assert progress == [(0, 4), (4, 4)]
+            assert module["upload_file"](source, "wdg", root) == "uploaded"
+            assert module["check_credentials"]("wigle", root) == "WiGLE credentials valid"
+            assert module["check_credentials"]("wdg", root) == "WDGWars credentials valid"
+
+
+def test_wdg_queued_job():
+    class Response:
+        status = 200
+        def read(self, _): return b'{"status":"done"}'
+    class Connection:
+        def __init__(self, host, timeout): pass
+        def request(self, method, endpoint, headers): assert endpoint == "/api/v2/upload-job/123"
+        def getresponse(self): return Response()
+        def close(self): pass
+    with mock.patch.object(module["http"].client, "HTTPSConnection", Connection):
+        assert module["poll_wdg"]("123", {"X-API-Key": "key"}) == "uploaded"
+
+
+def test_large_wdg_upload():
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        config = root / ".config" / "marauder-cardputerzero"
+        config.mkdir(parents=True)
+        (config / "wdgwars-api-key").write_text("key")
+        source = root / "large.csv"
+        with source.open("wb") as output:
+            output.seek(21 * 1048576)
+            output.write(b"x")
+        class Response:
+            def __init__(self, status, data): self.status, self.data = status, data
+            def read(self, _): return self.data
+        class Connection:
+            def __init__(self, host, timeout): pass
+            def putrequest(self, method, endpoint): self.endpoint = endpoint
+            def request(self, method, endpoint, headers): self.endpoint = endpoint
+            def putheader(self, *_): pass
+            def endheaders(self): pass
+            def send(self, *_): pass
+            def getresponse(self):
+                if self.endpoint == "/api/v2/upload-csv": return Response(202, b'{"ok":true,"job_id":123}')
+                return Response(200, b'{"status":"done"}')
+            def close(self): pass
+        with mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": str(root / ".config")}), \
+             mock.patch.object(module["http"].client, "HTTPSConnection", Connection):
+            assert module["upload_file"](source, "wdg", root) == "uploaded"
+        assert not list(root.glob(".wardrive-upload-*"))
 
 
 def test_failed_status():
@@ -95,4 +145,6 @@ def test_failed_status():
 if __name__ == "__main__":
     test_conversion()
     test_server_status()
+    test_wdg_queued_job()
+    test_large_wdg_upload()
     test_failed_status()

@@ -21,7 +21,7 @@ int main() {
     fs::create_directories(root);
     const auto name = std::string("wardrive_20261127_120000.csv");
     const auto file = root / name;
-    std::ofstream(file) << "wardrive data\n";
+    std::ofstream(file) << "utc,radio,address,name\n2026-11-27T12:00:00Z,WiFi,AA:BB:CC:DD:EE:FF,Test\n";
     const auto modified = fs::last_write_time(file);
     const auto system = std::chrono::time_point_cast<std::chrono::system_clock::duration>(
         modified - fs::file_time_type::clock::now() + std::chrono::system_clock::now());
@@ -29,7 +29,7 @@ int main() {
         std::chrono::system_clock::to_time_t(system) << " uploaded accepted\n";
     auto files = platform::wardrive::list_files();
     assert(files.size() == 1 && files[0].name == name);
-    assert(files[0].wigle == "Uploaded" && files[0].wdg == "Accepted");
+    assert(files[0].eligible && files[0].wigle == "Uploaded" && files[0].wdg == "Queued");
     std::string error;
     assert(!platform::wardrive::erase("../wardrive_20261127_120000.csv", error));
     assert(fs::exists(file));

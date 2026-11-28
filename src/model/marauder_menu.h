@@ -57,6 +57,8 @@ enum class MarauderMenuAction {
     WigleName,
     WigleToken,
     WdgKey,
+    CheckWigle,
+    CheckWdg,
 };
 
 enum class MarauderMenuColor {

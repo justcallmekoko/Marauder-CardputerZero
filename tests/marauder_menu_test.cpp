@@ -103,7 +103,8 @@ int main() {
         {MarauderMenuAction::CycleStorage, MarauderMenuAction::OpenPcapFiles, MarauderMenuAction::OpenWardriveFiles,
          MarauderMenuAction::OpenMapPacks,
          MarauderMenuAction::Reserve, MarauderMenuAction::CycleCache},
-        {MarauderMenuAction::UploadPolicy, MarauderMenuAction::WigleName, MarauderMenuAction::WigleToken, MarauderMenuAction::WdgKey}
+        {MarauderMenuAction::UploadPolicy, MarauderMenuAction::WigleName, MarauderMenuAction::WigleToken,
+         MarauderMenuAction::WdgKey, MarauderMenuAction::CheckWigle, MarauderMenuAction::CheckWdg}
     };
     for (const auto& group : groups) {
         menu.activate();

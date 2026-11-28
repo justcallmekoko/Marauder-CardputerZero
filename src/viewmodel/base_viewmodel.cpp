@@ -164,6 +164,7 @@ BaseViewModel::BaseViewModel()
 BaseViewModel::~BaseViewModel() {
     if (map_job_.valid()) { map_progress_.cancel = true; map_job_.wait(); }
     if (wardrive_upload_job_.valid()) wardrive_upload_job_.wait();
+    if (credential_check_job_.valid()) credential_check_job_.wait();
     bluetooth_session_.stop();
     gps_log_.stop();
     pcap_capture_.stop();
@@ -635,25 +636,112 @@ std::string BaseViewModel::delete_selected_wardrive() {
 std::string BaseViewModel::upload_selected_wardrive(const std::string& service) {
     const auto name = selected_wardrive_name();
     if (name.empty()) return "No log selected";
+    if (!wardrive_files_[wardrive_cursor_].eligible) return "Log has no devices";
+    if (service == "both") {
+        std::vector<std::pair<std::string, std::string>> tasks;
+        const auto& file = wardrive_files_[wardrive_cursor_];
+        if (file.wigle != "Uploaded" && file.wigle != "Queued") tasks.emplace_back(name, "wigle");
+        if (file.wdg != "Uploaded" && file.wdg != "Queued") tasks.emplace_back(name, "wdg");
+        return start_wardrive_upload(std::move(tasks));
+    }
+    return start_wardrive_upload({{name, service}});
+}
+
+std::size_t BaseViewModel::pending_wardrive_count() const {
+    std::size_t count{};
+    for (const auto& file : wardrive_files_) {
+        if (!file.eligible) continue;
+        count += file.wigle != "Uploaded" && file.wigle != "Queued";
+        count += file.wdg != "Uploaded" && file.wdg != "Queued";
+    }
+    return count;
+}
+
+std::string BaseViewModel::upload_pending_wardrive() {
     if (wardrive_upload_job_.valid()) return "Upload in progress";
-    if (gps_log_.active() && gps_log_.path().filename() == name) return "Stop wardrive first";
+    refresh_wardrive_files();
+    std::vector<std::pair<std::string, std::string>> tasks;
+    for (const auto& file : wardrive_files_) {
+        if (!file.eligible) continue;
+        if (file.wigle != "Uploaded" && file.wigle != "Queued") tasks.emplace_back(file.name, "wigle");
+        if (file.wdg != "Uploaded" && file.wdg != "Queued") tasks.emplace_back(file.name, "wdg");
+    }
+    return start_wardrive_upload(std::move(tasks));
+}
+
+unsigned BaseViewModel::wardrive_upload_percent() const {
+    const auto total = wardrive_progress_.total.load();
+    return total ? static_cast<unsigned>(std::min<std::uint64_t>(100, wardrive_progress_.sent.load() * 100 / total)) : 0;
+}
+
+std::string BaseViewModel::wardrive_upload_label() const {
+    const auto index = wardrive_upload_index_.load();
+    if (index >= wardrive_upload_tasks_.size()) return "Finishing uploads";
+    const auto& [name, service] = wardrive_upload_tasks_[index];
+    return std::to_string(index + 1) + "/" + std::to_string(wardrive_upload_tasks_.size()) + "  " +
+        (service == "wigle" ? "WiGLE" : "WDGWars") + "  " + screen_capture_name(name);
+}
+
+std::string BaseViewModel::start_wardrive_upload(std::vector<std::pair<std::string, std::string>> tasks) {
+    if (wardrive_upload_job_.valid()) return "Upload in progress";
+    if (tasks.empty()) return "No pending uploads";
+    for (const auto& [name, service] : tasks) {
+        if (gps_log_.active() && gps_log_.path().filename() == name) return "Stop wardrive first";
+        if (service == "wigle" && (!model::credential_saved(model::Credential::WigleName) ||
+                                    !model::credential_saved(model::Credential::WigleToken)))
+            return "Set WiGLE credentials first";
+        if (service == "wdg" && !model::credential_saved(model::Credential::WdgKey))
+            return "Set WDGWars API key first";
+    }
     const auto active = active_wifi_profile();
     if (active.first.empty()) return "Connect to WiFi first";
     if (!model_.trusted_profile().empty() && active.first != model_.trusted_profile())
         return "Connect to trusted WiFi";
-    if (service == "wigle" && (!model::credential_saved(model::Credential::WigleName) ||
-                                !model::credential_saved(model::Credential::WigleToken)))
-        return "Set WiGLE credentials first";
-    if (service == "wdg" && !model::credential_saved(model::Credential::WdgKey))
-        return "Set WDGWars API key first";
+    wardrive_upload_tasks_ = std::move(tasks);
+    wardrive_upload_index_ = 0;
+    wardrive_progress_.sent = 0;
+    wardrive_progress_.total = 0;
     try {
-        wardrive_upload_job_ = std::async(std::launch::async, [name, service] {
-            return platform::wardrive::upload(name, service);
+        wardrive_upload_job_ = std::async(std::launch::async, [this] {
+            unsigned uploaded{}, queued{}, failed{};
+            std::string last;
+            for (std::size_t i = 0; i < wardrive_upload_tasks_.size(); ++i) {
+                wardrive_upload_index_ = i;
+                wardrive_progress_.sent = 0;
+                wardrive_progress_.total = 0;
+                const auto& [name, service] = wardrive_upload_tasks_[i];
+                const auto result = platform::wardrive::upload(name, service, &wardrive_progress_);
+                last = result.message;
+                if (!result.ok) ++failed;
+                else if (last.find(" accepted ") != std::string::npos) ++queued;
+                else ++uploaded;
+            }
+            wardrive_upload_index_ = wardrive_upload_tasks_.size();
+            if (wardrive_upload_tasks_.size() == 1) return last;
+            return std::to_string(uploaded) + " uploaded, " + std::to_string(queued) +
+                " queued, " + std::to_string(failed) + " failed";
         });
     } catch (const std::system_error&) { return "Could not start upload"; }
-    wardrive_message_ = service == "wigle" ? "Uploading to WiGLE..." : "Uploading to WDGWars...";
+    wardrive_message_ = "Uploading " + std::to_string(wardrive_upload_tasks_.size()) + " service item(s)...";
     wardrive_files_generation_.set(wardrive_files_generation_.value() + 1);
     return wardrive_message_;
+}
+
+void BaseViewModel::check_credentials(const std::string& service) {
+    if (credential_check_job_.valid()) { resource_error_ = "Check in progress"; return; }
+    if (service == "wigle" && (!model::credential_saved(model::Credential::WigleName) ||
+                                !model::credential_saved(model::Credential::WigleToken))) {
+        resource_error_ = "Set WiGLE credentials first"; return;
+    }
+    if (service == "wdg" && !model::credential_saved(model::Credential::WdgKey)) {
+        resource_error_ = "Set WDGWars API key first"; return;
+    }
+    credential_check_service_ = service;
+    auto& status = service == "wigle" ? wigle_check_ : wdg_check_;
+    status = "Checking";
+    try {
+        credential_check_job_ = std::async(std::launch::async, platform::wardrive::check_credentials, service);
+    } catch (const std::system_error&) { status = "Unavailable"; resource_error_ = "Could not start check"; }
 }
 
 std::string BaseViewModel::toggle_pcap_capture() {
@@ -751,7 +839,11 @@ void BaseViewModel::credential_key(uint32_t key) {
     if (key == LV_KEY_ESC) credential_open_ = false;
     else if (key == LV_KEY_ENTER) {
         if (credential_input_.empty() && !clear_credential_) return;
-        if (model::store_credential(credential_field_, credential_input_)) credential_open_ = false;
+        if (model::store_credential(credential_field_, credential_input_)) {
+            credential_open_ = false;
+            if (credential_field_ == model::Credential::WdgKey) wdg_check_ = "Not checked";
+            else wigle_check_ = "Not checked";
+        }
         else credential_prompt_ = "Save failed. Enter to retry.";
     } else if (key == LV_KEY_DEL && credential_input_.empty()) {
         clear_credential_ = true;
@@ -807,6 +899,8 @@ void BaseViewModel::marauder_menu_activate() {
     if (action == Action::DimDelay && !model_.cycle_dim()) resource_error_ = "Could not save preference";
     if (action == Action::Reserve && !model_.cycle_reserve()) resource_error_ = "Could not save preference";
     if (action == Action::UploadPolicy) choose_upload_policy();
+    if (action == Action::CheckWigle) check_credentials("wigle");
+    if (action == Action::CheckWdg) check_credentials("wdg");
     if (credential_action(action, credential_field_)) {
         credential_open_ = true;
         clear_credential_ = false;
@@ -884,6 +978,8 @@ void BaseViewModel::marauder_menu_activate() {
         case Action::WigleName:
         case Action::WigleToken:
         case Action::WdgKey:
+        case Action::CheckWigle:
+        case Action::CheckWdg:
         case Action::CycleStorage:
         case Action::Brightness:
         case Action::DimDelay:
@@ -921,6 +1017,8 @@ std::string BaseViewModel::setting_value(model::MarauderMenuAction action) const
     }
     if (action == Action::UploadPolicy) return !pending_uuid_.empty() ? screen_name(pending_network_) :
         model_.trusted_profile().empty() ? "Manual" : "Trusted WiFi";
+    if (action == Action::CheckWigle) return wigle_check_;
+    if (action == Action::CheckWdg) return wdg_check_;
     if (action == Action::CycleCensor) return model_.censor_enabled() ? "On" : "Off";
     model::Credential field;
     if (credential_action(action, field)) return model::credential_saved(field) ? "Saved" : "Not set";
@@ -1838,6 +1936,20 @@ void BaseViewModel::wifi_scan_timer_cb(lv_timer_t* timer) {
             self->wardrive_upload_job_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
             self->wardrive_message_ = self->wardrive_upload_job_.get();
             self->refresh_wardrive_files();
+        } else if (self->wardrive_upload_job_.valid() &&
+                   self->model_.current_page() == model::AppPage::WardriveFiles &&
+                   lv_tick_elaps(self->wardrive_progress_tick_) >= 250) {
+            self->wardrive_progress_tick_ = lv_tick_get();
+            self->wardrive_files_generation_.set(self->wardrive_files_generation_.value() + 1);
+        }
+        if (self->credential_check_job_.valid() &&
+            self->credential_check_job_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+            const auto result = self->credential_check_job_.get();
+            auto& status = self->credential_check_service_ == "wigle" ? self->wigle_check_ : self->wdg_check_;
+            if (status == "Checking")
+                status = result.ok ? "Valid" : result.message.find("invalid") != std::string::npos ? "Invalid" : "Unavailable";
+            self->resource_error_ = result.message;
+            self->marauder_menu_generation_subject_.set(self->marauder_menu_generation_subject_.value() + 1);
         }
         if (self->map_job_.valid()) {
             if (self->map_job_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
