@@ -159,7 +159,7 @@ void PcapFilesScreen::render() {
             lv_obj_set_style_text_color(row.meta, focus ? colors.success : colors.text_disabled, 0);
         }
         set_key_guide(uploading ? "Esc Back  Upload continues" :
-            details ? "U WiGLE  W WDG  B Both  A All  D Del  Esc List" :
+            details ? "U WiGLE  W WDG  B Both  A All  DEL Remove  Esc List" :
                       "F/X Move  Enter Info  U WiGLE  W WDG  B Both  A All");
         return;
     }
@@ -206,6 +206,6 @@ void PcapFilesScreen::render() {
         lv_obj_set_style_text_color(row.name, colors.text, 0);
         lv_obj_set_style_text_color(row.meta, focus ? colors.error : colors.text_disabled, 0);
     }
-    set_key_guide(details ? "D Delete  Esc List  P Capture" : "F/X Files  Enter Info  D Delete  P Rec  Esc Back");
+    set_key_guide(details ? "DEL Remove  Esc List  P Capture" : "F/X Files  Enter Info  DEL Remove  P Rec  Esc Back");
 }
 } // namespace screen

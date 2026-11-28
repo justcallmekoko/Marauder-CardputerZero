@@ -319,7 +319,7 @@ void GpsToolScreen::render() {
             }
         }
     } else if (track) detail = std::to_string(vm.gps_record_count()) + " positions saved";
-    else detail = vm.gps_receiver_id().empty() ? "Device > Radios and GPS > Radio setup" :
+    else detail = vm.gps_receiver_id().empty() ? "Device > Radio Setup" :
                   vm.gps_receiver_name();
     lv_label_set_text(detail_, detail.c_str());
     lv_label_set_text(message_, vm.gps_tool_message().c_str());

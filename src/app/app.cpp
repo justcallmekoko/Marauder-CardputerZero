@@ -326,7 +326,7 @@ private:
             if (action == NavigationAction::Previous) { view_model_.move_pcap_file(-1); return true; }
             if (action == NavigationAction::Next) { view_model_.move_pcap_file(1); return true; }
             if (key == LV_KEY_ENTER) { view_model_.toggle_pcap_details(); return true; }
-            if (action == NavigationAction::Details && !view_model_.selected_pcap_name().empty()) {
+            if (key == LV_KEY_DEL && !view_model_.selected_pcap_name().empty()) {
                 show_confirmation("Delete selected capture?", "Enter  Delete", DialogAction::DeletePcap);
                 return true;
             }
@@ -345,7 +345,7 @@ private:
                 return true;
             }
             if (view_model_.selected_wardrive_name().empty()) return true;
-            if (action == NavigationAction::Details) {
+            if (key == LV_KEY_DEL) {
                 show_confirmation("Delete selected wardrive log?", "Enter  Delete", DialogAction::DeleteWardrive);
                 return true;
             }
@@ -368,7 +368,7 @@ private:
             else if (action == NavigationAction::Back) view_model_.step_map_zoom(-1);
             else if (action == NavigationAction::Primary && key != LV_KEY_ENTER) view_model_.step_map_zoom(1);
             else if (key == LV_KEY_ENTER) view_model_.select_map_pack();
-            else if (action == NavigationAction::Details) {
+            else if (key == LV_KEY_DEL) {
                 pending_map_pack_ = view_model_.map_pack_cursor();
                 show_confirmation(std::string("Delete ") + platform::maps::pack(pending_map_pack_).name + " map?",
                                   "Enter  Delete", DialogAction::DeleteMap);
