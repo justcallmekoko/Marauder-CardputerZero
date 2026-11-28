@@ -31,6 +31,7 @@ enum class MarauderMenuAction {
     OpenWifiScan,
     OpenRawCapture,
     OpenBluetoothRaw,
+    OpenBluetoothAdapters,
     OpenBluetoothFindMy,
     OpenBluetoothIBeacon,
     OpenBluetoothFlipper,

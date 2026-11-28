@@ -47,6 +47,7 @@ const std::vector<Item>& items_for(Id menu) {
         {"Saved Networks", Color::LightGrey, Action::None, Id::Main, false, false},
     };
     static const std::vector<Item> bluetooth = {
+        {"Collection adapter", Color::Blue, Action::OpenBluetoothAdapters, Id::Main, false, true},
         {"Advertisement feed", Color::Cyan, Action::OpenBluetoothRaw, Id::Main, false, true},
         {"Find My", Color::Green, Action::OpenBluetoothFindMy, Id::Main, false, true},
         {"iBeacon", Color::Blue, Action::OpenBluetoothIBeacon, Id::Main, false, true},

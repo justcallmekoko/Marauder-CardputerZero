@@ -401,6 +401,12 @@ private:
             if (key == LV_KEY_ENTER) { view_model_.toggle_radio(); return true; }
             if (action == NavigationAction::Details) { view_model_.refresh_radios(); return true; }
         }
+        if (view_model_.current_page() == model::AppPage::BluetoothAdapters) {
+            if (action == NavigationAction::Previous) { view_model_.move_bluetooth_adapter(-1); return true; }
+            if (action == NavigationAction::Next) { view_model_.move_bluetooth_adapter(1); return true; }
+            if (key == LV_KEY_ENTER) { view_model_.select_bluetooth_adapter(); return true; }
+            if (action == NavigationAction::Details) { view_model_.refresh_radios(); return true; }
+        }
 
         if (view_model_.current_page() == model::AppPage::Adapters) {
             if (key == 'm' || key == 'M') { view_model_.toggle_monitor(); return true; }

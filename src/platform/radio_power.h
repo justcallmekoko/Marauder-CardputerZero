@@ -63,8 +63,11 @@ public:
     void stop();
     std::vector<BluetoothObservation> poll(std::string& status);
     bool active() const { return socket_ >= 0; }
+    bool ready() const { return ready_; }
 private:
     int socket_{-1}, child_{-1};
+    bool ready_{};
+    std::chrono::steady_clock::time_point started_{};
     std::string pending_;
 };
 class BluetoothSession {

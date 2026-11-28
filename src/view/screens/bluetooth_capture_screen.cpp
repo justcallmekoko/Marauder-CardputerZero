@@ -79,9 +79,9 @@ void BluetoothCaptureScreen::render() {
         std::to_string(visible.size()) + " devices";
     lv_label_set_text(counts_, count.c_str());
     lv_obj_set_style_text_color(counts_, colors.info, 0);
-    const auto state = vm.bluetooth_running() ? "LIVE" : "PAUSED";
+    const auto state = vm.bluetooth_running() ? "LIVE" : vm.bluetooth_starting() ? "STARTING" : "PAUSED";
     const auto filter = vm.bluetooth_filter() ? "FILTER" : "ALL";
-    const std::string status = std::string(state) + "  " + filter + "  " +
+    const std::string status = std::string(state) + "  " + vm.bluetooth_adapter_name() + "  " + filter + "  " +
         (vm.bluetooth_builder() ? "BUILD ON" : "BUILD OFF") + "  " + vm.bluetooth_status();
     lv_label_set_text(status_, status.c_str());
     lv_obj_set_style_text_color(status_, vm.bluetooth_running() ? colors.success : colors.warning, 0);

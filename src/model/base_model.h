@@ -19,6 +19,7 @@ enum class AppPage {
     WifiScan = 2,
     Diagnostics = 3,
     RadioSetup,
+    BluetoothAdapters,
     Traffic,
     PcapFiles,
     WardriveFiles,
@@ -61,6 +62,8 @@ public:
     void toggle_page();
     const std::string& selected_adapter_id() const;
     bool set_selected_adapter_id(std::string stable_id);
+    const std::string& selected_bluetooth_id() const { return selected_bluetooth_id_; }
+    bool set_selected_bluetooth_id(std::string stable_id);
     bool traffic_monitor_source() const { return traffic_monitor_source_; }
     bool cycle_traffic_source();
     unsigned wardrive_dwell_ms() const { return wardrive_dwell_ms_; }
@@ -85,6 +88,7 @@ private:
     bool censor_enabled_{};
     AppPage current_page_{AppPage::Dashboard};
     std::string selected_adapter_id_;
+    std::string selected_bluetooth_id_;
     bool traffic_monitor_source_{true};
     unsigned wardrive_dwell_ms_{650};
     unsigned wardrive_priority_{};

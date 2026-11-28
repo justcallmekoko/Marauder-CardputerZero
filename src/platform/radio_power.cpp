@@ -343,6 +343,7 @@ void BluetoothHciSession::stop() {
     }
 #endif
     socket_ = child_ = -1;
+    ready_ = false;
     pending_.clear();
 }
 bool BluetoothHciSession::start(const std::string& adapter) {
@@ -366,18 +367,9 @@ bool BluetoothHciSession::start(const std::string& adapter) {
     close(ends[1]);
     if (err) { close(ends[0]); return false; }
     socket_ = ends[0];
-    pollfd descriptor{socket_, POLLIN, 0};
-    if (::poll(&descriptor, 1, 2000) <= 0) { stop(); return false; }
-    std::string line;
-    char c;
-    while (line.size() < 64) {
-        const auto n = recv(socket_, &c, 1, 0);
-        if (n < 0 && errno == EINTR) continue;
-        if (n != 1 || c == '\n') break;
-        line += c;
-    }
-    if (line == "status\tReady") return true;
-    stop();
+    ready_ = false;
+    started_ = std::chrono::steady_clock::now();
+    return true;
 #endif
     return false;
 }
@@ -390,13 +382,14 @@ std::vector<BluetoothObservation> BluetoothHciSession::poll(std::string& status)
         const auto count = recv(socket_, buffer, sizeof(buffer), MSG_DONTWAIT);
         if (count < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) break;
         if (count < 0 && errno == EINTR) continue;
-        if (count <= 0) { status = "Raw Bluetooth capture ended"; stop(); break; }
+        if (count <= 0) { status = ready_ ? "Raw Bluetooth capture ended" : "Raw Bluetooth helper unavailable"; stop(); break; }
         pending_.append(buffer, static_cast<size_t>(count));
         if (pending_.size() > 32768) { status = "Raw Bluetooth capture overflow"; stop(); break; }
         size_t end;
         while ((end = pending_.find('\n')) != std::string::npos) {
             const auto line = pending_.substr(0, end);
             pending_.erase(0, end + 1);
+            if (line == "status\tReady") { ready_ = true; status = "Ready"; continue; }
             if (line.compare(0, 4, "raw\t") != 0) continue;
             const auto a = line.find('\t', 4);
             const auto b = a == std::string::npos ? a : line.find('\t', a + 1);
@@ -414,6 +407,11 @@ std::vector<BluetoothObservation> BluetoothHciSession::poll(std::string& status)
                               type == 2 ? "public identity" : "random identity";
             found.push_back(ble::decode_report(mac, kind, rssi, line.substr(c + 1)));
         }
+    }
+    if (socket_ >= 0 && !ready_ &&
+        std::chrono::steady_clock::now() - started_ > std::chrono::seconds(2)) {
+        status = "Raw Bluetooth helper timed out";
+        stop();
     }
 #endif
     return found;

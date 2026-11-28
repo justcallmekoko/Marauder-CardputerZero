@@ -250,9 +250,9 @@ void BaseViewModel::show_bluetooth_page(uint32_t filter) {
     bluetooth_session_.stop();
     bluetooth_hci_session_.stop();
     bluetooth_feed_.clear();
-    const auto radio = std::find_if(radio_list_.devices.begin(), radio_list_.devices.end(),
-        [](const auto& item) { return item.kind == "Bluetooth" && item.state == "On"; });
-    const std::string adapter_id = radio == radio_list_.devices.end() ? "" : radio->id;
+    const auto* radio = collection_bluetooth_radio();
+    const std::string adapter_id = radio ? radio->id : "";
+    bluetooth_adapter_name_ = radio ? radio->name : "No adapter";
     if (adapter_id != bluetooth_adapter_id_) {
         bluetooth_devices_.clear();
         bluetooth_index_.clear();
@@ -266,10 +266,46 @@ void BaseViewModel::show_bluetooth_page(uint32_t filter) {
     bluetooth_view_ = 0;
     bluetooth_cursor_ = bluetooth_action_cursor_ = 0;
     bluetooth_filter_cursor_ = 0;
-    bluetooth_start_stop();
+    bluetooth_status_ = "Starting";
     model_.set_current_page(model::AppPage::BluetoothCapture);
     publish_navigation();
+    bluetooth_start_stop();
     bluetooth_generation_.set(bluetooth_generation_.value() + 1);
+}
+std::vector<std::size_t> BaseViewModel::bluetooth_adapter_indices() const {
+    std::vector<std::size_t> indices;
+    for (std::size_t i = 0; i < radio_list_.devices.size(); ++i)
+        if (radio_list_.devices[i].kind == "Bluetooth") indices.push_back(i);
+    return indices;
+}
+const platform::RadioDevice* BaseViewModel::collection_bluetooth_radio() const {
+    const auto& saved = model_.selected_bluetooth_id();
+    const auto it = std::find_if(radio_list_.devices.begin(), radio_list_.devices.end(), [&](const auto& item) {
+        return item.kind == "Bluetooth" && item.state == "On" && (saved.empty() || item.id == saved);
+    });
+    return it == radio_list_.devices.end() ? nullptr : &*it;
+}
+void BaseViewModel::show_bluetooth_adapters_page() {
+    const auto indices = bluetooth_adapter_indices();
+    bluetooth_radio_cursor_ = 0;
+    for (std::size_t i = 0; i < indices.size(); ++i)
+        if (radios()[indices[i]].id == model_.selected_bluetooth_id()) bluetooth_radio_cursor_ = i;
+    model_.set_current_page(model::AppPage::BluetoothAdapters);
+    publish_navigation();
+    refresh_radios();
+}
+void BaseViewModel::move_bluetooth_adapter(int direction) {
+    const auto count = bluetooth_adapter_indices().size();
+    if (count) bluetooth_radio_cursor_ = (bluetooth_radio_cursor_ + count + (direction < 0 ? count - 1 : 1)) % count;
+    marauder_menu_generation_subject_.set(marauder_menu_generation_subject_.value() + 1);
+}
+void BaseViewModel::select_bluetooth_adapter() {
+    const auto indices = bluetooth_adapter_indices();
+    if (radio_busy() || bluetooth_radio_cursor_ >= indices.size()) return;
+    const auto& radio = radios()[indices[bluetooth_radio_cursor_]];
+    radio_list_.message = radio.state != "On" ? "Enable in Radio setup" :
+        model_.set_selected_bluetooth_id(radio.id) ? "Adapter saved" : "Could not save adapter";
+    marauder_menu_generation_subject_.set(marauder_menu_generation_subject_.value() + 1);
 }
 void BaseViewModel::bluetooth_start_stop() {
     if (bluetooth_session_.active() || bluetooth_hci_session_.active()) {
@@ -277,15 +313,15 @@ void BaseViewModel::bluetooth_start_stop() {
         bluetooth_hci_session_.stop();
         bluetooth_status_ = "Paused";
     } else {
-        const auto radio = std::find_if(radio_list_.devices.begin(), radio_list_.devices.end(),
-            [](const auto& item) { return item.kind == "Bluetooth" && item.state == "On"; });
-        if (radio == radio_list_.devices.end()) bluetooth_status_ = "Enable Bluetooth in Device > Radio setup";
+        const auto* radio = collection_bluetooth_radio();
+        if (!radio) bluetooth_status_ = model_.selected_bluetooth_id().empty() ?
+            "Enable Bluetooth in Device > Radio setup" : "Selected adapter unavailable; choose another";
         else if (!bluetooth_hci_session_.start(radio->name))
             bluetooth_status_ = "Raw Bluetooth helper unavailable";
         else if (!bluetooth_session_.start(radio->name, true)) {
             bluetooth_hci_session_.stop();
             bluetooth_status_ = "Bluetooth discovery unavailable";
-        } else bluetooth_status_ = "Raw HCI reports";
+        } else bluetooth_status_ = std::string("Starting ") + radio->name;
     }
     bluetooth_generation_.set(bluetooth_generation_.value() + 1);
 }
@@ -352,7 +388,8 @@ void BaseViewModel::bluetooth_back() {
     bluetooth_generation_.set(bluetooth_generation_.value() + 1);
 }
 void BaseViewModel::update_bluetooth_capture() {
-    if (model_.current_page() != model::AppPage::BluetoothCapture || !bluetooth_running()) return;
+    if (model_.current_page() != model::AppPage::BluetoothCapture ||
+        !bluetooth_hci_session_.active() || !bluetooth_session_.active()) return;
     std::string state;
     bluetooth_session_.poll(state); // BlueZ drives scanning; HCI delivers the uncoalesced reports below.
     if (!bluetooth_session_.active()) {
@@ -399,11 +436,14 @@ void BaseViewModel::update_bluetooth_capture() {
         if (bluetooth_view_ == 5)
             bluetooth_fox_.observe(sighting.address, 0, sighting.rssi, true, lv_tick_get());
     }
-    if (!raw_state.empty()) {
+    if (!raw_state.empty() && raw_state != "Ready") {
         bluetooth_session_.stop();
         bluetooth_status_ = raw_state;
         changed = true;
-    } else if (!state.empty() && state != "Scanning") { bluetooth_status_ = state; changed = true; }
+    } else if (raw_state == "Ready" || state == "Scanning") {
+        bluetooth_status_ = "Raw HCI reports";
+        changed = true;
+    } else if (!state.empty()) { bluetooth_status_ = state; changed = true; }
     if (changed) bluetooth_generation_.set(bluetooth_generation_.value() + 1);
 }
 void BaseViewModel::show_remote_id_page() {
@@ -544,9 +584,8 @@ std::string BaseViewModel::gps_receiver_name() const {
 }
 void BaseViewModel::toggle_gps_recording() {
     if (gps_tool_ == GpsTool::Info) return;
-    const auto bluetooth_radio = std::find_if(radio_list_.devices.begin(), radio_list_.devices.end(),
-        [](const auto& item) { return item.kind == "Bluetooth" && item.state == "On"; });
-    const bool bluetooth_available = bluetooth_radio != radio_list_.devices.end();
+    const auto* bluetooth_radio = collection_bluetooth_radio();
+    const bool bluetooth_available = bluetooth_radio != nullptr;
     if (gps_log_.active()) {
         bluetooth_session_.stop();
         bluetooth_message_.clear();
@@ -1128,6 +1167,7 @@ void BaseViewModel::marauder_menu_activate() {
             show_raw_capture_page();
             break;
         case Action::OpenBluetoothRaw: show_bluetooth_page(0); break;
+        case Action::OpenBluetoothAdapters: show_bluetooth_adapters_page(); break;
         case Action::OpenBluetoothFindMy: show_bluetooth_page(platform::ble::bit(platform::ble::Kind::FindMy)); break;
         case Action::OpenBluetoothIBeacon: show_bluetooth_page(platform::ble::bit(platform::ble::Kind::IBeacon)); break;
         case Action::OpenBluetoothFlipper: show_bluetooth_page(platform::ble::bit(platform::ble::Kind::Flipper)); break;
@@ -1200,6 +1240,14 @@ std::string BaseViewModel::setting_value(model::MarauderMenuAction action) const
     if (action == Action::DimDelay) return model_.dim_seconds() ? std::to_string(model_.dim_seconds()) + " sec" : "Never";
     if (action == Action::Reserve) return model_.reserve_mib() ? std::to_string(model_.reserve_mib()) + " MiB" : "Off";
     if (action == Action::CycleTrafficSource) return model_.traffic_monitor_source() ? "Monitor" : "Adapter";
+    if (action == Action::OpenBluetoothAdapters) {
+        const auto& selected = model_.selected_bluetooth_id();
+        if (selected.empty()) return "Auto";
+        const auto it = std::find_if(radios().begin(), radios().end(), [&](const auto& radio) {
+            return radio.kind == "Bluetooth" && radio.id == selected;
+        });
+        return it == radios().end() ? "Missing" : it->name;
+    }
     if (action == Action::CycleWardriveDwell) return std::to_string(model_.wardrive_dwell_ms()) + " ms";
     if (action == Action::CycleWardriveAdapters)
         return model_.wardrive_all_idle_adapters() ? "All idle" : "Selected";
@@ -1303,6 +1351,15 @@ void BaseViewModel::finish_radio_setting() {
     radio_cursor_ = 0;
     for (std::size_t i = 0; i < radios().size(); ++i) {
         if (radios()[i].id == selected) { radio_cursor_ = i; break; }
+    }
+    if (model_.current_page() == model::AppPage::BluetoothAdapters) {
+        const auto indices = bluetooth_adapter_indices();
+        bluetooth_radio_cursor_ = 0;
+        for (std::size_t i = 0; i < indices.size(); ++i)
+            if (radios()[indices[i]].id == model_.selected_bluetooth_id()) {
+                bluetooth_radio_cursor_ = i;
+                break;
+            }
     }
     marauder_menu_generation_subject_.set(marauder_menu_generation_subject_.value() + 1);
 }

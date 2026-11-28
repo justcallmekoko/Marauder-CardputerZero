@@ -42,9 +42,10 @@ int main() {
     MarauderMenuModel bluetooth;
     select_index(bluetooth, 1);
     if (bluetooth.activate() != MarauderMenuAction::None || bluetooth.columns() != 1 ||
-        bluetooth.item_count() != 7) return 76;
+        bluetooth.item_count() != 8) return 76;
     const MarauderMenuAction bluetooth_actions[] = {
-        MarauderMenuAction::OpenBluetoothRaw, MarauderMenuAction::OpenBluetoothFindMy,
+        MarauderMenuAction::OpenBluetoothAdapters, MarauderMenuAction::OpenBluetoothRaw,
+        MarauderMenuAction::OpenBluetoothFindMy,
         MarauderMenuAction::OpenBluetoothIBeacon, MarauderMenuAction::OpenBluetoothFlipper,
         MarauderMenuAction::OpenBluetoothFlock, MarauderMenuAction::OpenBluetoothMeta,
         MarauderMenuAction::OpenBluetoothSerial

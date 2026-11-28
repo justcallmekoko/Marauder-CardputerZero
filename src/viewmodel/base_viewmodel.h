@@ -149,6 +149,12 @@ public:
         uint32_t last_seen{};
     };
     void show_bluetooth_page(uint32_t filter);
+    void show_bluetooth_adapters_page();
+    void move_bluetooth_adapter(int direction);
+    void select_bluetooth_adapter();
+    std::vector<std::size_t> bluetooth_adapter_indices() const;
+    std::size_t bluetooth_adapter_cursor() const { return bluetooth_radio_cursor_; }
+    const std::string& selected_bluetooth_id() const { return model_.selected_bluetooth_id(); }
     void bluetooth_start_stop();
     void bluetooth_toggle_builder();
     void bluetooth_show_filters();
@@ -157,7 +163,9 @@ public:
     void bluetooth_select();
     void bluetooth_back();
     unsigned bluetooth_view() const { return bluetooth_view_; }
-    bool bluetooth_running() const { return bluetooth_hci_session_.active() && bluetooth_session_.active(); }
+    bool bluetooth_running() const { return bluetooth_hci_session_.ready() && bluetooth_session_.active(); }
+    bool bluetooth_starting() const { return bluetooth_hci_session_.active() && !bluetooth_hci_session_.ready(); }
+    const std::string& bluetooth_adapter_name() const { return bluetooth_adapter_name_; }
     bool bluetooth_builder() const { return bluetooth_builder_; }
     uint32_t bluetooth_filter() const { return bluetooth_filter_; }
     std::size_t bluetooth_cursor() const { return bluetooth_cursor_; }
@@ -399,6 +407,9 @@ private:
     std::vector<BluetoothRecord> bluetooth_devices_;
     std::unordered_map<std::string, std::size_t> bluetooth_index_;
     std::string bluetooth_adapter_id_;
+    std::string bluetooth_adapter_name_;
+    std::size_t bluetooth_radio_cursor_{};
+    const platform::RadioDevice* collection_bluetooth_radio() const;
     model::FoxHunt bluetooth_fox_;
     uint32_t bluetooth_filter_{};
     uint64_t bluetooth_total_{};

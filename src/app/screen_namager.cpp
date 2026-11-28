@@ -136,6 +136,7 @@ void ScreenManager::flush_requested_page() {
             has_loaded_page_ = true;
             return;
         case model::AppPage::RadioSetup:
+        case model::AppPage::BluetoothAdapters:
             load_screen(std::make_unique<screen::RadioSetupScreen>(view_model_, assets_));
             loaded_page_ = requested_page_;
             has_loaded_page_ = true;
