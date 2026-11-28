@@ -35,7 +35,7 @@ const std::vector<Item>& items_for(Id menu) {
         {"Traffic graph", Color::Green, Action::OpenTraffic, Id::Main, false, true, RadioRequirement::Selected},
         {"Raw capture", Color::Orange, Action::OpenRawCapture, Id::Main, false, true, RadioRequirement::Monitor},
         {"Pineapple scan", Color::Yellow, Action::OpenPineapple, Id::Main, false, true, RadioRequirement::Monitor},
-        {"Remote ID", Color::Magenta, Action::OpenRemoteId, Id::Main, false, true, RadioRequirement::Monitor},
+        {"Remote ID", Color::Magenta, Action::OpenRemoteId, Id::Main, false, true},
     };
     static const std::vector<Item> wifi_attacks = {
         {"Deauth", Color::Red, Action::None, Id::Main, false, false},

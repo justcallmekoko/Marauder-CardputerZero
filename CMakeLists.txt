@@ -6,7 +6,7 @@
 
 cmake_minimum_required(VERSION 3.31)
 
-project(marauder_cardputerzero VERSION 0.6.68 LANGUAGES C CXX)
+project(marauder_cardputerzero VERSION 0.6.69 LANGUAGES C CXX)
 
 include(CTest)
 find_package(Threads REQUIRED)
@@ -672,6 +672,10 @@ if(BUILD_TESTING AND USE_DESKTOP)
         src/platform/wifi_security.cpp src/platform/pineapple_wifi.cpp)
     target_include_directories(remote_id_wifi_test PRIVATE src/platform)
     add_test(NAME remote_id_wifi_test COMMAND remote_id_wifi_test)
+    add_executable(remote_id_ble_test tests/remote_id_ble_test.cpp src/platform/remote_id_ble.cpp
+        src/platform/RemoteIdDecoder.cpp src/platform/RemoteIdModel.cpp)
+    target_include_directories(remote_id_ble_test PRIVATE src/platform)
+    add_test(NAME remote_id_ble_test COMMAND remote_id_ble_test)
     add_executable(pineapple_wifi_test tests/pineapple_wifi_test.cpp src/platform/pineapple_wifi.cpp
         src/platform/raw_wifi.cpp src/platform/wifi_security.cpp src/platform/remote_id_wifi.cpp
         src/platform/RemoteIdDecoder.cpp src/platform/RemoteIdModel.cpp)

@@ -1,5 +1,5 @@
 #include "RemoteIdModel.h"
-// Adapted from ESP32 Marauder RemoteIdModel (MIT); Wi-Fi transports only.
+// Adapted from ESP32 Marauder RemoteIdModel (MIT).
 
 #include <cmath>
 #include <climits>
@@ -342,6 +342,7 @@ void remoteIdFormatTransports(uint8_t transportMask, char* output,
   } transports[] = {
       {static_cast<uint8_t>(RemoteIdTransport::WifiBeacon), "WB"},
       {static_cast<uint8_t>(RemoteIdTransport::WifiNan), "WN"},
+      {static_cast<uint8_t>(RemoteIdTransport::Bluetooth), "BLE"},
   };
   size_t used = 0;
   for (const auto& transport : transports) {

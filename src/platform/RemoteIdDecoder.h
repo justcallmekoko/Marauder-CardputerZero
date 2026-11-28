@@ -1,5 +1,5 @@
 #pragma once
-// Adapted from ESP32 Marauder RemoteIdDecoder (MIT); Wi-Fi transports only.
+// Adapted from ESP32 Marauder RemoteIdDecoder (MIT).
 
 #include <stddef.h>
 #include <stdint.h>

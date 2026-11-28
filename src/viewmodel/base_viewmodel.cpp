@@ -468,7 +468,40 @@ void BaseViewModel::update_bluetooth_capture() {
     } else if (!state.empty()) { bluetooth_status_ = state; changed = true; }
     if (changed) bluetooth_generation_.set(bluetooth_generation_.value() + 1);
 }
+void BaseViewModel::update_remote_bluetooth() {
+    if (model_.current_page() != model::AppPage::RemoteId ||
+        !bluetooth_hci_session_.active() || !bluetooth_session_.active()) return;
+    std::string discovery_state;
+    bluetooth_session_.poll(discovery_state);
+    if (!bluetooth_session_.active()) {
+        bluetooth_hci_session_.stop();
+        remote_message_ = discovery_state.empty() ? "Bluetooth discovery ended" : discovery_state;
+        publish_remote();
+        return;
+    }
+    std::string raw_state;
+    std::vector<platform::remote_id::Packet> incoming;
+    for (const auto& sighting : bluetooth_hci_session_.poll(raw_state)) {
+        platform::remote_id::Packet packet;
+        if (platform::remote_id::decode_bluetooth_report(sighting, packet))
+            incoming.push_back(std::move(packet));
+    }
+    if (!incoming.empty()) finish_remote_observations(incoming);
+    if (raw_state == "Raw Bluetooth helper timed out" && bluetooth_hci_retries_++ == 0) {
+        const auto* radio = collection_bluetooth_radio();
+        if (radio && bluetooth_hci_session_.start(radio->name)) return;
+    }
+    if (!raw_state.empty() && raw_state != "Ready") {
+        bluetooth_session_.stop();
+        bluetooth_hci_session_.stop();
+        remote_message_ = raw_state;
+        publish_remote();
+    }
+}
 void BaseViewModel::show_remote_id_page() {
+    bluetooth_session_.stop();
+    bluetooth_hci_session_.stop();
+    bluetooth_hci_retries_ = 0;
     remote_session_ = true;
     raw_session_ = false;
     pineapple_session_ = false;
@@ -476,7 +509,14 @@ void BaseViewModel::show_remote_id_page() {
     remote_message_.clear();
     model_.set_current_page(model::AppPage::RemoteId);
     publish_navigation();
-    if (!wifi_scan_running_) start_wifi_scan();
+    start_wifi_scan();
+    const auto* radio = collection_bluetooth_radio();
+    if (radio && bluetooth_hci_session_.start(radio->name)) {
+        if (!bluetooth_session_.start(radio->name, true)) bluetooth_hci_session_.stop();
+    }
+    if (!wifi_scan_running_ && !remote_ble_active())
+        remote_message_ = "Enable a WiFi monitor or Bluetooth adapter";
+    publish_remote();
 }
 void BaseViewModel::show_map_packs_page() {
     map_pack_cursor_ = model_.map_pack();
@@ -751,24 +791,27 @@ void BaseViewModel::remote_back() {
 void BaseViewModel::begin_remote_fox_hunt() {
     const auto* aircraft = remote_store_.at(remote_cursor_);
     if (!aircraft) return;
-    if (!wifi_scan_running_) { remote_message_ = "Monitor capture unavailable"; return; }
     const auto found = std::find_if(wifi_frequencies_.begin(), wifi_frequencies_.end(), [&](unsigned mhz) {
         return platform::wireless::channel_number(static_cast<int>(mhz)) == aircraft->lastWifiChannel;
     });
-    if (found == wifi_frequencies_.end()) { remote_message_ = "Aircraft channel unavailable"; return; }
-    if (pcap_pinned_frequency() && pcap_pinned_frequency() != *found) {
+    const bool wifi_target = wifi_scan_running_ && aircraft->lastWifiChannel && found != wifi_frequencies_.end();
+    if (!wifi_target && !(remote_ble_active() &&
+          (aircraft->transportMask & static_cast<uint8_t>(RemoteIdTransport::Bluetooth)))) {
+        remote_message_ = "Aircraft radio unavailable"; return;
+    }
+    if (wifi_target && pcap_pinned_frequency() && pcap_pinned_frequency() != *found) {
         remote_message_ = "Stop target PCAP to change channel"; return;
     }
-    fox_hunt_.begin(mac_text(aircraft->mac), *found);
+    fox_hunt_.begin(mac_text(aircraft->mac), wifi_target ? *found : 0);
     fox_target_ = FoxTarget::Aircraft;
     fox_label_ = aircraft->hasUasId ? aircraft->uasId : "Remote ID aircraft";
-    fox_vendor_ = "Wi-Fi Remote ID";
+    fox_vendor_ = wifi_target ? "Wi-Fi Remote ID" : "Bluetooth Remote ID";
     remote_view_ = 3;
     remote_message_.clear();
     wifi_hop_tick_ = 0;
     wifi_tune_failed_frequency_ = 0;
     fox_ui_tick_ = lv_tick_get();
-    advance_wifi_channel();
+    if (wifi_target) advance_wifi_channel();
 }
 void BaseViewModel::show_pcap_files_page() {
     stop_wifi_capture();
@@ -2296,7 +2339,7 @@ void BaseViewModel::wifi_scan_timer_cb(lv_timer_t* timer) {
                 self->wifi_scan_details_expanded_ = true;
             }
             if (self->wifi_view_ == 14) self->wifi_view_ = 12;
-            if (self->remote_view_ == 3) {
+            if (self->remote_view_ == 3 && self->fox_hunt_.frequency_mhz() != 0) {
                 self->remote_view_ = 1;
                 self->remote_message_ = "Monitor capture stopped";
                 self->publish_remote();
@@ -2307,6 +2350,7 @@ void BaseViewModel::wifi_scan_timer_cb(lv_timer_t* timer) {
         self->finish_radio_setting();
         self->update_gps_tool();
         self->update_bluetooth_capture();
+        self->update_remote_bluetooth();
     }
 }
 
@@ -2466,7 +2510,7 @@ void BaseViewModel::finish_remote_observations(std::vector<platform::remote_id::
     bool changed = false;
     for (const auto& packet : incoming) {
         const auto& decoded = packet.record;
-        if (fox_target_ == FoxTarget::Aircraft && wifi_tuned_frequency_ == fox_hunt_.frequency_mhz())
+        if (fox_target_ == FoxTarget::Aircraft && packet.frequency_mhz == fox_hunt_.frequency_mhz())
             fox_hunt_.observe(mac_text(decoded.mac), static_cast<unsigned>(packet.frequency_mhz),
                               packet.rssi, packet.has_rssi, now);
         auto* record = remote_store_.findByMac(decoded.mac);
@@ -2483,7 +2527,7 @@ void BaseViewModel::finish_remote_observations(std::vector<platform::remote_id::
             record->transportMask |= static_cast<uint8_t>(packet.transport);
         }
         merge_remote_record(*record, decoded);
-        record->lastWifiChannel = decoded.lastWifiChannel;
+        if (decoded.lastWifiChannel) record->lastWifiChannel = decoded.lastWifiChannel;
         changed = true;
     }
     if (remote_store_.updateLifecycle(now, 15000) || changed) publish_remote();

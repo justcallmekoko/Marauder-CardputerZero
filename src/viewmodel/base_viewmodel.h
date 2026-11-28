@@ -23,6 +23,7 @@
 #include "raw_wifi.h"
 #include "pineapple_wifi.h"
 #include "remote_id_wifi.h"
+#include "remote_id_ble.h"
 #include "pcap_capture.h"
 #include "gps_log.h"
 #include "wardrive_files.h"
@@ -242,6 +243,8 @@ public:
     int remote_view() const { return remote_view_; }
     std::size_t remote_operation_cursor() const { return remote_operation_cursor_; }
     const std::string& remote_message() const { return remote_message_; }
+    bool remote_ble_active() const { return bluetooth_session_.active() && bluetooth_hci_session_.active(); }
+    bool remote_wifi_active() const { return wifi_scan_running_; }
     unsigned remote_detail_tab() const { return remote_detail_tab_; }
     bool remote_position(int32_t& lat_e7, int32_t& lon_e7) const { return gps_session_.position(lat_e7, lon_e7); }
     void remote_move(int direction);
@@ -423,6 +426,7 @@ private:
     bool bluetooth_builder_{};
     std::string bluetooth_status_;
     void update_bluetooth_capture();
+    void update_remote_bluetooth();
     std::unordered_set<std::string> bluetooth_seen_;
     platform::wireless::WardriveChannels wardrive_channels_;
     std::deque<WardriveSighting> wardrive_sightings_;
