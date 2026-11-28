@@ -313,6 +313,7 @@ void BaseViewModel::bluetooth_start_stop() {
         bluetooth_hci_session_.stop();
         bluetooth_status_ = "Paused";
     } else {
+        bluetooth_hci_retries_ = 0;
         const auto* radio = collection_bluetooth_radio();
         if (!radio) bluetooth_status_ = model_.selected_bluetooth_id().empty() ?
             "Enable Bluetooth in Device > Radio setup" : "Selected adapter unavailable; choose another";
@@ -442,6 +443,15 @@ void BaseViewModel::update_bluetooth_capture() {
         }
         if (bluetooth_view_ == 5)
             bluetooth_fox_.observe(sighting.address, 0, sighting.rssi, true, lv_tick_get());
+    }
+    if (raw_state == "Raw Bluetooth helper timed out" && bluetooth_hci_retries_ == 0) {
+        const auto* radio = collection_bluetooth_radio();
+        if (radio && bluetooth_hci_session_.start(radio->name)) {
+            bluetooth_hci_retries_ = 1;
+            bluetooth_status_ = "Retrying raw Bluetooth";
+            bluetooth_generation_.set(bluetooth_generation_.value() + 1);
+            return;
+        }
     }
     if (!raw_state.empty() && raw_state != "Ready") {
         bluetooth_session_.stop();

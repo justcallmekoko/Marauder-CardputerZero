@@ -409,7 +409,7 @@ std::vector<BluetoothObservation> BluetoothHciSession::poll(std::string& status)
         }
     }
     if (socket_ >= 0 && !ready_ &&
-        std::chrono::steady_clock::now() - started_ > std::chrono::seconds(2)) {
+        std::chrono::steady_clock::now() - started_ > std::chrono::seconds(6)) {
         status = "Raw Bluetooth helper timed out";
         stop();
     }

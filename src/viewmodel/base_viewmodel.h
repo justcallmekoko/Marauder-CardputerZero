@@ -408,6 +408,7 @@ private:
     std::unordered_map<std::string, std::size_t> bluetooth_index_;
     std::string bluetooth_adapter_id_;
     std::string bluetooth_adapter_name_;
+    unsigned bluetooth_hci_retries_{};
     std::size_t bluetooth_radio_cursor_{};
     const platform::RadioDevice* collection_bluetooth_radio() const;
     model::FoxHunt bluetooth_fox_;
