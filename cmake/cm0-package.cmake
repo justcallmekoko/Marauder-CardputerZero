@@ -31,6 +31,9 @@ if(APP_INSTALL_SYSTEMD_SERVICE)
 endif()
 
 install(PROGRAMS src/platform/helpers/radio-inventory src/platform/helpers/gps-session src/platform/helpers/monitor-session src/platform/helpers/bluetooth-session src/platform/helpers/wardrive-upload DESTINATION lib/marauder)
+if(TARGET marauder_ble_hci_monitor)
+    install(TARGETS marauder_ble_hci_monitor RUNTIME DESTINATION lib/marauder)
+endif()
 
 install(TARGETS ${PROJECT_NAME}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}

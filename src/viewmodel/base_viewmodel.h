@@ -19,6 +19,7 @@
 #include "wardrive_channels.h"
 #include "wireless_scan.h"
 #include "radio_power.h"
+#include "ble_classify.h"
 #include "raw_wifi.h"
 #include "pineapple_wifi.h"
 #include "remote_id_wifi.h"
@@ -141,6 +142,46 @@ public:
     void show_adapters_page();
     void show_wifi_scan_page();
     void show_raw_capture_page();
+    struct BluetoothRecord {
+        platform::BluetoothObservation observation;
+        platform::ble::Classification classification;
+        uint64_t sightings{};
+        uint32_t last_seen{};
+    };
+    void show_bluetooth_page(uint32_t filter);
+    void show_bluetooth_adapters_page();
+    void move_bluetooth_adapter(int direction);
+    void select_bluetooth_adapter();
+    std::vector<std::size_t> bluetooth_adapter_indices() const;
+    std::size_t bluetooth_adapter_cursor() const { return bluetooth_radio_cursor_; }
+    bool bluetooth_adapter_details_open() const { return bluetooth_adapter_details_expanded_; }
+    void toggle_bluetooth_adapter_details();
+    const std::string& selected_bluetooth_id() const { return model_.selected_bluetooth_id(); }
+    void bluetooth_start_stop();
+    void bluetooth_toggle_builder();
+    void bluetooth_show_filters();
+    void bluetooth_show_devices();
+    void bluetooth_move(int direction);
+    void bluetooth_select();
+    void bluetooth_back();
+    unsigned bluetooth_view() const { return bluetooth_view_; }
+    bool bluetooth_running() const { return bluetooth_hci_session_.ready() && bluetooth_session_.active(); }
+    bool bluetooth_starting() const { return bluetooth_hci_session_.active() && !bluetooth_hci_session_.ready(); }
+    const std::string& bluetooth_adapter_name() const { return bluetooth_adapter_name_; }
+    bool bluetooth_builder() const { return bluetooth_builder_; }
+    uint32_t bluetooth_filter() const { return bluetooth_filter_; }
+    std::size_t bluetooth_cursor() const { return bluetooth_cursor_; }
+    std::size_t bluetooth_filter_cursor() const { return bluetooth_filter_cursor_; }
+    std::size_t bluetooth_action_cursor() const { return bluetooth_action_cursor_; }
+    uint64_t bluetooth_total() const { return bluetooth_total_; }
+    std::size_t bluetooth_feed_offset() const { return bluetooth_feed_offset_; }
+    const std::string& bluetooth_status() const { return bluetooth_status_; }
+    const std::deque<BluetoothRecord>& bluetooth_feed() const { return bluetooth_feed_; }
+    const std::vector<BluetoothRecord>& bluetooth_devices() const { return bluetooth_devices_; }
+    std::vector<std::size_t> bluetooth_visible_indices() const;
+    const BluetoothRecord* bluetooth_selected() const;
+    const model::FoxHunt& bluetooth_fox() const { return bluetooth_fox_; }
+    lv_subject_t* bluetooth_subject() { return bluetooth_generation_.native(); }
     void show_remote_id_page();
     void show_map_packs_page();
     void move_map_pack(int direction);
@@ -362,6 +403,26 @@ private:
     uint32_t monitor_status_tick_{};
     platform::GpsSession gps_session_;
     platform::BluetoothSession bluetooth_session_;
+    platform::BluetoothHciSession bluetooth_hci_session_;
+    reactive::IntSubject bluetooth_generation_{0};
+    std::deque<BluetoothRecord> bluetooth_feed_;
+    std::vector<BluetoothRecord> bluetooth_devices_;
+    std::unordered_map<std::string, std::size_t> bluetooth_index_;
+    std::string bluetooth_adapter_id_;
+    std::string bluetooth_adapter_name_;
+    unsigned bluetooth_hci_retries_{};
+    std::size_t bluetooth_radio_cursor_{};
+    bool bluetooth_adapter_details_expanded_{};
+    const platform::RadioDevice* collection_bluetooth_radio() const;
+    model::FoxHunt bluetooth_fox_;
+    uint32_t bluetooth_filter_{};
+    uint64_t bluetooth_total_{};
+    unsigned bluetooth_view_{}; // 0 feed, 1 filters, 2 devices, 3 actions, 4 information, 5 fox hunt
+    std::size_t bluetooth_cursor_{}, bluetooth_filter_cursor_{}, bluetooth_action_cursor_{};
+    std::size_t bluetooth_feed_offset_{};
+    bool bluetooth_builder_{};
+    std::string bluetooth_status_;
+    void update_bluetooth_capture();
     std::unordered_set<std::string> bluetooth_seen_;
     platform::wireless::WardriveChannels wardrive_channels_;
     std::deque<WardriveSighting> wardrive_sightings_;

@@ -166,6 +166,7 @@ BaseViewModel::~BaseViewModel() {
     if (wardrive_upload_job_.valid()) wardrive_upload_job_.wait();
     if (credential_check_job_.valid()) credential_check_job_.wait();
     bluetooth_session_.stop();
+    bluetooth_hci_session_.stop();
     gps_log_.stop();
     pcap_capture_.stop();
     if (changed_light_) set_light(original_light_);
@@ -200,6 +201,7 @@ bool BaseViewModel::is_dark_mode() const { return model_.dark_mode(); }
 model::AppPage BaseViewModel::current_page() const { return model_.current_page(); }
 void BaseViewModel::show_dashboard_page() {
     bluetooth_session_.stop();
+    bluetooth_hci_session_.stop();
     gps_log_.stop();
     wardrive_session_ = false;
     stop_wifi_capture();
@@ -214,6 +216,7 @@ void BaseViewModel::show_diagnostics_page() {
 }
 void BaseViewModel::show_adapters_page() {
     bluetooth_session_.stop();
+    bluetooth_hci_session_.stop();
     gps_log_.stop();
     wardrive_session_ = false;
     stop_wifi_capture();
@@ -239,6 +242,231 @@ void BaseViewModel::show_raw_capture_page() {
     model_.set_current_page(model::AppPage::WifiScan);
     publish_navigation();
     if (!wifi_scan_running_) start_wifi_scan();
+}
+void BaseViewModel::show_bluetooth_page(uint32_t filter) {
+    stop_wifi_capture();
+    gps_log_.stop();
+    wardrive_session_ = false;
+    bluetooth_session_.stop();
+    bluetooth_hci_session_.stop();
+    bluetooth_feed_.clear();
+    const auto* radio = collection_bluetooth_radio();
+    const std::string adapter_id = radio ? radio->id : "";
+    bluetooth_adapter_name_ = radio ? radio->name : "No adapter";
+    if (adapter_id != bluetooth_adapter_id_) {
+        bluetooth_devices_.clear();
+        bluetooth_index_.clear();
+        bluetooth_total_ = 0;
+        bluetooth_adapter_id_ = adapter_id;
+    }
+    bluetooth_fox_.reset();
+    bluetooth_feed_offset_ = 0;
+    bluetooth_filter_ = filter;
+    bluetooth_builder_ = filter != 0;
+    bluetooth_view_ = 0;
+    bluetooth_cursor_ = bluetooth_action_cursor_ = 0;
+    bluetooth_filter_cursor_ = 0;
+    bluetooth_status_ = "Starting";
+    model_.set_current_page(model::AppPage::BluetoothCapture);
+    publish_navigation();
+    bluetooth_start_stop();
+    bluetooth_generation_.set(bluetooth_generation_.value() + 1);
+}
+std::vector<std::size_t> BaseViewModel::bluetooth_adapter_indices() const {
+    std::vector<std::size_t> indices;
+    for (std::size_t i = 0; i < radio_list_.devices.size(); ++i)
+        if (radio_list_.devices[i].kind == "Bluetooth") indices.push_back(i);
+    return indices;
+}
+const platform::RadioDevice* BaseViewModel::collection_bluetooth_radio() const {
+    const auto& saved = model_.selected_bluetooth_id();
+    const auto it = std::find_if(radio_list_.devices.begin(), radio_list_.devices.end(), [&](const auto& item) {
+        return item.kind == "Bluetooth" && item.state == "On" && (saved.empty() || item.id == saved);
+    });
+    return it == radio_list_.devices.end() ? nullptr : &*it;
+}
+void BaseViewModel::show_bluetooth_adapters_page() {
+    const auto indices = bluetooth_adapter_indices();
+    bluetooth_radio_cursor_ = 0;
+    for (std::size_t i = 0; i < indices.size(); ++i)
+        if (radios()[indices[i]].id == model_.selected_bluetooth_id()) bluetooth_radio_cursor_ = i;
+    bluetooth_adapter_details_expanded_ = false;
+    model_.set_current_page(model::AppPage::BluetoothAdapters);
+    publish_navigation();
+    refresh_radios();
+}
+void BaseViewModel::move_bluetooth_adapter(int direction) {
+    const auto count = bluetooth_adapter_indices().size();
+    if (count) bluetooth_radio_cursor_ = (bluetooth_radio_cursor_ + count + (direction < 0 ? count - 1 : 1)) % count;
+    marauder_menu_generation_subject_.set(marauder_menu_generation_subject_.value() + 1);
+}
+void BaseViewModel::toggle_bluetooth_adapter_details() {
+    bluetooth_adapter_details_expanded_ = !bluetooth_adapter_details_expanded_;
+    marauder_menu_generation_subject_.set(marauder_menu_generation_subject_.value() + 1);
+}
+void BaseViewModel::select_bluetooth_adapter() {
+    const auto indices = bluetooth_adapter_indices();
+    if (radio_busy() || bluetooth_radio_cursor_ >= indices.size()) return;
+    const auto& radio = radios()[indices[bluetooth_radio_cursor_]];
+    radio_list_.message = radio.state != "On" ? "Enable in Radio setup" :
+        model_.set_selected_bluetooth_id(radio.id) ? "Adapter saved" : "Could not save adapter";
+    marauder_menu_generation_subject_.set(marauder_menu_generation_subject_.value() + 1);
+}
+void BaseViewModel::bluetooth_start_stop() {
+    if (bluetooth_session_.active() || bluetooth_hci_session_.active()) {
+        bluetooth_session_.stop();
+        bluetooth_hci_session_.stop();
+        bluetooth_status_ = "Paused";
+    } else {
+        bluetooth_hci_retries_ = 0;
+        const auto* radio = collection_bluetooth_radio();
+        if (!radio) bluetooth_status_ = model_.selected_bluetooth_id().empty() ?
+            "Enable Bluetooth in Device > Radio setup" : "Selected adapter unavailable; choose another";
+        else if (!bluetooth_hci_session_.start(radio->name))
+            bluetooth_status_ = "Raw Bluetooth helper unavailable";
+        else if (!bluetooth_session_.start(radio->name, true)) {
+            bluetooth_hci_session_.stop();
+            bluetooth_status_ = "Bluetooth discovery unavailable";
+        } else bluetooth_status_ = std::string("Starting ") + radio->name;
+    }
+    bluetooth_generation_.set(bluetooth_generation_.value() + 1);
+}
+void BaseViewModel::bluetooth_toggle_builder() {
+    bluetooth_builder_ = !bluetooth_builder_;
+    bluetooth_generation_.set(bluetooth_generation_.value() + 1);
+}
+void BaseViewModel::bluetooth_show_filters() {
+    bluetooth_view_ = bluetooth_view_ == 1 ? 0 : 1;
+    bluetooth_filter_cursor_ = 0;
+    bluetooth_generation_.set(bluetooth_generation_.value() + 1);
+}
+void BaseViewModel::bluetooth_show_devices() {
+    bluetooth_view_ = 2;
+    bluetooth_cursor_ = 0;
+    bluetooth_generation_.set(bluetooth_generation_.value() + 1);
+}
+std::vector<std::size_t> BaseViewModel::bluetooth_visible_indices() const {
+    std::vector<std::size_t> visible;
+    for (std::size_t i = 0; i < bluetooth_devices_.size(); ++i)
+        if (!bluetooth_filter_ || (bluetooth_devices_[i].classification.matches & bluetooth_filter_))
+            visible.push_back(i);
+    return visible;
+}
+const BaseViewModel::BluetoothRecord* BaseViewModel::bluetooth_selected() const {
+    const auto visible = bluetooth_visible_indices();
+    return bluetooth_cursor_ < visible.size() ? &bluetooth_devices_[visible[bluetooth_cursor_]] : nullptr;
+}
+void BaseViewModel::bluetooth_move(int direction) {
+    if (bluetooth_view_ >= 4) return;
+    if (bluetooth_view_ == 0) {
+        if (direction < 0 && bluetooth_feed_offset_ + 1 < bluetooth_feed_.size()) ++bluetooth_feed_offset_;
+        if (direction > 0 && bluetooth_feed_offset_) --bluetooth_feed_offset_;
+        bluetooth_generation_.set(bluetooth_generation_.value() + 1);
+        return;
+    }
+    std::size_t* cursor = bluetooth_view_ == 1 ? &bluetooth_filter_cursor_ :
+        bluetooth_view_ == 3 ? &bluetooth_action_cursor_ : &bluetooth_cursor_;
+    const auto count = bluetooth_view_ == 1 ? static_cast<std::size_t>(platform::ble::Kind::Count) + 1 :
+        bluetooth_view_ == 3 ? 2u : bluetooth_visible_indices().size();
+    if (count) *cursor = (*cursor + count + (direction < 0 ? count - 1 : 1)) % count;
+    bluetooth_generation_.set(bluetooth_generation_.value() + 1);
+}
+void BaseViewModel::bluetooth_select() {
+    if (bluetooth_view_ == 0) { bluetooth_start_stop(); return; }
+    if (bluetooth_view_ == 1) {
+        bluetooth_filter_ = bluetooth_filter_cursor_ ?
+            bluetooth_filter_ ^ platform::ble::bit(static_cast<platform::ble::Kind>(bluetooth_filter_cursor_ - 1)) : 0;
+        bluetooth_feed_.clear();
+        bluetooth_feed_offset_ = 0;
+        bluetooth_cursor_ = 0;
+    } else if (bluetooth_view_ == 2 && bluetooth_selected()) {
+        bluetooth_action_cursor_ = 0;
+        bluetooth_view_ = 3;
+    } else if (bluetooth_view_ == 3 && bluetooth_selected()) {
+        bluetooth_view_ = bluetooth_action_cursor_ ? 5 : 4;
+        if (bluetooth_view_ == 5) {
+            bluetooth_fox_.begin(bluetooth_selected()->observation.address, 0);
+            if (!bluetooth_session_.active() || !bluetooth_hci_session_.active()) {
+                bluetooth_session_.stop();
+                bluetooth_hci_session_.stop();
+                bluetooth_start_stop();
+            }
+        }
+    }
+    bluetooth_generation_.set(bluetooth_generation_.value() + 1);
+}
+void BaseViewModel::bluetooth_back() {
+    bluetooth_view_ = bluetooth_view_ >= 4 ? 3 : bluetooth_view_ == 3 ? 2 : 0;
+    if (bluetooth_view_ != 5) bluetooth_fox_.reset();
+    bluetooth_generation_.set(bluetooth_generation_.value() + 1);
+}
+void BaseViewModel::update_bluetooth_capture() {
+    if (model_.current_page() != model::AppPage::BluetoothCapture ||
+        !bluetooth_hci_session_.active() || !bluetooth_session_.active()) return;
+    std::string state;
+    bluetooth_session_.poll(state); // BlueZ drives scanning; HCI delivers the uncoalesced reports below.
+    if (!bluetooth_session_.active()) {
+        bluetooth_hci_session_.stop();
+        bluetooth_status_ = state.empty() ? "Bluetooth discovery ended" : state;
+        bluetooth_generation_.set(bluetooth_generation_.value() + 1);
+        return;
+    }
+    std::string raw_state;
+    bool changed = false;
+    for (auto& sighting : bluetooth_hci_session_.poll(raw_state)) {
+        ++bluetooth_total_;
+        const auto classified = platform::ble::classify(sighting);
+        if (!bluetooth_filter_ || (classified.matches & bluetooth_filter_)) {
+            if (bluetooth_feed_.size() == 64) bluetooth_feed_.pop_front();
+            bluetooth_feed_.push_back({sighting, classified, 1, lv_tick_get()});
+            changed = true;
+        }
+        if (bluetooth_builder_) {
+            const auto key = sighting.address_type + ":" + sighting.address;
+            const auto known = bluetooth_index_.find(key);
+            if (known != bluetooth_index_.end()) {
+                auto& record = bluetooth_devices_[known->second];
+                const auto prior = record.classification;
+                const auto prior_name = record.observation.name;
+                record.observation = sighting;
+                if (record.observation.name.empty()) record.observation.name = prior_name;
+                record.classification = classified;
+                record.classification.matches |= prior.matches;
+                if (!classified.matches && prior.matches) {
+                    record.classification.type = prior.type;
+                    record.classification.evidence = prior.evidence;
+                    record.classification.detail = prior.detail;
+                }
+                if (record.classification.vendor == "Unknown") record.classification.vendor = prior.vendor;
+                ++record.sightings;
+                record.last_seen = lv_tick_get();
+            } else if (bluetooth_devices_.size() < 512) {
+                bluetooth_index_[key] = bluetooth_devices_.size();
+                bluetooth_devices_.push_back({sighting, classified, 1, lv_tick_get()});
+            } else bluetooth_status_ = "Device list full (512)";
+            changed = true;
+        }
+        if (bluetooth_view_ == 5)
+            bluetooth_fox_.observe(sighting.address, 0, sighting.rssi, true, lv_tick_get());
+    }
+    if (raw_state == "Raw Bluetooth helper timed out" && bluetooth_hci_retries_ == 0) {
+        const auto* radio = collection_bluetooth_radio();
+        if (radio && bluetooth_hci_session_.start(radio->name)) {
+            bluetooth_hci_retries_ = 1;
+            bluetooth_status_ = "Retrying raw Bluetooth";
+            bluetooth_generation_.set(bluetooth_generation_.value() + 1);
+            return;
+        }
+    }
+    if (!raw_state.empty() && raw_state != "Ready") {
+        bluetooth_session_.stop();
+        bluetooth_status_ = raw_state;
+        changed = true;
+    } else if (raw_state == "Ready" || state == "Scanning") {
+        bluetooth_status_ = "Raw HCI reports";
+        changed = true;
+    } else if (!state.empty()) { bluetooth_status_ = state; changed = true; }
+    if (changed) bluetooth_generation_.set(bluetooth_generation_.value() + 1);
 }
 void BaseViewModel::show_remote_id_page() {
     remote_session_ = true;
@@ -378,9 +606,8 @@ std::string BaseViewModel::gps_receiver_name() const {
 }
 void BaseViewModel::toggle_gps_recording() {
     if (gps_tool_ == GpsTool::Info) return;
-    const auto bluetooth_radio = std::find_if(radio_list_.devices.begin(), radio_list_.devices.end(),
-        [](const auto& item) { return item.kind == "Bluetooth" && item.state == "On"; });
-    const bool bluetooth_available = bluetooth_radio != radio_list_.devices.end();
+    const auto* bluetooth_radio = collection_bluetooth_radio();
+    const bool bluetooth_available = bluetooth_radio != nullptr;
     if (gps_log_.active()) {
         bluetooth_session_.stop();
         bluetooth_message_.clear();
@@ -961,6 +1188,14 @@ void BaseViewModel::marauder_menu_activate() {
         case model::MarauderMenuAction::OpenRawCapture:
             show_raw_capture_page();
             break;
+        case Action::OpenBluetoothRaw: show_bluetooth_page(0); break;
+        case Action::OpenBluetoothAdapters: show_bluetooth_adapters_page(); break;
+        case Action::OpenBluetoothFindMy: show_bluetooth_page(platform::ble::bit(platform::ble::Kind::FindMy)); break;
+        case Action::OpenBluetoothIBeacon: show_bluetooth_page(platform::ble::bit(platform::ble::Kind::IBeacon)); break;
+        case Action::OpenBluetoothFlipper: show_bluetooth_page(platform::ble::bit(platform::ble::Kind::Flipper)); break;
+        case Action::OpenBluetoothFlock: show_bluetooth_page(platform::ble::bit(platform::ble::Kind::Flock)); break;
+        case Action::OpenBluetoothMeta: show_bluetooth_page(platform::ble::bit(platform::ble::Kind::Meta)); break;
+        case Action::OpenBluetoothSerial: show_bluetooth_page(platform::ble::bit(platform::ble::Kind::SerialModule)); break;
         case model::MarauderMenuAction::OpenRemoteId:
             show_remote_id_page();
             break;
@@ -1130,6 +1365,15 @@ void BaseViewModel::finish_radio_setting() {
     radio_cursor_ = 0;
     for (std::size_t i = 0; i < radios().size(); ++i) {
         if (radios()[i].id == selected) { radio_cursor_ = i; break; }
+    }
+    if (model_.current_page() == model::AppPage::BluetoothAdapters) {
+        const auto indices = bluetooth_adapter_indices();
+        bluetooth_radio_cursor_ = 0;
+        for (std::size_t i = 0; i < indices.size(); ++i)
+            if (radios()[indices[i]].id == model_.selected_bluetooth_id()) {
+                bluetooth_radio_cursor_ = i;
+                break;
+            }
     }
     marauder_menu_generation_subject_.set(marauder_menu_generation_subject_.value() + 1);
 }
@@ -2062,6 +2306,7 @@ void BaseViewModel::wifi_scan_timer_cb(lv_timer_t* timer) {
         self->advance_wifi_channel();
         self->finish_radio_setting();
         self->update_gps_tool();
+        self->update_bluetooth_capture();
     }
 }
 

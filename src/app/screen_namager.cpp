@@ -16,6 +16,7 @@
 #include "remote_id_screen.h"
 #include "map_packs_screen.h"
 #include "gps_tool_screen.h"
+#include "bluetooth_capture_screen.h"
 
 namespace app {
 namespace {
@@ -69,7 +70,7 @@ void ScreenManager::show_dashboard_screen() {
 
 void ScreenManager::show_adapters_screen() {
     load_screen(std::make_unique<screen::AdaptersScreen>(view_model_, assets_));
-    loaded_page_ = model::AppPage::Adapters;
+    loaded_page_ = requested_page_;
     has_loaded_page_ = true;
 }
 
@@ -103,6 +104,11 @@ void ScreenManager::flush_requested_page() {
     }
 
     switch (requested_page_) {
+        case model::AppPage::BluetoothCapture:
+            load_screen(std::make_unique<screen::BluetoothCaptureScreen>(view_model_, assets_));
+            loaded_page_ = requested_page_;
+            has_loaded_page_ = true;
+            return;
         case model::AppPage::MapPacks:
             load_screen(std::make_unique<screen::MapPacksScreen>(view_model_, assets_));
             loaded_page_ = requested_page_;
@@ -135,6 +141,7 @@ void ScreenManager::flush_requested_page() {
             has_loaded_page_ = true;
             return;
         case model::AppPage::Adapters:
+        case model::AppPage::BluetoothAdapters:
             show_adapters_screen();
             return;
         case model::AppPage::WifiScan:

@@ -13,6 +13,19 @@ def clean(value):
     return "".join(c if 32 <= ord(c) < 127 else " " for c in str(value))[:48].strip()
 
 
+def hex_fields(values, limit=6):
+    """Bound the fields forwarded to the native classifier and display."""
+    result = []
+    for key, data in list(values.items())[:limit]:
+        try:
+            payload = bytes(data)[:64].hex().upper()
+            label = f"{int(key):04X}" if isinstance(key, int) else str(key).upper()
+            result.append(f"{label}:{payload}")
+        except (TypeError, ValueError):
+            continue
+    return ",".join(result)
+
+
 def main(adapter):
     if not re.fullmatch(r"hci[0-9]{1,3}", adapter):
         raise ValueError("Invalid Bluetooth adapter")
@@ -26,7 +39,8 @@ def main(adapter):
     loop = GLib.MainLoop()
 
     def emit(device_path, changed):
-        if not {"RSSI", "ManufacturerData", "ServiceData", "UUIDs", "Name", "TxPower"}.intersection(changed):
+        if not {"RSSI", "ManufacturerData", "ServiceData", "AdvertisingData",
+                "UUIDs", "Name", "TxPower"}.intersection(changed):
             return
         try:
             info = dbus.Interface(bus.get_object("org.bluez", device_path),
@@ -39,7 +53,12 @@ def main(adapter):
             rssi = changed.get("RSSI", info.get("RSSI"))
             if rssi is None:
                 return
-            print(f"device\t{address}\t{name}\t{int(rssi)}\t{kind}", flush=True)
+            manufacturer = hex_fields(info.get("ManufacturerData", {}))
+            services = hex_fields(info.get("ServiceData", {}))
+            ad_fields = hex_fields(info.get("AdvertisingData", {}))
+            uuids = ",".join(str(uuid).upper() for uuid in list(info.get("UUIDs", []))[:12])
+            print(f"device\t{address}\t{name}\t{int(rssi)}\t{kind}\t"
+                  f"{manufacturer}\t{services}\t{ad_fields}\t{uuids}", flush=True)
         except (dbus.DBusException, TypeError, ValueError):
             pass
 
@@ -62,7 +81,7 @@ def main(adapter):
     bus.add_signal_receiver(added, dbus_interface="org.freedesktop.DBus.ObjectManager",
                             signal_name="InterfacesAdded")
     GLib.io_add_watch(0, GLib.IO_IN | GLib.IO_HUP | GLib.IO_ERR, closed)
-    controller.SetDiscoveryFilter({"Transport": dbus.String("auto"),
+    controller.SetDiscoveryFilter({"Transport": dbus.String("le" if len(sys.argv) > 2 else "auto"),
                                    "DuplicateData": dbus.Boolean(True)})
     started = False
     try:
@@ -80,7 +99,7 @@ def main(adapter):
 
 if __name__ == "__main__":
     try:
-        if len(sys.argv) != 2:
+        if len(sys.argv) not in (2, 3) or (len(sys.argv) == 3 and sys.argv[2] != "le"):
             raise ValueError("Bluetooth adapter required")
         main(sys.argv[1])
     except (ValueError, dbus.DBusException) as error:

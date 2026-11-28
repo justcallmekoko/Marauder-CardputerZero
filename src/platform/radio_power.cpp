@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "radio_power.h"
 #include "wireless_adapters.h"
+#include "ble_classify.h"
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
@@ -11,6 +12,7 @@
 #include <cerrno>
 #include <cstring>
 #include <spawn.h>
+#include <poll.h>
 #include <signal.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
@@ -237,7 +239,7 @@ void BluetoothSession::stop() {
     child_ = socket_ = -1;
     pending_.clear();
 }
-bool BluetoothSession::start(const std::string& adapter) {
+bool BluetoothSession::start(const std::string& adapter, bool le_only) {
     stop();
     if (adapter.size() < 4 || adapter.size() > 6 || adapter.compare(0, 3, "hci") != 0 ||
         !std::all_of(adapter.begin() + 3, adapter.end(),
@@ -252,7 +254,8 @@ bool BluetoothSession::start(const std::string& adapter) {
         err = posix_spawn_file_actions_adddup2(&actions, ends[1], STDIN_FILENO);
         if (!err) err = posix_spawn_file_actions_adddup2(&actions, ends[1], STDOUT_FILENO);
         char program[] = "/usr/lib/marauder/bluetooth-session";
-        char* args[] = {program, const_cast<char*>(adapter.c_str()), nullptr};
+        char le[] = "le";
+        char* args[] = {program, const_cast<char*>(adapter.c_str()), le_only ? le : nullptr, nullptr};
         if (!err) err = posix_spawn(&child_, program, &actions, nullptr, args, environ);
         posix_spawn_file_actions_destroy(&actions);
     }
@@ -290,8 +293,19 @@ std::vector<BluetoothObservation> BluetoothSession::poll(std::string& status) {
             if (b == std::string::npos) continue;
             const auto c = line.find('\t', b + 1);
             if (c == std::string::npos) continue;
+            const auto d = line.find('\t', c + 1);
             BluetoothObservation item{line.substr(7, a - 7), line.substr(a + 1, b - a - 1),
-                                      line.substr(c + 1)};
+                                      line.substr(c + 1, d == std::string::npos ? d : d - c - 1)};
+            if (d != std::string::npos) {
+                const auto e = line.find('\t', d + 1);
+                const auto f = e == std::string::npos ? e : line.find('\t', e + 1);
+                const auto g = f == std::string::npos ? f : line.find('\t', f + 1);
+                if (g == std::string::npos) continue;
+                item.manufacturer_data = line.substr(d + 1, e - d - 1);
+                item.service_data = line.substr(e + 1, f - e - 1);
+                item.advertising_data = line.substr(f + 1, g - f - 1);
+                item.uuids = line.substr(g + 1);
+            }
             try { item.rssi = std::stoi(line.substr(b + 1, c - b - 1)); }
             catch (const std::exception&) { continue; }
             if (item.address.size() != 17 || item.rssi < -127 || item.rssi > 20) continue;
@@ -301,6 +315,103 @@ std::vector<BluetoothObservation> BluetoothSession::poll(std::string& status) {
                     std::isxdigit(static_cast<unsigned char>(item.address[i])) != 0;
             if (valid) found.push_back(std::move(item));
         }
+    }
+#endif
+    return found;
+}
+
+BluetoothHciSession::~BluetoothHciSession() { stop(); }
+void BluetoothHciSession::stop() {
+#if defined(__linux__) && !USE_DESKTOP
+    if (socket_ >= 0) {
+        shutdown(socket_, SHUT_WR);
+        if (child_ > 0) {
+            int status{};
+            bool exited = false;
+            for (int attempt = 0; attempt < 20; ++attempt) {
+                const auto result = waitpid(child_, &status, WNOHANG);
+                if (result == child_ || (result < 0 && errno == ECHILD)) { exited = true; break; }
+                if (result < 0 && errno != EINTR) break;
+                usleep(50000);
+            }
+            if (!exited) {
+                kill(child_, SIGTERM);
+                while (waitpid(child_, &status, 0) < 0 && errno == EINTR) {}
+            }
+        }
+        close(socket_);
+    }
+#endif
+    socket_ = child_ = -1;
+    ready_ = false;
+    pending_.clear();
+}
+bool BluetoothHciSession::start(const std::string& adapter) {
+    stop();
+    if (adapter.size() < 4 || adapter.size() > 6 || adapter.compare(0, 3, "hci") != 0 ||
+        !std::all_of(adapter.begin() + 3, adapter.end(),
+                     [](unsigned char c) { return c >= '0' && c <= '9'; })) return false;
+#if defined(__linux__) && !USE_DESKTOP
+    int ends[2];
+    if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, ends) != 0) return false;
+    posix_spawn_file_actions_t actions;
+    int err = posix_spawn_file_actions_init(&actions);
+    if (!err) {
+        err = posix_spawn_file_actions_adddup2(&actions, ends[1], STDIN_FILENO);
+        if (!err) err = posix_spawn_file_actions_adddup2(&actions, ends[1], STDOUT_FILENO);
+        char sudo[] = "/usr/bin/sudo", no_prompt[] = "-n", helper[] = "/usr/lib/marauder/ble-hci-monitor";
+        char* args[] = {sudo, no_prompt, helper, const_cast<char*>(adapter.c_str()), nullptr};
+        if (!err) err = posix_spawn(&child_, sudo, &actions, nullptr, args, environ);
+        posix_spawn_file_actions_destroy(&actions);
+    }
+    close(ends[1]);
+    if (err) { close(ends[0]); return false; }
+    socket_ = ends[0];
+    ready_ = false;
+    started_ = std::chrono::steady_clock::now();
+    return true;
+#endif
+    return false;
+}
+std::vector<BluetoothObservation> BluetoothHciSession::poll(std::string& status) {
+    std::vector<BluetoothObservation> found;
+#if defined(__linux__) && !USE_DESKTOP
+    if (socket_ < 0) return found;
+    char buffer[1024];
+    for (int reads = 0; reads < 16; ++reads) {
+        const auto count = recv(socket_, buffer, sizeof(buffer), MSG_DONTWAIT);
+        if (count < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) break;
+        if (count < 0 && errno == EINTR) continue;
+        if (count <= 0) { status = ready_ ? "Raw Bluetooth capture ended" : "Raw Bluetooth helper unavailable"; stop(); break; }
+        pending_.append(buffer, static_cast<size_t>(count));
+        if (pending_.size() > 32768) { status = "Raw Bluetooth capture overflow"; stop(); break; }
+        size_t end;
+        while ((end = pending_.find('\n')) != std::string::npos) {
+            const auto line = pending_.substr(0, end);
+            pending_.erase(0, end + 1);
+            if (line == "status\tReady") { ready_ = true; status = "Ready"; continue; }
+            if (line.compare(0, 4, "raw\t") != 0) continue;
+            const auto a = line.find('\t', 4);
+            const auto b = a == std::string::npos ? a : line.find('\t', a + 1);
+            const auto c = b == std::string::npos ? b : line.find('\t', b + 1);
+            if (c == std::string::npos) continue;
+            const auto mac = line.substr(4, a - 4);
+            if (mac.size() != 17) continue;
+            int type{}, rssi{};
+            try {
+                type = std::stoi(line.substr(a + 1, b - a - 1));
+                rssi = std::stoi(line.substr(b + 1, c - b - 1));
+            } catch (const std::exception&) { continue; }
+            if (type < 0 || type > 3 || rssi < -128 || rssi > 127) continue;
+            const auto kind = type == 0 ? "public" : type == 1 ? "random" :
+                              type == 2 ? "public identity" : "random identity";
+            found.push_back(ble::decode_report(mac, kind, rssi, line.substr(c + 1)));
+        }
+    }
+    if (socket_ >= 0 && !ready_ &&
+        std::chrono::steady_clock::now() - started_ > std::chrono::seconds(6)) {
+        status = "Raw Bluetooth helper timed out";
+        stop();
     }
 #endif
     return found;

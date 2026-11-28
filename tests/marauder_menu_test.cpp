@@ -25,7 +25,7 @@ int main() {
     select_index(wardrive_settings, 3); // Device.
     if (wardrive_settings.activate() != MarauderMenuAction::None) return 60;
     if (wardrive_settings.activate() != MarauderMenuAction::None) return 61; // Radios and GPS.
-    select_index(wardrive_settings, 3); // Wardrive setup.
+    select_index(wardrive_settings, 4); // Wardrive setup.
     if (wardrive_settings.activate() != MarauderMenuAction::None ||
         wardrive_settings.columns() != 1 || wardrive_settings.item_count() != 3) return 62;
     if (wardrive_settings.activate() != MarauderMenuAction::CycleWardriveDwell) return 63;
@@ -39,6 +39,20 @@ int main() {
     if (wardrive_settings.selected_index() != 2) return 67;
 
     MarauderMenuModel gps;
+    MarauderMenuModel bluetooth;
+    select_index(bluetooth, 1);
+    if (bluetooth.activate() != MarauderMenuAction::None || bluetooth.columns() != 1 ||
+        bluetooth.item_count() != 7) return 76;
+    const MarauderMenuAction bluetooth_actions[] = {
+        MarauderMenuAction::OpenBluetoothRaw, MarauderMenuAction::OpenBluetoothFindMy,
+        MarauderMenuAction::OpenBluetoothIBeacon, MarauderMenuAction::OpenBluetoothFlipper,
+        MarauderMenuAction::OpenBluetoothFlock, MarauderMenuAction::OpenBluetoothMeta,
+        MarauderMenuAction::OpenBluetoothSerial
+    };
+    for (std::size_t i = 0; i < bluetooth.item_count(); ++i) {
+        if (bluetooth.activate() != bluetooth_actions[i]) return 77;
+        bluetooth.next();
+    }
     select_index(gps, 2);
     gps.activate();
     gps.move(0, -1);
@@ -136,7 +150,8 @@ int main() {
     if (menu.selected_index() != 0) return 72;
     const std::vector<std::vector<MarauderMenuAction>> groups = {
         {MarauderMenuAction::OpenRadioSetup, MarauderMenuAction::OpenAdapters,
-         MarauderMenuAction::CycleTrafficSource, MarauderMenuAction::None},
+         MarauderMenuAction::OpenBluetoothAdapters, MarauderMenuAction::CycleTrafficSource,
+         MarauderMenuAction::None},
         {MarauderMenuAction::Brightness, MarauderMenuAction::DimDelay, MarauderMenuAction::CycleBatteryDisplay,
          MarauderMenuAction::CycleCensor},
         {MarauderMenuAction::CycleStorage, MarauderMenuAction::OpenPcapFiles, MarauderMenuAction::OpenWardriveFiles,

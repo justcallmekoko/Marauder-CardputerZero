@@ -6,7 +6,7 @@
 
 cmake_minimum_required(VERSION 3.31)
 
-project(marauder_cardputerzero VERSION 0.6.62 LANGUAGES C CXX)
+project(marauder_cardputerzero VERSION 0.6.68 LANGUAGES C CXX)
 
 include(CTest)
 find_package(Threads REQUIRED)
@@ -679,6 +679,9 @@ if(BUILD_TESTING AND USE_DESKTOP)
     add_test(NAME pineapple_wifi_test COMMAND pineapple_wifi_test)
     add_test(NAME gps_session_test COMMAND python3 ${CMAKE_CURRENT_SOURCE_DIR}/tests/gps_session_test.py)
     add_executable(wifi_security_test tests/wifi_security_test.cpp src/platform/wifi_security.cpp)
+    add_executable(ble_classify_test tests/ble_classify_test.cpp src/platform/ble_classify.cpp)
+    target_include_directories(ble_classify_test PRIVATE src/platform)
+    add_test(NAME ble_classify_test COMMAND ble_classify_test)
     target_include_directories(wifi_security_test PRIVATE src/platform)
     add_test(NAME wifi_security_test COMMAND wifi_security_test)
     add_executable(wireless_capabilities_test
@@ -738,4 +741,8 @@ if(BUILD_TESTING AND USE_DESKTOP)
 endif()
 
 # Package deb
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT USE_DESKTOP)
+    add_executable(marauder_ble_hci_monitor src/platform/helpers/ble-hci-monitor.cc)
+    set_target_properties(marauder_ble_hci_monitor PROPERTIES OUTPUT_NAME ble-hci-monitor)
+endif()
 include(cmake/cm0-package.cmake)

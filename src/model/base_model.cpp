@@ -157,6 +157,7 @@ bool BaseModel::set_trusted_profile(const std::string& uuid) {
 BaseModel::BaseModel() {
     std::ifstream selection(preference_path("wifi-adapter"));
     std::getline(selection, selected_adapter_id_);
+    selected_bluetooth_id_ = read_value("bluetooth-adapter");
     std::ifstream saved_monitors(preference_path("monitor-adapters"));
     std::string monitor_id;
     while (std::getline(saved_monitors, monitor_id))
@@ -254,11 +255,13 @@ void BaseModel::toggle_page() {
             break;
         case AppPage::Traffic:
         case AppPage::RadioSetup:
+        case AppPage::BluetoothAdapters:
         case AppPage::PcapFiles:
         case AppPage::WardriveFiles:
         case AppPage::RemoteId:
         case AppPage::GpsTool:
         case AppPage::MapPacks:
+        case AppPage::BluetoothCapture:
         case AppPage::Diagnostics:
             current_page_ = AppPage::Dashboard;
             break;
@@ -268,6 +271,12 @@ const std::string& BaseModel::selected_adapter_id() const { return selected_adap
 bool BaseModel::set_selected_adapter_id(std::string stable_id) {
     if (!replace_preference(preference_path("wifi-adapter"), stable_id.rfind("ifindex:", 0) == 0 ? "" : stable_id)) return false;
     selected_adapter_id_ = std::move(stable_id);
+    return true;
+}
+bool BaseModel::set_selected_bluetooth_id(std::string stable_id) {
+    if (stable_id.size() != 64 || stable_id.find_first_not_of("0123456789abcdef") != std::string::npos ||
+        !save_value("bluetooth-adapter", stable_id)) return false;
+    selected_bluetooth_id_ = std::move(stable_id);
     return true;
 }
 

@@ -171,6 +171,11 @@ private:
             }
             return true;
         }
+        if (view_model_.current_page() == model::AppPage::BluetoothCapture && !long_pressed) {
+            if (key == 'b' || key == 'B') { view_model_.bluetooth_toggle_builder(); return true; }
+            if (key == 't' || key == 'T') { view_model_.bluetooth_show_filters(); return true; }
+            if (key == 'l' || key == 'L') { view_model_.bluetooth_show_devices(); return true; }
+        }
         if ((key == 't' || key == 'T') && view_model_.current_page() == model::AppPage::WifiScan &&
             view_model_.raw_session() && (view_model_.wifi_view() == 7 || view_model_.wifi_view() == 9)) {
             if (!long_pressed) view_model_.show_raw_filters();
@@ -178,6 +183,10 @@ private:
         }
         if (key == 'p' || key == 'P') {
             if (!long_pressed) {
+                if (view_model_.current_page() == model::AppPage::BluetoothCapture && !view_model_.pcap_active()) {
+                    toast_->show("BLE PCAP recording is not available", view::widgets::ToastTone::Warning, 3200);
+                    return true;
+                }
                 const bool was_recording = view_model_.pcap_active();
                 if (!was_recording) {
                     const auto warning = view_model_.collection_warning(model::RadioRequirement::Monitor);
@@ -236,6 +245,11 @@ private:
         }
 
         if (key == LV_KEY_ESC && !long_pressed) {
+            if (view_model_.current_page() == model::AppPage::BluetoothCapture &&
+                view_model_.bluetooth_view() != 0) {
+                view_model_.bluetooth_back();
+                return true;
+            }
             if (view_model_.current_page() == model::AppPage::MapPacks && view_model_.map_installing()) {
                 view_model_.cancel_map_download();
                 return true;
@@ -301,6 +315,11 @@ private:
             if (action == NavigationAction::Next) { view_model_.next_system_info_page(); return true; }
             if (action == NavigationAction::Primary) { view_model_.refresh_diagnostics(); return true; }
             if (action == NavigationAction::Details) { view_model_.toggle_system_info_details(); return true; }
+        }
+        if (view_model_.current_page() == model::AppPage::BluetoothCapture) {
+            if (action == NavigationAction::Previous) { view_model_.bluetooth_move(-1); return true; }
+            if (action == NavigationAction::Next) { view_model_.bluetooth_move(1); return true; }
+            if (key == LV_KEY_ENTER) { view_model_.bluetooth_select(); return true; }
         }
 
         if (view_model_.current_page() == model::AppPage::PcapFiles) {
@@ -381,6 +400,12 @@ private:
             if (action == NavigationAction::Next) { view_model_.move_radio(1); return true; }
             if (key == LV_KEY_ENTER) { view_model_.toggle_radio(); return true; }
             if (action == NavigationAction::Details) { view_model_.refresh_radios(); return true; }
+        }
+        if (view_model_.current_page() == model::AppPage::BluetoothAdapters) {
+            if (action == NavigationAction::Previous) { view_model_.move_bluetooth_adapter(-1); return true; }
+            if (action == NavigationAction::Next) { view_model_.move_bluetooth_adapter(1); return true; }
+            if (key == LV_KEY_ENTER) { view_model_.select_bluetooth_adapter(); return true; }
+            if (action == NavigationAction::Details) { view_model_.toggle_bluetooth_adapter_details(); return true; }
         }
 
         if (view_model_.current_page() == model::AppPage::Adapters) {
