@@ -146,8 +146,8 @@ void BluetoothCaptureScreen::render() {
         lv_obj_set_style_text_color(row.data, colors.text_disabled, 0);
     }
     set_key_guide(feed ? "F/X Scroll  T Filter  B Build  L List  Enter Pause" :
-        filters ? "Up/Down Choose  Enter Toggle  Esc Back" :
-        devices ? "Up/Down Scroll  Enter Actions  Esc Back" :
-        actions ? "Up/Down Choose  Enter Open  Esc Back" : "Esc Back");
+        filters ? "F/X Choose  Enter Toggle  Esc Back" :
+        devices ? "F/X Scroll  Enter Actions  Esc Back" :
+        actions ? "F/X Choose  Enter Open  Esc Back" : "Esc Back");
 }
 } // namespace screen
