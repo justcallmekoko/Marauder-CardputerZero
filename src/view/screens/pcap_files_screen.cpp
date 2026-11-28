@@ -123,12 +123,13 @@ void PcapFilesScreen::render() {
             lv_label_set_text(upload_label_, view_model().wardrive_upload_label().c_str());
             lv_bar_set_value(upload_bar_, static_cast<int32_t>(sent), LV_ANIM_OFF);
             lv_obj_set_style_bg_color(upload_bar_, colors.surface, LV_PART_MAIN);
-            lv_obj_set_style_bg_color(upload_bar_, colors.success, LV_PART_INDICATOR);
+            lv_obj_set_style_bg_color(upload_bar_, sent == 100 ? colors.warning : colors.success, LV_PART_INDICATOR);
             const auto total = view_model().wardrive_upload_total();
             const auto done = view_model().wardrive_upload_current();
             const auto batch = total ? static_cast<unsigned>(std::min<std::size_t>(100, done * 100 / total)) : 0;
-            const auto transfer = "Transfer  " + std::to_string(sent) + "%";
-            const auto summary = "Batch  " + std::to_string(done) + "/" + std::to_string(total);
+            const auto transfer = "Sent  " + std::to_string(sent) + "%";
+            const auto summary = view_model().wardrive_upload_phase_label() + "  " +
+                std::to_string(done) + "/" + std::to_string(total);
             lv_label_set_text(count_, transfer.c_str());
             lv_label_set_text(batch_label_, summary.c_str());
             lv_bar_set_value(batch_bar_, static_cast<int32_t>(batch), LV_ANIM_OFF);

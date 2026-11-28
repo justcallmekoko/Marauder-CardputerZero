@@ -13,6 +13,8 @@ struct FileInfo {
 };
 struct Progress {
     std::atomic<std::uint64_t> sent{0}, total{0};
+    std::atomic<int> phase{0}; // Preparing, sending, awaiting response, queued job.
+    std::atomic<std::int64_t> phase_started_ms{0};
 };
 struct Result { bool ok{}; std::string message; };
 std::vector<FileInfo> list_files();

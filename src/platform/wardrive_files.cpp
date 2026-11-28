@@ -113,10 +113,15 @@ Result run_helper(const std::string& path, const std::string& service, Progress*
         char line[512];
         while (std::fgets(line, sizeof(line), stream)) {
             unsigned long long sent{}, total{};
+            int phase{};
             if (progress && std::sscanf(line, "PROGRESS %llu %llu", &sent, &total) == 2) {
                 progress->sent = sent;
                 progress->total = total;
-            } else if (std::strncmp(line, "PROGRESS ", 9) != 0) message = line;
+            } else if (progress && std::sscanf(line, "PHASE %d", &phase) == 1 && phase >= 0 && phase <= 3) {
+                progress->phase_started_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now().time_since_epoch()).count();
+                progress->phase = phase;
+            } else if (std::strncmp(line, "PROGRESS ", 9) != 0 && std::strncmp(line, "PHASE ", 6) != 0) message = line;
         }
         fclose(stream);
     } else close(output[0]);

@@ -108,6 +108,7 @@ public:
     std::size_t wardrive_upload_total() const { return wardrive_upload_tasks_.size(); }
     unsigned wardrive_upload_percent() const;
     std::string wardrive_upload_label() const;
+    std::string wardrive_upload_phase_label() const;
     const auto& wardrive_files() const { return wardrive_files_; }
     std::size_t wardrive_cursor() const { return wardrive_cursor_; }
     bool wardrive_details() const { return wardrive_details_; }

@@ -682,6 +682,21 @@ std::string BaseViewModel::wardrive_upload_label() const {
         (service == "wigle" ? "WiGLE" : "WDGWars") + "  " + screen_capture_name(name);
 }
 
+std::string BaseViewModel::wardrive_upload_phase_label() const {
+    const auto phase = wardrive_progress_.phase.load();
+    if (phase == 0) return "Preparing log";
+    if (phase == 1) return "Sending file";
+    const auto started = wardrive_progress_.phase_started_ms.load();
+    const auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+    const auto seconds = started > 0 && now > started ? (now - started) / 1000 : 0;
+    const auto index = wardrive_upload_index_.load();
+    const bool wdg = index < wardrive_upload_tasks_.size() && wardrive_upload_tasks_[index].second == "wdg";
+    return std::string(phase == 3 ? "WDG job processing " :
+                       wdg ? "WDG server processing " : "WiGLE server response ") +
+        std::to_string(seconds) + "s";
+}
+
 std::string BaseViewModel::start_wardrive_upload(std::vector<std::pair<std::string, std::string>> tasks) {
     if (wardrive_upload_job_.valid()) return "Upload in progress";
     if (tasks.empty()) return "No pending uploads";
@@ -701,6 +716,8 @@ std::string BaseViewModel::start_wardrive_upload(std::vector<std::pair<std::stri
     wardrive_upload_index_ = 0;
     wardrive_progress_.sent = 0;
     wardrive_progress_.total = 0;
+    wardrive_progress_.phase = 0;
+    wardrive_progress_.phase_started_ms = 0;
     try {
         wardrive_upload_job_ = std::async(std::launch::async, [this] {
             unsigned uploaded{}, queued{}, failed{};
@@ -709,6 +726,8 @@ std::string BaseViewModel::start_wardrive_upload(std::vector<std::pair<std::stri
                 wardrive_upload_index_ = i;
                 wardrive_progress_.sent = 0;
                 wardrive_progress_.total = 0;
+                wardrive_progress_.phase = 0;
+                wardrive_progress_.phase_started_ms = 0;
                 const auto& [name, service] = wardrive_upload_tasks_[i];
                 const auto result = platform::wardrive::upload(name, service, &wardrive_progress_);
                 last = result.message;

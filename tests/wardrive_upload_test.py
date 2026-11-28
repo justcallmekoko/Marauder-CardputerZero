@@ -65,7 +65,7 @@ def test_server_status():
             def endheaders(self): pass
             def send(self, *_): pass
             def getresponse(self):
-                if self.endpoint == "/api/v2/profile/user": return Response(200, b'{"success":true}')
+                if self.endpoint == "/api/v2/profile/user": return Response(200, b'{"success":"true"}')
                 if self.endpoint == "/api/me": return Response(200, b'{"ok":true}')
                 if self.endpoint == "/api/upload-csv": return Response(200, b'{"ok":true,"accepted":2}')
                 return Response(200, b'{"success":true}')
@@ -74,9 +74,14 @@ def test_server_status():
         with mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": str(root / ".config")}), \
              mock.patch.object(module["http"].client, "HTTPSConnection", Connection):
             progress = []
-            assert module["upload_file"](source, "wigle", root, lambda sent, total: progress.append((sent, total))) == "uploaded"
+            phases = []
+            assert module["upload_file"](source, "wigle", root,
+                                         lambda sent, total: progress.append((sent, total)), phases.append) == "uploaded"
             assert progress == [(0, 4), (4, 4)]
-            assert module["upload_file"](source, "wdg", root) == "uploaded"
+            assert phases == [1, 2]
+            phases.clear()
+            assert module["upload_file"](source, "wdg", root, phase=phases.append) == "uploaded"
+            assert phases == [1, 2]
             assert module["check_credentials"]("wigle", root) == "WiGLE credentials valid"
             assert module["check_credentials"]("wdg", root) == "WDGWars credentials valid"
 
@@ -120,7 +125,9 @@ def test_large_wdg_upload():
             def close(self): pass
         with mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": str(root / ".config")}), \
              mock.patch.object(module["http"].client, "HTTPSConnection", Connection):
-            assert module["upload_file"](source, "wdg", root) == "uploaded"
+            phases = []
+            assert module["upload_file"](source, "wdg", root, phase=phases.append) == "uploaded"
+            assert phases == [1, 2, 3]
         assert not list(root.glob(".wardrive-upload-*"))
 
 

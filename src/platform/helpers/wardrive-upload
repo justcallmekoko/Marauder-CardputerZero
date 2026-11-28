@@ -100,6 +100,10 @@ def read_json(response):
         return {}
 
 
+def confirmed(value):
+    return value is True or value == "true"
+
+
 def check_credentials(service, home):
     host, headers = credentials(service, home)
     endpoint = "/api/v2/profile/user" if service == "wigle" else "/api/me"
@@ -111,16 +115,18 @@ def check_credentials(service, home):
         result = read_json(response)
         if response.status in (401, 403):
             raise ValueError(("WiGLE" if service == "wigle" else "WDGWars") + " credentials invalid")
-        if response.status != 200 or result.get("success" if service == "wigle" else "ok") is not True:
+        if response.status != 200 or not confirmed(result.get("success" if service == "wigle" else "ok")):
             raise ValueError("Credential check not confirmed (HTTP " + str(response.status) + ")")
         return ("WiGLE" if service == "wigle" else "WDGWars") + " credentials valid"
     finally:
         connection.close()
 
 
-def poll_wdg(job_id, headers):
+def poll_wdg(job_id, headers, phase=None):
     if not str(job_id).isdigit():
         raise ValueError("WDGWars returned an invalid job ID")
+    if phase:
+        phase(3)
     deadline = time.monotonic() + 120
     while time.monotonic() < deadline:
         connection = http.client.HTTPSConnection("wdgwars.pl", timeout=20)
@@ -143,7 +149,7 @@ def poll_wdg(job_id, headers):
     return "accepted"
 
 
-def upload_file(path, service, home, progress=None):
+def upload_file(path, service, home, progress=None, phase=None):
     host, headers = credentials(service, home)
     large_wdg = service == "wdg" and path.stat().st_size > 20 * 1048576
     payload = path
@@ -180,6 +186,8 @@ def upload_file(path, service, home, progress=None):
         for key, value in headers.items():
             connection.putheader(key, value)
         connection.endheaders()
+        if phase:
+            phase(1)
         connection.send(prefix)
         total = payload.stat().st_size
         sent = 0
@@ -192,19 +200,21 @@ def upload_file(path, service, home, progress=None):
                 if progress:
                     progress(sent, total)
         connection.send(suffix)
+        if phase:
+            phase(2)
         response = connection.getresponse()
         result = read_json(response)
         if response.status >= 300 or (isinstance(result, dict) and
                                       (result.get("success") is False or result.get("ok") is False)):
             raise ValueError(f"{service.upper()} rejected upload (HTTP {response.status})")
         if service == "wigle":
-            if response.status != 200 or not isinstance(result, dict) or result.get("success") is not True:
+            if response.status != 200 or not confirmed(result.get("success")):
                 raise ValueError("WiGLE response did not confirm upload")
             return "uploaded"
         if response.status == 202:
-            if result.get("ok") is not True or result.get("job_id") is None:
+            if not confirmed(result.get("ok")) or result.get("job_id") is None:
                 raise ValueError("WDGWars did not return a valid upload job")
-            return poll_wdg(result["job_id"], headers)
+            return poll_wdg(result["job_id"], headers, phase)
         if response.status not in (200, 201) or result.get("ok") is False:
             raise ValueError("WDGWars did not confirm upload")
         return "uploaded"
@@ -233,6 +243,7 @@ def main(argv):
     os.close(fd)
     converted = Path(temporary)
     try:
+        print("PHASE 0", flush=True)
         count = convert(source, converted)
         state_path = Path(str(source) + ".upload")
         current = {"wigle": "pending", "wdg": "pending"}
@@ -252,7 +263,8 @@ def main(argv):
 
         try:
             result = upload_file(converted, argv[2], home,
-                                 lambda sent, total: print(f"PROGRESS {sent} {total}", flush=True))
+                                 lambda sent, total: print(f"PROGRESS {sent} {total}", flush=True),
+                                 lambda stage: print(f"PHASE {stage}", flush=True))
         except (OSError, ValueError, http.client.HTTPException):
             if current[argv[2]] not in ("uploaded", "accepted"):
                 current[argv[2]] = "failed"
