@@ -240,6 +240,141 @@ void BaseViewModel::show_raw_capture_page() {
     publish_navigation();
     if (!wifi_scan_running_) start_wifi_scan();
 }
+void BaseViewModel::show_bluetooth_page(uint32_t filter) {
+    stop_wifi_capture();
+    gps_log_.stop();
+    wardrive_session_ = false;
+    bluetooth_session_.stop();
+    bluetooth_feed_.clear();
+    bluetooth_devices_.clear();
+    bluetooth_index_.clear();
+    bluetooth_fox_.reset();
+    bluetooth_total_ = 0;
+    bluetooth_feed_offset_ = 0;
+    bluetooth_filter_ = filter;
+    bluetooth_builder_ = filter != 0;
+    bluetooth_view_ = 0;
+    bluetooth_cursor_ = bluetooth_action_cursor_ = 0;
+    bluetooth_filter_cursor_ = 0;
+    bluetooth_start_stop();
+    model_.set_current_page(model::AppPage::BluetoothCapture);
+    publish_navigation();
+    bluetooth_generation_.set(bluetooth_generation_.value() + 1);
+}
+void BaseViewModel::bluetooth_start_stop() {
+    if (bluetooth_session_.active()) {
+        bluetooth_session_.stop();
+        bluetooth_status_ = "Paused";
+    } else {
+        const auto radio = std::find_if(radio_list_.devices.begin(), radio_list_.devices.end(),
+            [](const auto& item) { return item.kind == "Bluetooth" && item.state == "On"; });
+        if (radio == radio_list_.devices.end()) bluetooth_status_ = "Enable Bluetooth in Device > Radio setup";
+        else bluetooth_status_ = bluetooth_session_.start(radio->name, true) ? "Listening" : "Bluetooth scan unavailable";
+    }
+    bluetooth_generation_.set(bluetooth_generation_.value() + 1);
+}
+void BaseViewModel::bluetooth_toggle_builder() {
+    bluetooth_builder_ = !bluetooth_builder_;
+    bluetooth_generation_.set(bluetooth_generation_.value() + 1);
+}
+void BaseViewModel::bluetooth_show_filters() {
+    bluetooth_view_ = bluetooth_view_ == 1 ? 0 : 1;
+    bluetooth_filter_cursor_ = 0;
+    bluetooth_generation_.set(bluetooth_generation_.value() + 1);
+}
+void BaseViewModel::bluetooth_show_devices() {
+    bluetooth_view_ = 2;
+    bluetooth_cursor_ = 0;
+    bluetooth_generation_.set(bluetooth_generation_.value() + 1);
+}
+std::vector<std::size_t> BaseViewModel::bluetooth_visible_indices() const {
+    std::vector<std::size_t> visible;
+    for (std::size_t i = 0; i < bluetooth_devices_.size(); ++i)
+        if (!bluetooth_filter_ || (bluetooth_devices_[i].classification.matches & bluetooth_filter_))
+            visible.push_back(i);
+    return visible;
+}
+const BaseViewModel::BluetoothRecord* BaseViewModel::bluetooth_selected() const {
+    const auto visible = bluetooth_visible_indices();
+    return bluetooth_cursor_ < visible.size() ? &bluetooth_devices_[visible[bluetooth_cursor_]] : nullptr;
+}
+void BaseViewModel::bluetooth_move(int direction) {
+    if (bluetooth_view_ == 0) {
+        if (direction < 0 && bluetooth_feed_offset_ + 1 < bluetooth_feed_.size()) ++bluetooth_feed_offset_;
+        if (direction > 0 && bluetooth_feed_offset_) --bluetooth_feed_offset_;
+        bluetooth_generation_.set(bluetooth_generation_.value() + 1);
+        return;
+    }
+    std::size_t* cursor = bluetooth_view_ == 1 ? &bluetooth_filter_cursor_ :
+        bluetooth_view_ == 3 ? &bluetooth_action_cursor_ : &bluetooth_cursor_;
+    const auto count = bluetooth_view_ == 1 ? static_cast<std::size_t>(platform::ble::Kind::Count) + 1 :
+        bluetooth_view_ == 3 ? 2u : bluetooth_visible_indices().size();
+    if (count) *cursor = (*cursor + count + (direction < 0 ? count - 1 : 1)) % count;
+    bluetooth_generation_.set(bluetooth_generation_.value() + 1);
+}
+void BaseViewModel::bluetooth_select() {
+    if (bluetooth_view_ == 0) { bluetooth_start_stop(); return; }
+    if (bluetooth_view_ == 1) {
+        bluetooth_filter_ = bluetooth_filter_cursor_ ?
+            bluetooth_filter_ ^ platform::ble::bit(static_cast<platform::ble::Kind>(bluetooth_filter_cursor_ - 1)) : 0;
+        bluetooth_feed_.clear();
+        bluetooth_feed_offset_ = 0;
+        bluetooth_cursor_ = 0;
+    } else if (bluetooth_view_ == 2 && bluetooth_selected()) {
+        bluetooth_action_cursor_ = 0;
+        bluetooth_view_ = 3;
+    } else if (bluetooth_view_ == 3 && bluetooth_selected()) {
+        bluetooth_view_ = bluetooth_action_cursor_ ? 5 : 4;
+        if (bluetooth_view_ == 5) bluetooth_fox_.begin(bluetooth_selected()->observation.address, 0);
+    }
+    bluetooth_generation_.set(bluetooth_generation_.value() + 1);
+}
+void BaseViewModel::bluetooth_back() {
+    bluetooth_view_ = bluetooth_view_ >= 4 ? 3 : bluetooth_view_ == 3 ? 2 : 0;
+    if (bluetooth_view_ != 5) bluetooth_fox_.reset();
+    bluetooth_generation_.set(bluetooth_generation_.value() + 1);
+}
+void BaseViewModel::update_bluetooth_capture() {
+    if (model_.current_page() != model::AppPage::BluetoothCapture || !bluetooth_session_.active()) return;
+    std::string state;
+    bool changed = false;
+    for (auto& sighting : bluetooth_session_.poll(state)) {
+        ++bluetooth_total_;
+        const auto classified = platform::ble::classify(sighting);
+        if (!bluetooth_filter_ || (classified.matches & bluetooth_filter_)) {
+            if (bluetooth_feed_.size() == 64) bluetooth_feed_.pop_front();
+            bluetooth_feed_.push_back({sighting, classified, 1, lv_tick_get()});
+            changed = true;
+        }
+        if (bluetooth_builder_) {
+            const auto key = sighting.address_type + ":" + sighting.address;
+            const auto known = bluetooth_index_.find(key);
+            if (known != bluetooth_index_.end()) {
+                auto& record = bluetooth_devices_[known->second];
+                const auto prior = record.classification;
+                record.observation = sighting;
+                record.classification = classified;
+                record.classification.matches |= prior.matches;
+                if (!classified.matches && prior.matches) {
+                    record.classification.type = prior.type;
+                    record.classification.evidence = prior.evidence;
+                    record.classification.detail = prior.detail;
+                }
+                if (record.classification.vendor == "Unknown") record.classification.vendor = prior.vendor;
+                ++record.sightings;
+                record.last_seen = lv_tick_get();
+            } else if (bluetooth_devices_.size() < 512) {
+                bluetooth_index_[key] = bluetooth_devices_.size();
+                bluetooth_devices_.push_back({sighting, classified, 1, lv_tick_get()});
+            } else bluetooth_status_ = "Device list full (512)";
+            changed = true;
+        }
+        if (bluetooth_view_ == 5)
+            bluetooth_fox_.observe(sighting.address, 0, sighting.rssi, true, lv_tick_get());
+    }
+    if (!state.empty() && state != "Scanning") { bluetooth_status_ = state; changed = true; }
+    if (changed) bluetooth_generation_.set(bluetooth_generation_.value() + 1);
+}
 void BaseViewModel::show_remote_id_page() {
     remote_session_ = true;
     raw_session_ = false;
@@ -961,6 +1096,13 @@ void BaseViewModel::marauder_menu_activate() {
         case model::MarauderMenuAction::OpenRawCapture:
             show_raw_capture_page();
             break;
+        case Action::OpenBluetoothRaw: show_bluetooth_page(0); break;
+        case Action::OpenBluetoothFindMy: show_bluetooth_page(platform::ble::bit(platform::ble::Kind::FindMy)); break;
+        case Action::OpenBluetoothIBeacon: show_bluetooth_page(platform::ble::bit(platform::ble::Kind::IBeacon)); break;
+        case Action::OpenBluetoothFlipper: show_bluetooth_page(platform::ble::bit(platform::ble::Kind::Flipper)); break;
+        case Action::OpenBluetoothFlock: show_bluetooth_page(platform::ble::bit(platform::ble::Kind::Flock)); break;
+        case Action::OpenBluetoothMeta: show_bluetooth_page(platform::ble::bit(platform::ble::Kind::Meta)); break;
+        case Action::OpenBluetoothSerial: show_bluetooth_page(platform::ble::bit(platform::ble::Kind::SerialModule)); break;
         case model::MarauderMenuAction::OpenRemoteId:
             show_remote_id_page();
             break;
@@ -2062,6 +2204,7 @@ void BaseViewModel::wifi_scan_timer_cb(lv_timer_t* timer) {
         self->advance_wifi_channel();
         self->finish_radio_setting();
         self->update_gps_tool();
+        self->update_bluetooth_capture();
     }
 }
 

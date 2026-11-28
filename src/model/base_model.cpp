@@ -259,6 +259,7 @@ void BaseModel::toggle_page() {
         case AppPage::RemoteId:
         case AppPage::GpsTool:
         case AppPage::MapPacks:
+        case AppPage::BluetoothCapture:
         case AppPage::Diagnostics:
             current_page_ = AppPage::Dashboard;
             break;

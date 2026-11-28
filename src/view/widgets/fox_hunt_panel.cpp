@@ -52,7 +52,8 @@ void FoxHuntPanel::show(bool visible) {
     else lv_obj_add_flag(root_, LV_OBJ_FLAG_HIDDEN);
 }
 void FoxHuntPanel::render(const model::FoxHunt& hunt, const std::string& label,
-                          const std::string& vendor, lv_color_t accent, bool dark_mode, bool tuned, bool censor) {
+                          const std::string& vendor, lv_color_t accent, bool dark_mode, bool tuned, bool censor,
+                          bool bluetooth) {
     const auto colors = view::palette(dark_mode);
     const auto now = lv_tick_get();
     const bool fresh = hunt.fresh(now);
@@ -65,8 +66,9 @@ void FoxHuntPanel::render(const model::FoxHunt& hunt, const std::string& label,
     const auto status = !tuned ? "TUNING CHANNEL" : fresh ? "SIGNAL LIVE" : hunt.sample_count() ?
         "LAST " + std::to_string(hunt.age_ms(now) / 1000) + "s AGO" : "WAITING FOR SIGNAL";
     lv_label_set_text(status_, status.c_str());
-    const auto meta = "CH " + std::to_string(platform::wireless::channel_number(hunt.frequency_mhz())) +
-        "   " + std::to_string(hunt.frames()) + " frames";
+    const auto meta = (bluetooth ? "BLE   " :
+        "CH " + std::to_string(platform::wireless::channel_number(hunt.frequency_mhz())) + "   ") +
+        std::to_string(hunt.frames()) + (bluetooth ? " sightings" : " frames");
     lv_label_set_text(meta_, meta.c_str());
     lv_obj_set_style_text_color(name_, colors.text, 0);
     lv_obj_set_style_text_color(address_, colors.text_disabled, 0);

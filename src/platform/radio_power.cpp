@@ -237,7 +237,7 @@ void BluetoothSession::stop() {
     child_ = socket_ = -1;
     pending_.clear();
 }
-bool BluetoothSession::start(const std::string& adapter) {
+bool BluetoothSession::start(const std::string& adapter, bool le_only) {
     stop();
     if (adapter.size() < 4 || adapter.size() > 6 || adapter.compare(0, 3, "hci") != 0 ||
         !std::all_of(adapter.begin() + 3, adapter.end(),
@@ -252,7 +252,8 @@ bool BluetoothSession::start(const std::string& adapter) {
         err = posix_spawn_file_actions_adddup2(&actions, ends[1], STDIN_FILENO);
         if (!err) err = posix_spawn_file_actions_adddup2(&actions, ends[1], STDOUT_FILENO);
         char program[] = "/usr/lib/marauder/bluetooth-session";
-        char* args[] = {program, const_cast<char*>(adapter.c_str()), nullptr};
+        char le[] = "le";
+        char* args[] = {program, const_cast<char*>(adapter.c_str()), le_only ? le : nullptr, nullptr};
         if (!err) err = posix_spawn(&child_, program, &actions, nullptr, args, environ);
         posix_spawn_file_actions_destroy(&actions);
     }
@@ -290,8 +291,19 @@ std::vector<BluetoothObservation> BluetoothSession::poll(std::string& status) {
             if (b == std::string::npos) continue;
             const auto c = line.find('\t', b + 1);
             if (c == std::string::npos) continue;
+            const auto d = line.find('\t', c + 1);
             BluetoothObservation item{line.substr(7, a - 7), line.substr(a + 1, b - a - 1),
-                                      line.substr(c + 1)};
+                                      line.substr(c + 1, d == std::string::npos ? d : d - c - 1)};
+            if (d != std::string::npos) {
+                const auto e = line.find('\t', d + 1);
+                const auto f = e == std::string::npos ? e : line.find('\t', e + 1);
+                const auto g = f == std::string::npos ? f : line.find('\t', f + 1);
+                if (g == std::string::npos) continue;
+                item.manufacturer_data = line.substr(d + 1, e - d - 1);
+                item.service_data = line.substr(e + 1, f - e - 1);
+                item.advertising_data = line.substr(f + 1, g - f - 1);
+                item.uuids = line.substr(g + 1);
+            }
             try { item.rssi = std::stoi(line.substr(b + 1, c - b - 1)); }
             catch (const std::exception&) { continue; }
             if (item.address.size() != 17 || item.rssi < -127 || item.rssi > 20) continue;

@@ -50,6 +50,7 @@ private:
 struct BluetoothObservation {
     std::string address, name, address_type;
     int rssi{-128};
+    std::string manufacturer_data, service_data, advertising_data, uuids;
 };
 class BluetoothSession {
 public:
@@ -57,7 +58,7 @@ public:
     BluetoothSession(const BluetoothSession&) = delete;
     BluetoothSession& operator=(const BluetoothSession&) = delete;
     ~BluetoothSession();
-    bool start(const std::string& adapter);
+    bool start(const std::string& adapter, bool le_only = false);
     void stop();
     std::vector<BluetoothObservation> poll(std::string& status);
     bool active() const { return socket_ >= 0; }

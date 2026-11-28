@@ -47,9 +47,13 @@ const std::vector<Item>& items_for(Id menu) {
         {"Saved Networks", Color::LightGrey, Action::None, Id::Main, false, false},
     };
     static const std::vector<Item> bluetooth = {
-        {"Scanners", Color::Cyan, Action::None, Id::Main, false, false},
-        {"Sniffers", Color::Magenta, Action::None, Id::Main, false, false},
-        {"General", Color::LightGrey, Action::None, Id::Main, false, false},
+        {"Advertisement feed", Color::Cyan, Action::OpenBluetoothRaw, Id::Main, false, true},
+        {"Find My", Color::Green, Action::OpenBluetoothFindMy, Id::Main, false, true},
+        {"iBeacon", Color::Blue, Action::OpenBluetoothIBeacon, Id::Main, false, true},
+        {"Flipper", Color::Magenta, Action::OpenBluetoothFlipper, Id::Main, false, true},
+        {"Flock", Color::Orange, Action::OpenBluetoothFlock, Id::Main, false, true},
+        {"Meta", Color::Purple, Action::OpenBluetoothMeta, Id::Main, false, true},
+        {"Serial modules", Color::Red, Action::OpenBluetoothSerial, Id::Main, false, true},
     };
     static const std::vector<Item> gps = {
         {"GPS Info", Color::Red, Action::OpenGpsInfo, Id::Main, false, true},
@@ -158,6 +162,7 @@ std::size_t MarauderMenuModel::columns() const {
         case MarauderMenuId::Device:
         case MarauderMenuId::FilesAndMemory:
         case MarauderMenuId::Accounts: return 1;
+        case MarauderMenuId::Bluetooth: return 1;
         default: return 2;
     }
 }

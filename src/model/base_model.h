@@ -25,6 +25,7 @@ enum class AppPage {
     RemoteId,
     GpsTool,
     MapPacks,
+    BluetoothCapture,
 };
 
 std::string saved_gps_id();
