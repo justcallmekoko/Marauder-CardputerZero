@@ -85,15 +85,19 @@ int main() {
     menu.next();
     if (menu.selected_index() != 0) return 3;
 
-    // WiFi > Networks > Access Points routes to live monitor capture.
+    // WiFi > Recon > Access Points routes to live monitor capture.
     if (menu.activate() != MarauderMenuAction::None || menu.depth() != 2) return 4;
+    if (std::string(menu.item(0).label) != "Recon" ||
+        std::string(menu.item(1).label) != "Collection") return 73;
     if (menu.activate() != MarauderMenuAction::None || menu.depth() != 3) return 5;
+    if (std::string(menu.title()) != "WiFi > Recon") return 74;
     if (menu.activate() != MarauderMenuAction::OpenWifiScan) return 6;
 
     if (menu.item_count() != 1) return 7;
     menu.back();
-    menu.move(1, 0); // WiFi Activity.
+    menu.move(1, 0); // WiFi Collection.
     if (menu.activate() != MarauderMenuAction::None) return 42;
+    if (std::string(menu.title()) != "WiFi > Collection") return 75;
     menu.move(1, 0); // Raw capture.
     if (menu.activate() != MarauderMenuAction::OpenRawCapture) return 43;
     menu.move(-1, 0); // Pineapple scan.

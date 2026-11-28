@@ -23,8 +23,8 @@ const std::vector<Item>& items_for(Id menu) {
         {"Device", Color::Blue, Action::None, Id::Device, true, true},
     };
     static const std::vector<Item> wifi = {
-        {"Networks", Color::Orange, Action::None, Id::WifiNetworks, true, true},
-        {"Activity", Color::Yellow, Action::None, Id::WifiActivity, true, true},
+        {"Recon", Color::Orange, Action::None, Id::WifiNetworks, true, true},
+        {"Collection", Color::Yellow, Action::None, Id::WifiActivity, true, true},
         {"Attacks", Color::Red, Action::None, Id::WifiAttacks, true, true},
         {"General", Color::Purple, Action::None, Id::WifiGeneral, true, true},
     };
@@ -120,8 +120,8 @@ const char* title_for(Id menu) {
     switch (menu) {
         case Id::Main: return "MARAUDER";
         case Id::Wifi: return "WiFi";
-        case Id::WifiNetworks: return "WiFi > Networks";
-        case Id::WifiActivity: return "WiFi > Activity";
+        case Id::WifiNetworks: return "WiFi > Recon";
+        case Id::WifiActivity: return "WiFi > Collection";
         case Id::WifiAttacks: return "WiFi > Attacks";
         case Id::WifiGeneral: return "WiFi > General";
         case Id::Bluetooth: return "Bluetooth";
