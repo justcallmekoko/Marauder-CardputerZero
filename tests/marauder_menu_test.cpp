@@ -39,6 +39,20 @@ int main() {
     if (wardrive_settings.selected_index() != 2) return 67;
 
     MarauderMenuModel gps;
+    MarauderMenuModel bluetooth;
+    select_index(bluetooth, 1);
+    if (bluetooth.activate() != MarauderMenuAction::None || bluetooth.columns() != 1 ||
+        bluetooth.item_count() != 7) return 76;
+    const MarauderMenuAction bluetooth_actions[] = {
+        MarauderMenuAction::OpenBluetoothRaw, MarauderMenuAction::OpenBluetoothFindMy,
+        MarauderMenuAction::OpenBluetoothIBeacon, MarauderMenuAction::OpenBluetoothFlipper,
+        MarauderMenuAction::OpenBluetoothFlock, MarauderMenuAction::OpenBluetoothMeta,
+        MarauderMenuAction::OpenBluetoothSerial
+    };
+    for (std::size_t i = 0; i < bluetooth.item_count(); ++i) {
+        if (bluetooth.activate() != bluetooth_actions[i]) return 77;
+        bluetooth.next();
+    }
     select_index(gps, 2);
     gps.activate();
     gps.move(0, -1);

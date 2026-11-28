@@ -246,10 +246,16 @@ void BaseViewModel::show_bluetooth_page(uint32_t filter) {
     wardrive_session_ = false;
     bluetooth_session_.stop();
     bluetooth_feed_.clear();
-    bluetooth_devices_.clear();
-    bluetooth_index_.clear();
+    const auto radio = std::find_if(radio_list_.devices.begin(), radio_list_.devices.end(),
+        [](const auto& item) { return item.kind == "Bluetooth" && item.state == "On"; });
+    const std::string adapter_id = radio == radio_list_.devices.end() ? "" : radio->id;
+    if (adapter_id != bluetooth_adapter_id_) {
+        bluetooth_devices_.clear();
+        bluetooth_index_.clear();
+        bluetooth_total_ = 0;
+        bluetooth_adapter_id_ = adapter_id;
+    }
     bluetooth_fox_.reset();
-    bluetooth_total_ = 0;
     bluetooth_feed_offset_ = 0;
     bluetooth_filter_ = filter;
     bluetooth_builder_ = filter != 0;

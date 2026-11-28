@@ -397,6 +397,7 @@ private:
     std::deque<BluetoothRecord> bluetooth_feed_;
     std::vector<BluetoothRecord> bluetooth_devices_;
     std::unordered_map<std::string, std::size_t> bluetooth_index_;
+    std::string bluetooth_adapter_id_;
     model::FoxHunt bluetooth_fox_;
     uint32_t bluetooth_filter_{};
     uint64_t bluetooth_total_{};
