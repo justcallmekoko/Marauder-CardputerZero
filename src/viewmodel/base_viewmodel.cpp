@@ -378,7 +378,14 @@ void BaseViewModel::bluetooth_select() {
         bluetooth_view_ = 3;
     } else if (bluetooth_view_ == 3 && bluetooth_selected()) {
         bluetooth_view_ = bluetooth_action_cursor_ ? 5 : 4;
-        if (bluetooth_view_ == 5) bluetooth_fox_.begin(bluetooth_selected()->observation.address, 0);
+        if (bluetooth_view_ == 5) {
+            bluetooth_fox_.begin(bluetooth_selected()->observation.address, 0);
+            if (!bluetooth_session_.active() || !bluetooth_hci_session_.active()) {
+                bluetooth_session_.stop();
+                bluetooth_hci_session_.stop();
+                bluetooth_start_stop();
+            }
+        }
     }
     bluetooth_generation_.set(bluetooth_generation_.value() + 1);
 }

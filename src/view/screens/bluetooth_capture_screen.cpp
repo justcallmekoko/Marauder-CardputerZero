@@ -85,11 +85,14 @@ void BluetoothCaptureScreen::render() {
         (vm.bluetooth_builder() ? "BUILD ON" : "BUILD OFF") + "  " + vm.bluetooth_status();
     lv_label_set_text(status_, status.c_str());
     lv_obj_set_style_text_color(status_, vm.bluetooth_running() ? colors.success : colors.warning, 0);
+    if (fox) lv_obj_add_flag(status_, LV_OBJ_FLAG_HIDDEN);
+    else lv_obj_remove_flag(status_, LV_OBJ_FLAG_HIDDEN);
     fox_panel_->show(fox);
     if (fox && selected) {
         fox_panel_->render(vm.bluetooth_fox(), vm.screen_name(selected->observation.name.empty() ?
             selected->classification.type : selected->observation.name), selected->classification.vendor,
-            accent(selected->classification, colors), vm.is_dark_mode(), true, vm.censor_enabled(), true);
+            accent(selected->classification, colors), vm.is_dark_mode(), vm.bluetooth_running(),
+            vm.censor_enabled(), true, vm.bluetooth_status());
     }
     if (info && selected) {
         const auto& observed = selected->observation;

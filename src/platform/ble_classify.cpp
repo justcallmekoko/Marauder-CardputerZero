@@ -194,6 +194,8 @@ Classification classify(const BluetoothObservation& item) {
             has_pair(field.bytes, 0x83, 0x30)) result.matches |= bit(Kind::Flipper);
     }
     const auto all_uuids = item.uuids + "," + item.service_data;
+    if (uuid(all_uuids, "00003081-") || uuid(all_uuids, "00003082-") ||
+        uuid(all_uuids, "00003083-")) result.matches |= bit(Kind::Flipper);
     if (uuid(all_uuids, "0000FD44-") || uuid(all_uuids, "15190001-12F4-C226-88ED-2AC5579F2A85"))
         result.matches |= bit(Kind::FindMy);
     static constexpr std::array<const char*, 6> meta_uuids = {
