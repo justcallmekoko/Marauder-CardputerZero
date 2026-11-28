@@ -35,7 +35,7 @@ const std::vector<Item>& items_for(Id menu) {
         {"Traffic graph", Color::Green, Action::OpenTraffic, Id::Main, false, true, RadioRequirement::Selected},
         {"Raw capture", Color::Orange, Action::OpenRawCapture, Id::Main, false, true, RadioRequirement::Monitor},
         {"Pineapple scan", Color::Yellow, Action::OpenPineapple, Id::Main, false, true, RadioRequirement::Monitor},
-        {"Remote ID", Color::Magenta, Action::OpenRemoteId, Id::Main, false, true, RadioRequirement::Monitor},
+        {"Remote ID", Color::Magenta, Action::OpenRemoteId, Id::Main, false, true},
     };
     static const std::vector<Item> wifi_attacks = {
         {"Deauth", Color::Red, Action::None, Id::Main, false, false},
@@ -47,7 +47,27 @@ const std::vector<Item>& items_for(Id menu) {
         {"Saved Networks", Color::LightGrey, Action::None, Id::Main, false, false},
     };
     static const std::vector<Item> bluetooth = {
-        {"Advertisement feed", Color::Cyan, Action::OpenBluetoothRaw, Id::Main, false, true},
+        {"Recon", Color::Orange, Action::None, Id::BluetoothRecon, true, true},
+        {"Collection", Color::Yellow, Action::None, Id::BluetoothCollection, true, true},
+        {"Attacks", Color::Red, Action::None, Id::BluetoothAttacks, true, true},
+        {"General", Color::Purple, Action::None, Id::BluetoothGeneral, true, true},
+    };
+    static const std::vector<Item> bluetooth_recon = {
+        {"Nearby devices", Color::Cyan, Action::OpenBluetoothDevices, Id::Main, false, true},
+        {"Device types", Color::Magenta, Action::None, Id::BluetoothDevices, true, true},
+    };
+    static const std::vector<Item> bluetooth_collection = {
+        {"Raw feed", Color::Cyan, Action::OpenBluetoothRaw, Id::Main, false, true},
+    };
+    static const std::vector<Item> bluetooth_attacks = {
+        {"Advertisement tools", Color::Orange, Action::None, Id::Main, false, false},
+        {"Spoofing tools", Color::Red, Action::None, Id::Main, false, false},
+    };
+    static const std::vector<Item> bluetooth_general = {
+        {"Adapter Setup", Color::Purple, Action::OpenBluetoothAdapters, Id::Main, false, true},
+        {"Saved devices", Color::LightGrey, Action::None, Id::Main, false, false},
+    };
+    static const std::vector<Item> bluetooth_devices = {
         {"Find My", Color::Green, Action::OpenBluetoothFindMy, Id::Main, false, true},
         {"iBeacon", Color::Blue, Action::OpenBluetoothIBeacon, Id::Main, false, true},
         {"Flipper", Color::Magenta, Action::OpenBluetoothFlipper, Id::Main, false, true},
@@ -111,6 +131,11 @@ const std::vector<Item>& items_for(Id menu) {
         case Id::WifiAttacks: return wifi_attacks;
         case Id::WifiGeneral: return wifi_general;
         case Id::Bluetooth: return bluetooth;
+        case Id::BluetoothRecon: return bluetooth_recon;
+        case Id::BluetoothCollection: return bluetooth_collection;
+        case Id::BluetoothAttacks: return bluetooth_attacks;
+        case Id::BluetoothGeneral: return bluetooth_general;
+        case Id::BluetoothDevices: return bluetooth_devices;
         case Id::Gps: return gps;
         case Id::Device: return device;
         case Id::Radios: return radios;
@@ -130,6 +155,11 @@ const char* title_for(Id menu) {
         case Id::WifiAttacks: return "WiFi > Attacks";
         case Id::WifiGeneral: return "WiFi > General";
         case Id::Bluetooth: return "Bluetooth";
+        case Id::BluetoothRecon: return "Bluetooth > Recon";
+        case Id::BluetoothCollection: return "Bluetooth > Collection";
+        case Id::BluetoothAttacks: return "Bluetooth > Attacks";
+        case Id::BluetoothGeneral: return "Bluetooth > General";
+        case Id::BluetoothDevices: return "Bluetooth > Device types";
         case Id::Gps: return "GPS";
         case Id::Device: return "Device";
         case Id::Radios: return "Radios and GPS";
@@ -163,7 +193,7 @@ std::size_t MarauderMenuModel::columns() const {
         case MarauderMenuId::Device:
         case MarauderMenuId::FilesAndMemory:
         case MarauderMenuId::Accounts: return 1;
-        case MarauderMenuId::Bluetooth: return 1;
+        case MarauderMenuId::BluetoothDevices: return 1;
         default: return 2;
     }
 }

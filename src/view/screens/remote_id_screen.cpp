@@ -166,8 +166,10 @@ void RemoteIdScreen::render() {
     lv_label_set_text(title_, fox ? "Fox hunt" : operations ? "Aircraft operations" :
                       details ? tabs[vm.remote_detail_tab()] : "Remote ID map");
     const auto count = fox ? std::to_string(vm.fox_hunt().frames()) + " frames" :
-        std::to_string(total) + " seen  CH " +
-        std::to_string(platform::wireless::channel_number(vm.wifi_tuned_frequency()));
+        std::to_string(total) + " seen  " +
+        (vm.remote_wifi_active() ? "CH " +
+            std::to_string(platform::wireless::channel_number(vm.wifi_tuned_frequency())) : std::string("WiFi off")) +
+        (vm.remote_ble_active() ? "  BLE" : "");
     lv_label_set_text(count_, count.c_str());
     lv_obj_set_style_text_color(count_, colors.success, 0);
     fox_panel_->show(fox);
@@ -176,10 +178,13 @@ void RemoteIdScreen::render() {
         lv_obj_add_flag(empty_, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(detail_, LV_OBJ_FLAG_HIDDEN);
         for (auto& row : rows_) lv_obj_add_flag(row.box, LV_OBJ_FLAG_HIDDEN);
+        const bool ble_fox = vm.fox_hunt().frequency_mhz() == 0;
         fox_panel_->render(vm.fox_hunt(), vm.fox_label() == "Remote ID aircraft" ? vm.fox_label() :
                            vm.screen_identifier(vm.fox_label()), vm.fox_vendor(),
                            lv_color_hex(0xD1A8BE), vm.is_dark_mode(),
-                           vm.wifi_tuned_frequency() == vm.fox_hunt().frequency_mhz(), vm.censor_enabled());
+                           ble_fox ? vm.remote_ble_active() :
+                           vm.wifi_tuned_frequency() == vm.fox_hunt().frequency_mhz(),
+                           vm.censor_enabled(), ble_fox, vm.remote_message());
         set_key_guide("Esc Operations  P PCAP");
         return;
     }
@@ -213,7 +218,9 @@ void RemoteIdScreen::render() {
     }
     lv_obj_set_pos(empty_, 126, 56);
     lv_obj_set_width(empty_, 176);
-    lv_label_set_text(empty_, "Listening for aircraft...");
+    lv_label_set_text(empty_, vm.remote_wifi_active() || vm.remote_ble_active() ?
+        "Listening for aircraft..." : vm.remote_message().empty() ?
+        "No collection radio available" : vm.remote_message().c_str());
     lv_obj_set_pos(detail_, 8, 18);
     if (details) lv_obj_add_flag(map_, LV_OBJ_FLAG_HIDDEN);
     else lv_obj_remove_flag(map_, LV_OBJ_FLAG_HIDDEN);
@@ -231,7 +238,7 @@ void RemoteIdScreen::render() {
                 "\nState  " + flight_state(aircraft->operationalStatus) +
                 "\nFrames  " + std::to_string(aircraft->packetCount) +
                 "    RSSI  " + std::to_string(aircraft->rssi) + " dBm" +
-                "\nWi-Fi CH  " + std::to_string(aircraft->lastWifiChannel);
+                "\nWi-Fi CH  " + (aircraft->lastWifiChannel ? std::to_string(aircraft->lastWifiChannel) : "--");
         } else if (vm.remote_detail_tab() == 1) {
             text = std::string("Aircraft  ") + (aircraft->hasLocation ?
                 vm.screen_coordinate(position_text(aircraft->latitudeE7)) + ", " +
@@ -254,8 +261,10 @@ void RemoteIdScreen::render() {
                     vm.screen_coordinate(position_text(aircraft->operatorLongitudeE7)) : "Not broadcast") +
                 "\nDescription  " + (aircraft->hasDescription ? vm.screen_name(aircraft->description) : "Not broadcast") +
                 "\nAuthentication  " + (aircraft->hasAuthentication ? "Observed" : "Not observed") +
-                std::string("\nTransport  Wi-Fi ") +
-                (aircraft->transportMask & static_cast<uint8_t>(RemoteIdTransport::WifiNan) ? "NAN" : "Beacon");
+                "\nTransport  ";
+            char transports[24];
+            remoteIdFormatTransports(aircraft->transportMask, transports, sizeof(transports));
+            text += transports;
         }
         lv_label_set_text(detail_, text.c_str());
         set_key_guide("F/X Details  Esc Actions");
@@ -372,8 +381,11 @@ void RemoteIdScreen::render() {
         lv_label_set_text(row.name, identity.c_str());
         lv_obj_set_style_text_color(row.name, aircraft->isLost ? colors.text_disabled : colors.text, 0);
         std::string meta = aircraft->isLost ? "LOST  " : "LIVE  ";
-        meta += "CH " + std::to_string(aircraft->lastWifiChannel) + "  " +
-            std::to_string(aircraft->rssi) + " dBm";
+        char transports[24];
+        remoteIdFormatTransports(aircraft->transportMask, transports, sizeof(transports));
+        meta += std::string(transports) + (aircraft->lastWifiChannel ?
+            " CH " + std::to_string(aircraft->lastWifiChannel) : "") +
+            "  " + std::to_string(aircraft->rssi) + " dBm";
         if (have_gps && aircraft->hasLocation) {
             char distance[20];
             remoteIdFormatDistanceKm(remoteIdDistanceMeters(origin_lat, origin_lon,

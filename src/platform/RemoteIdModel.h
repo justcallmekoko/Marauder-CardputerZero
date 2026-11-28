@@ -1,5 +1,5 @@
 #pragma once
-// Adapted from ESP32 Marauder RemoteIdModel (MIT); Wi-Fi transports only.
+// Adapted from ESP32 Marauder RemoteIdModel (MIT).
 
 #include <stddef.h>
 #include <stdint.h>
@@ -8,6 +8,7 @@ enum class RemoteIdTransport : uint8_t {
   None = 0,
   WifiBeacon = 1 << 0,
   WifiNan = 1 << 1,
+  Bluetooth = 1 << 2,
 };
 
 static constexpr size_t REMOTE_ID_HISTORY_CAPACITY = 10;

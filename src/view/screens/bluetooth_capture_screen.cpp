@@ -107,6 +107,10 @@ void BluetoothCaptureScreen::render() {
             (classified.evidence.empty() ? "" : "\n" + classified.evidence);
         lv_label_set_text(detail_, detail.c_str());
         lv_obj_remove_flag(detail_, LV_OBJ_FLAG_HIDDEN);
+    } else if (devices && visible.empty()) {
+        lv_label_set_text(detail_, vm.bluetooth_running() ? "Listening for nearby devices..." :
+                          vm.bluetooth_status().c_str());
+        lv_obj_remove_flag(detail_, LV_OBJ_FLAG_HIDDEN);
     } else lv_obj_add_flag(detail_, LV_OBJ_FLAG_HIDDEN);
     const std::size_t cursor = filters ? vm.bluetooth_filter_cursor() :
         actions ? vm.bluetooth_action_cursor() : vm.bluetooth_cursor();
