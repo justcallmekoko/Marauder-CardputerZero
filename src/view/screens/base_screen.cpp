@@ -19,8 +19,8 @@
 namespace screen {
 namespace {
 bool guide_key(std::string_view token) {
-    static constexpr std::array<std::string_view, 11> names = {
-        "F", "X", "Z", "C", "D", "M", "P", "B", "T", "H", "ESC"
+    static constexpr std::array<std::string_view, 14> names = {
+        "F", "X", "Z", "C", "D", "M", "P", "B", "T", "H", "A", "U", "W", "ESC"
     };
     auto is_name = [&](std::string_view name) {
         if (name == "Enter" || name == "ENTER" || name == "Esc" ||

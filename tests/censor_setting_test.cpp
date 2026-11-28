@@ -15,10 +15,16 @@ int main() {
         assert(!first.censor_enabled());
         assert(first.toggle_censor());
         assert(first.censor_enabled());
+        assert(first.map_zoom() == 6);
+        assert(first.set_map_zoom(4));
+        assert(first.set_map_pack(1));
     }
     {
         model::BaseModel reopened;
         assert(reopened.censor_enabled());
+        assert(reopened.map_zoom() == 4);
+        assert(reopened.map_pack() == 1);
+        assert(!reopened.set_map_zoom(17));
         assert(reopened.toggle_censor());
     }
     assert(!model::BaseModel{}.censor_enabled());

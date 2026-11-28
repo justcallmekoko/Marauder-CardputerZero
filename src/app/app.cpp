@@ -11,6 +11,7 @@
 #include "help_popup.h"
 #include "logger.h"
 #include "linux_input.h"
+#include "map_packs.h"
 #include "screenshot_service.h"
 #include "screen_manager.h"
 #include "shortcut_policy.h"
@@ -74,7 +75,8 @@ public:
     }
 
 private:
-    enum class DialogAction { Exit, SelectAdapter, OpenAdapters };
+    enum class DialogAction { Exit, SelectAdapter, OpenAdapters, DeleteMap, DeletePcap,
+                              DeleteWardrive, UploadWigle, UploadWdg, UploadBoth, UploadAll };
     DialogAction dialog_action_{DialogAction::Exit};
     void show_confirmation(const std::string& message, const char* accept, DialogAction action) {
         dialog_action_ = action;
@@ -131,6 +133,19 @@ private:
                 if (key == LV_KEY_ENTER) {
                     if (dialog_action_ == DialogAction::Exit) view_model_.request_quit();
                     else if (dialog_action_ == DialogAction::OpenAdapters) view_model_.show_adapters_page();
+                    else if (dialog_action_ == DialogAction::DeleteMap) view_model_.delete_map_pack(pending_map_pack_);
+                    else if (dialog_action_ == DialogAction::DeletePcap || dialog_action_ == DialogAction::DeleteWardrive ||
+                             dialog_action_ == DialogAction::UploadWigle || dialog_action_ == DialogAction::UploadWdg ||
+                             dialog_action_ == DialogAction::UploadBoth || dialog_action_ == DialogAction::UploadAll) {
+                        const auto result = dialog_action_ == DialogAction::DeletePcap ? view_model_.delete_selected_pcap() :
+                            dialog_action_ == DialogAction::DeleteWardrive ? view_model_.delete_selected_wardrive() :
+                            dialog_action_ == DialogAction::UploadAll ? view_model_.upload_pending_wardrive() :
+                            view_model_.upload_selected_wardrive(dialog_action_ == DialogAction::UploadWigle ? "wigle" :
+                                                                 dialog_action_ == DialogAction::UploadWdg ? "wdg" : "both");
+                        const bool okay = result == "Capture deleted" || result == "Wardrive log deleted" ||
+                            result.rfind("Uploading ", 0) == 0;
+                        toast_->show(result, okay ? view::widgets::ToastTone::Success : view::widgets::ToastTone::Error, 3200);
+                    }
                     else {
                         const auto& radios = view_model_.adapters();
                         const auto cursor = view_model_.adapter_cursor();
@@ -221,12 +236,20 @@ private:
         }
 
         if (key == LV_KEY_ESC && !long_pressed) {
+            if (view_model_.current_page() == model::AppPage::MapPacks && view_model_.map_installing()) {
+                view_model_.cancel_map_download();
+                return true;
+            }
             if (view_model_.current_page() == model::AppPage::RemoteId && view_model_.remote_details()) {
                 view_model_.remote_back();
                 return true;
             }
             if (view_model_.current_page() == model::AppPage::PcapFiles && view_model_.pcap_details()) {
                 view_model_.toggle_pcap_details();
+                return true;
+            }
+            if (view_model_.current_page() == model::AppPage::WardriveFiles && view_model_.wardrive_details()) {
+                view_model_.toggle_wardrive_details();
                 return true;
             }
             if (view_model_.current_page() == model::AppPage::WifiScan &&
@@ -284,7 +307,67 @@ private:
             if (action == NavigationAction::Previous) { view_model_.move_pcap_file(-1); return true; }
             if (action == NavigationAction::Next) { view_model_.move_pcap_file(1); return true; }
             if (key == LV_KEY_ENTER) { view_model_.toggle_pcap_details(); return true; }
-            if (action == NavigationAction::Details) { view_model_.refresh_pcap_files(); return true; }
+            if (action == NavigationAction::Details && !view_model_.selected_pcap_name().empty()) {
+                show_confirmation("Delete selected capture?", "Enter  Delete", DialogAction::DeletePcap);
+                return true;
+            }
+        }
+
+        if (view_model_.current_page() == model::AppPage::WardriveFiles) {
+            if (view_model_.wardrive_uploading()) return true;
+            if (action == NavigationAction::Previous) { view_model_.move_wardrive_file(-1); return true; }
+            if (action == NavigationAction::Next) { view_model_.move_wardrive_file(1); return true; }
+            if (key == LV_KEY_ENTER) { view_model_.toggle_wardrive_details(); return true; }
+            if (key == 'a' || key == 'A') {
+                const auto count = view_model_.pending_wardrive_count();
+                if (!count) toast_->show("No pending uploads", view::widgets::ToastTone::Success, 2400);
+                else show_confirmation("Upload " + std::to_string(count) + " pending items?",
+                                       "Enter  Upload", DialogAction::UploadAll);
+                return true;
+            }
+            if (view_model_.selected_wardrive_name().empty()) return true;
+            if (action == NavigationAction::Details) {
+                show_confirmation("Delete selected wardrive log?", "Enter  Delete", DialogAction::DeleteWardrive);
+                return true;
+            }
+            if (key == 'u' || key == 'U' || key == 'w' || key == 'W') {
+                const bool wigle = key == 'u' || key == 'U';
+                show_confirmation(wigle ? "Upload this log to WiGLE?" : "Upload this log to WDGWars?",
+                                  "Enter  Upload", wigle ? DialogAction::UploadWigle : DialogAction::UploadWdg);
+                return true;
+            }
+            if (key == 'b' || key == 'B') {
+                show_confirmation("Upload this log to both?", "Enter  Upload", DialogAction::UploadBoth);
+                return true;
+            }
+        }
+
+        if (view_model_.current_page() == model::AppPage::MapPacks) {
+            if (view_model_.map_installing()) return true;
+            if (action == NavigationAction::Previous) view_model_.move_map_pack(-1);
+            else if (action == NavigationAction::Next) view_model_.move_map_pack(1);
+            else if (action == NavigationAction::Back) view_model_.step_map_zoom(-1);
+            else if (action == NavigationAction::Primary && key != LV_KEY_ENTER) view_model_.step_map_zoom(1);
+            else if (key == LV_KEY_ENTER) view_model_.select_map_pack();
+            else if (action == NavigationAction::Details) {
+                pending_map_pack_ = view_model_.map_pack_cursor();
+                show_confirmation(std::string("Delete ") + platform::maps::pack(pending_map_pack_).name + " map?",
+                                  "Enter  Delete", DialogAction::DeleteMap);
+            }
+            else return false;
+            return true;
+        }
+
+        if (view_model_.current_page() == model::AppPage::GpsTool) {
+            if (key == 'm' || key == 'M') view_model_.toggle_wardrive_view();
+            else if (view_model_.gps_tool() == viewmodel::BaseViewModel::GpsTool::Wardrive &&
+                     view_model_.wardrive_view() == 2 && action == NavigationAction::Previous)
+                view_model_.scroll_wardrive_channels(-1);
+            else if (view_model_.gps_tool() == viewmodel::BaseViewModel::GpsTool::Wardrive &&
+                     view_model_.wardrive_view() == 2 && action == NavigationAction::Next)
+                view_model_.scroll_wardrive_channels(1);
+            else if (key == LV_KEY_ENTER) view_model_.toggle_gps_recording();
+            return true;
         }
 
         if (view_model_.current_page() == model::AppPage::RemoteId) {
@@ -389,6 +472,7 @@ private:
     viewmodel::BaseViewModel& view_model_;
     AssetManager& assets_;
     std::string pending_adapter_;
+    unsigned pending_map_pack_{};
     lv_obj_t* confirmation_ = nullptr;
     std::unique_ptr<view::widgets::Toast> toast_;
     std::unique_ptr<view::widgets::HelpPopup> help_popup_;

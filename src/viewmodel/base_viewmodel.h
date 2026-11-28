@@ -16,12 +16,16 @@
 #include "lvgl.h"
 
 #include "wireless_adapters.h"
+#include "wardrive_channels.h"
 #include "wireless_scan.h"
 #include "radio_power.h"
 #include "raw_wifi.h"
 #include "pineapple_wifi.h"
 #include "remote_id_wifi.h"
 #include "pcap_capture.h"
+#include "gps_log.h"
+#include "wardrive_files.h"
+#include "map_packs.h"
 
 #include <atomic>
 #include <array>
@@ -30,6 +34,10 @@
 #include <future>
 #include <chrono>
 #include <thread>
+#include <unordered_set>
+#include <unordered_map>
+#include <memory>
+#include <set>
 #include <vector>
 #include <deque>
 
@@ -38,6 +46,14 @@ namespace viewmodel {
 class BaseViewModel {
 public:
     enum class FoxTarget { None, AccessPoint, Station, Aircraft, Pineapple };
+    struct WardriveSighting {
+        bool bluetooth{};
+        std::string name, address;
+    };
+    struct WardriveMapPoint {
+        int32_t latitude_e7{}, longitude_e7{};
+        bool bluetooth{};
+    };
     BaseViewModel();
     ~BaseViewModel();
 
@@ -76,6 +92,28 @@ public:
     bool pcap_details() const { return pcap_details_; }
     const auto& pcap_message() const { return pcap_message_; }
     lv_subject_t* pcap_files_subject() { return pcap_files_generation_.native(); }
+    std::string selected_pcap_name() const;
+    std::string delete_selected_pcap();
+    void show_wardrive_files_page();
+    void refresh_wardrive_files();
+    void move_wardrive_file(int direction);
+    void toggle_wardrive_details();
+    std::string selected_wardrive_name() const;
+    std::string delete_selected_wardrive();
+    std::string upload_selected_wardrive(const std::string& service);
+    std::string upload_pending_wardrive();
+    std::size_t pending_wardrive_count() const;
+    bool wardrive_uploading() const { return wardrive_upload_job_.valid(); }
+    std::size_t wardrive_upload_current() const { return wardrive_upload_index_.load(); }
+    std::size_t wardrive_upload_total() const { return wardrive_upload_tasks_.size(); }
+    unsigned wardrive_upload_percent() const;
+    std::string wardrive_upload_label() const;
+    std::string wardrive_upload_phase_label() const;
+    const auto& wardrive_files() const { return wardrive_files_; }
+    std::size_t wardrive_cursor() const { return wardrive_cursor_; }
+    bool wardrive_details() const { return wardrive_details_; }
+    const auto& wardrive_message() const { return wardrive_message_; }
+    lv_subject_t* wardrive_files_subject() { return wardrive_files_generation_.native(); }
 
     bool is_dark_mode() const;
     bool censor_enabled() const { return model_.censor_enabled(); }
@@ -104,7 +142,54 @@ public:
     void show_wifi_scan_page();
     void show_raw_capture_page();
     void show_remote_id_page();
+    void show_map_packs_page();
+    void move_map_pack(int direction);
+    void select_map_pack();
+    void step_map_zoom(int direction);
+    void cancel_map_download();
+    void delete_map_pack(unsigned index);
+    unsigned map_pack_cursor() const { return map_pack_cursor_; }
+    unsigned map_pack() const { return model_.map_pack(); }
+    unsigned map_zoom() const { return model_.current_page() == model::AppPage::MapPacks ? map_preview_zoom_ : model_.map_zoom(); }
+    std::uint64_t map_local_estimate() const {
+        int32_t lat{}, lon{};
+        return remote_position(lat, lon) ? platform::maps::local_estimate(lat, lon, map_preview_zoom_) : 0;
+    }
+    std::uint64_t map_area_estimate() const { return platform::maps::area_estimate(map_pack_cursor_, map_preview_zoom_); }
+    bool map_installing() const { return map_job_.valid(); }
+    bool map_deleting() const { return map_deleting_; }
+    std::uint64_t map_progress_done() const { return map_progress_.done.load(); }
+    std::uint64_t map_progress_total() const { return map_progress_.total.load(); }
+    bool map_progress_bytes() const { return map_download_pack_ < 2; }
+    unsigned map_storage_revision() const { return map_storage_revision_; }
+    const std::string& map_message() const { return map_message_; }
+    lv_subject_t* map_subject() { return map_generation_.native(); }
     void show_pineapple_page();
+    enum class GpsTool { Info, Wardrive, Track };
+    void show_gps_tool(GpsTool tool);
+    void toggle_gps_recording();
+    GpsTool gps_tool() const { return gps_tool_; }
+    bool gps_recording() const { return gps_log_.active(); }
+    std::size_t gps_record_count() const { return gps_log_.count(); }
+    std::size_t bluetooth_record_count() const { return gps_log_.bluetooth_count(); }
+    std::size_t bluetooth_observed_count() const { return bluetooth_seen_.size(); }
+    std::size_t wardrive_wifi_count() const { return wardrive_channels_.size(); }
+    std::vector<platform::wireless::WardriveChannel> wardrive_channel_distribution() const {
+        return wardrive_channels_.distribution();
+    }
+    const std::deque<WardriveSighting>& wardrive_sightings() const { return wardrive_sightings_; }
+    const std::deque<WardriveMapPoint>& wardrive_route() const { return wardrive_route_; }
+    const std::deque<WardriveMapPoint>& wardrive_map_points() const { return wardrive_map_points_; }
+    unsigned wardrive_view() const { return wardrive_view_; }
+    void toggle_wardrive_view();
+    void scroll_wardrive_channels(int direction);
+    std::size_t wardrive_channel_offset() const { return wardrive_channel_offset_; }
+    bool bluetooth_scanning() const { return bluetooth_session_.active(); }
+    const std::string& gps_tool_message() const { return gps_tool_message_; }
+    const std::string& gps_file_name() const { return gps_file_name_; }
+    const std::string& gps_receiver_id() const { return gps_id_; }
+    std::string gps_receiver_name() const;
+    lv_subject_t* gps_tool_subject() { return gps_tool_generation_.native(); }
     const auto& pineapple_items() const { return pineapple_items_; }
     std::size_t pineapple_cursor() const { return pineapple_cursor_; }
     std::size_t pineapple_action_cursor() const { return pineapple_action_cursor_; }
@@ -142,7 +227,9 @@ public:
         return pcap_capture_.active() && filter.scope != platform::pcap::Scope::All ?
             static_cast<unsigned>(filter.frequency_mhz) : 0;
     }
-    std::string tune_traffic_channel(unsigned mhz) { return monitor_session_.tune(mhz); }
+    std::string tune_traffic_channel(unsigned mhz) {
+        return monitor_session_for(model_.selected_adapter_id()).tune(mhz);
+    }
     int take_traffic_step() { int step = traffic_step_; traffic_step_ = 0; return step; }
     bool scanning() const { return wifi_scan_running_; }
     lv_subject_t* inventory_subject() { return inventory_generation_.native(); }
@@ -186,7 +273,7 @@ public:
     bool radio_busy() const { return radio_job_.valid(); }
     void refresh_adapters();
     void toggle_monitor();
-    bool monitor_busy() const { return monitor_job_.valid(); }
+    bool monitor_busy() const { return monitor_job_.valid() || monitor_restore_job_.valid(); }
     void previous_adapter();
     void next_adapter();
     void select_highlighted_adapter();
@@ -217,7 +304,10 @@ public:
     void show_raw_filters();
     const auto& wifi_feed_target() const { return wifi_feed_target_; }
     bool wifi_feed_station() const { return wifi_feed_station_; }
-    unsigned wifi_tuned_frequency() const { return wifi_tuned_frequency_; }
+    unsigned wifi_tuned_frequency() const {
+        return wardrive_session_ ? wardrive_tuned_frequency_.load() : wifi_tuned_frequency_;
+    }
+    unsigned wardrive_active_radios() const { return wardrive_active_radios_.load(); }
     void wifi_back();
     void advance_wifi_info_tab();
     bool system_details_open() const { return system_info_.details_expanded(); }
@@ -247,6 +337,11 @@ private:
     bool begin_pineapple_fox_hunt();
     void begin_remote_fox_hunt();
     void stop_wifi_capture();
+    void start_wardrive_capture(bool clear_results);
+    void run_wardrive_capture(std::vector<platform::wireless::AdapterInfo> adapters,
+                              std::string selected_id,
+                              std::unordered_map<std::string, platform::MonitorSession*> active_sessions,
+                              bool all_idle, unsigned dwell_ms, unsigned priority);
     std::string start_pcap_capture(platform::pcap::Filter filter);
     void advance_wifi_channel();
     static void wifi_scan_timer_cb(lv_timer_t* timer);
@@ -254,27 +349,60 @@ private:
     void update_gps_status();
     void sync_gps_rows();
     reactive::StringSubject<16> gps_status_{"Off"};
-    platform::MonitorSession monitor_session_;
+    platform::MonitorSession& monitor_session_for(const std::string& stable_id);
+    std::unordered_map<std::string, std::unique_ptr<platform::MonitorSession>> monitor_sessions_;
+    std::set<std::string> active_monitor_ids_;
+    std::future<std::vector<std::string>> monitor_restore_job_;
     std::future<std::string> monitor_job_;
     std::string monitor_owner_;
+    std::string monitor_pending_id_;
     std::string monitor_pending_name_;
     bool monitor_target_on_{};
     uint32_t monitor_started_tick_{};
     uint32_t monitor_status_tick_{};
     platform::GpsSession gps_session_;
+    platform::BluetoothSession bluetooth_session_;
+    std::unordered_set<std::string> bluetooth_seen_;
+    platform::wireless::WardriveChannels wardrive_channels_;
+    std::deque<WardriveSighting> wardrive_sightings_;
+    std::deque<WardriveMapPoint> wardrive_route_, wardrive_map_points_;
+    std::unordered_set<std::string> wardrive_plotted_;
+    unsigned wardrive_view_{};
+    std::size_t wardrive_channel_offset_{};
     std::string gps_id_, radio_session_;
+    platform::gps::Log gps_log_;
+    GpsTool gps_tool_{GpsTool::Info};
+    bool wardrive_session_{};
+    std::string gps_tool_message_, gps_file_name_, bluetooth_message_;
+    uint32_t gps_sample_tick_{};
+    reactive::IntSubject gps_tool_generation_{0};
+    void update_gps_tool();
+    void add_wardrive_sighting(bool bluetooth, const std::string& name, const std::string& address);
+    void add_wardrive_map_point(bool bluetooth, const std::string& address, int32_t lat, int32_t lon);
     void finish_radio_setting();
     void load_radios(std::string key, bool enabled);
     std::future<platform::RadioInventory> radio_job_;
     platform::RadioInventory radio_list_;
     std::size_t radio_cursor_{0};
     std::string resource_message_, pending_uuid_, pending_network_;
+    std::future<std::string> map_job_;
+    platform::maps::Progress map_progress_;
+    reactive::IntSubject map_generation_{0};
+    std::string map_message_;
+    bool map_deleting_{false};
+    unsigned map_storage_revision_{};
+    uint32_t map_progress_tick_{};
+    unsigned map_pack_cursor_{};
+    unsigned map_download_pack_{};
+    unsigned map_preview_zoom_{6}, map_download_zoom_{6};
     int original_light_{-1}, light_max_{0}, before_dim_{-1};
     bool changed_light_{false};
     uint32_t activity_tick_{};
     bool set_light(int value);
     void idle_display();
     void choose_upload_policy();
+    std::string start_wardrive_upload(std::vector<std::pair<std::string, std::string>> tasks);
+    void check_credentials(const std::string& service);
     std::string resource_error_;
     model::BaseModel model_;
     model::MarauderMenuModel marauder_menu_;
@@ -296,6 +424,19 @@ private:
     std::size_t pcap_cursor_{};
     bool pcap_details_{};
     std::string pcap_message_;
+    reactive::IntSubject wardrive_files_generation_{0};
+    std::vector<platform::wardrive::FileInfo> wardrive_files_;
+    std::size_t wardrive_cursor_{};
+    bool wardrive_details_{};
+    std::string wardrive_message_;
+    std::future<std::string> wardrive_upload_job_;
+    std::vector<std::pair<std::string, std::string>> wardrive_upload_tasks_;
+    platform::wardrive::Progress wardrive_progress_;
+    std::atomic<std::size_t> wardrive_upload_index_{0};
+    std::future<platform::wardrive::Result> credential_check_job_;
+    std::string credential_check_service_;
+    std::string wigle_check_{"Not checked"}, wdg_check_{"Not checked"};
+    uint32_t wardrive_progress_tick_{};
     model::SystemInfoModel system_info_;
     platform::diagnostics::Snapshot diagnostics_snapshot_;
     std::vector<platform::wireless::AdapterInfo> adapters_;
@@ -361,6 +502,8 @@ private:
     std::future<std::string> wifi_hop_job_;
     std::size_t wifi_hop_index_{};
     unsigned wifi_tuned_frequency_{};
+    std::atomic<unsigned> wardrive_tuned_frequency_{0};
+    std::atomic<unsigned> wardrive_active_radios_{0};
     unsigned wifi_tune_failed_frequency_{};
     uint32_t wifi_hop_tick_{};
     lv_timer_t* wifi_scan_timer_{nullptr};

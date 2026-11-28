@@ -1,0 +1,286 @@
+#!/usr/bin/python3
+"""Convert one local wardrive log and upload it on explicit user request."""
+import base64
+import csv
+import gzip
+import http.client
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+import tempfile
+import time
+
+COLUMNS = ("MAC", "SSID", "AuthMode", "FirstSeen", "Channel", "Frequency", "RSSI",
+           "CurrentLatitude", "CurrentLongitude", "AltitudeMeters", "AccuracyMeters",
+           "RCOIs", "MfgrId", "Type")
+
+def app_version():
+    try:
+        result = subprocess.run(["/usr/bin/dpkg-query", "-W", "-f=${Version}", "marauder"],
+                                capture_output=True, text=True, timeout=2, check=True)
+        return result.stdout.strip().split("-", 1)[0] or "0.6.59"
+    except (OSError, subprocess.SubprocessError):
+        return "0.6.59"
+
+
+def convert(source, target):
+    count = 0
+    with source.open(newline="", encoding="utf-8") as src, target.open("w", newline="", encoding="utf-8") as dst:
+        reader = csv.DictReader(src)
+        shared = {"utc", "channel", "rssi_dbm", "security", "latitude", "longitude"}
+        modern = reader.fieldnames and shared.union({"radio", "address", "name"}).issubset(reader.fieldnames)
+        legacy = reader.fieldnames and shared.union({"bssid", "ssid"}).issubset(reader.fieldnames)
+        if not modern and not legacy:
+            raise ValueError("Unsupported wardrive log")
+        version = app_version()
+        dst.write(f"WigleWifi-1.6,appRelease={version},model=Cardputer Zero,release={version},device=Cardputer Zero,display=LCD,board=Cardputer Zero,brand=M5Stack\n")
+        writer = csv.writer(dst)
+        writer.writerow(COLUMNS)
+        for row in reader:
+            radio = row["radio"] if modern else "WiFi"
+            if radio not in ("WiFi", "Bluetooth"):
+                continue
+            address = row["address"] if modern else row["bssid"]
+            name = row["name"] if modern else row["ssid"]
+            if not re.fullmatch(r"[0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5}", address or ""):
+                continue
+            latitude, longitude = row["latitude"], row["longitude"]
+            try:
+                if not (-90 <= float(latitude) <= 90 and -180 <= float(longitude) <= 180):
+                    continue
+            except (ValueError, TypeError):
+                continue
+            channel = row["channel"] if radio == "WiFi" else ""
+            frequency = row.get("frequency_mhz", "") if radio == "WiFi" else ""
+            # Older app logs lack frequency. Their channel alone cannot distinguish 6 GHz.
+            if radio == "WiFi" and not frequency:
+                try:
+                    number = int(channel)
+                    frequency = str(2484 if number == 14 else 2407 + 5 * number if 1 <= number <= 13
+                                    else 5000 + 5 * number if 32 <= number <= 177 else "")
+                except ValueError:
+                    frequency = ""
+            observed = row["utc"] or ""
+            if not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", observed):
+                continue
+            writer.writerow((address, name, row["security"] if radio == "WiFi" else "Misc [LE]",
+                             observed.replace("T", " ").removesuffix("Z"), channel, frequency,
+                             row["rssi_dbm"], latitude, longitude,
+                             "", "", "", "", "WIFI" if radio == "WiFi" else "BLE"))
+            count += 1
+    if not count:
+        raise ValueError("Log has no GPS-tagged devices")
+    return count
+
+
+def credentials(service, home):
+    config = Path(os.environ.get("XDG_CONFIG_HOME") or home / ".config") / "marauder-cardputerzero"
+    if service == "wigle":
+        name = (config / "wigle-api-name").read_text().strip()
+        token = (config / "wigle-api-token").read_text().strip()
+        if not name or not token:
+            raise ValueError("Set WiGLE credentials first")
+        auth = base64.b64encode((name + ":" + token).encode()).decode()
+        return "api.wigle.net", {"Authorization": "Basic " + auth}
+    else:
+        key = (config / "wdgwars-api-key").read_text().strip()
+        if not key:
+            raise ValueError("Set WDGWars API key first")
+        return "wdgwars.pl", {"X-API-Key": key}
+
+
+def read_json(response):
+    try:
+        result = json.loads(response.read(262144))
+        return result if isinstance(result, dict) else {}
+    except (ValueError, UnicodeDecodeError):
+        return {}
+
+
+def confirmed(value):
+    return value is True or value == "true"
+
+
+def check_credentials(service, home):
+    host, headers = credentials(service, home)
+    endpoint = "/api/v2/profile/user" if service == "wigle" else "/api/me"
+    connection = http.client.HTTPSConnection(host, timeout=15)
+    try:
+        connection.request("GET", endpoint, headers={**headers, "Accept": "application/json",
+                                                     "User-Agent": "Marauder-CardputerZero"})
+        response = connection.getresponse()
+        result = read_json(response)
+        if response.status in (401, 403):
+            raise ValueError(("WiGLE" if service == "wigle" else "WDGWars") + " credentials invalid")
+        if response.status != 200 or not confirmed(result.get("success" if service == "wigle" else "ok")):
+            raise ValueError("Credential check not confirmed (HTTP " + str(response.status) + ")")
+        return ("WiGLE" if service == "wigle" else "WDGWars") + " credentials valid"
+    finally:
+        connection.close()
+
+
+def poll_wdg(job_id, headers, phase=None):
+    if not str(job_id).isdigit():
+        raise ValueError("WDGWars returned an invalid job ID")
+    if phase:
+        phase(3)
+    deadline = time.monotonic() + 120
+    while time.monotonic() < deadline:
+        connection = http.client.HTTPSConnection("wdgwars.pl", timeout=20)
+        try:
+            connection.request("GET", "/api/v2/upload-job/" + str(job_id),
+                               headers={**headers, "Accept": "application/json"})
+            response = connection.getresponse()
+            result = read_json(response)
+            if response.status < 300:
+                state = str(result.get("status", "")).lower()
+                if state == "done":
+                    return "uploaded"
+                if state == "failed":
+                    raise ValueError("WDGWars rejected uploaded log")
+        except (OSError, http.client.HTTPException):
+            pass  # The accepted job may still complete; keep checking until the deadline.
+        finally:
+            connection.close()
+        time.sleep(3)
+    return "accepted"
+
+
+def upload_file(path, service, home, progress=None, phase=None):
+    host, headers = credentials(service, home)
+    large_wdg = service == "wdg" and path.stat().st_size > 20 * 1048576
+    payload = path
+    temporary_gzip = None
+    if large_wdg:
+        fd, temporary_gzip = tempfile.mkstemp(prefix=".wardrive-upload-", suffix=".csv.gz", dir=path.parent)
+        try:
+            with os.fdopen(fd, "wb") as output, gzip.GzipFile(fileobj=output, mode="wb", compresslevel=6) as zipped, path.open("rb") as source:
+                while chunk := source.read(65536):
+                    zipped.write(chunk)
+            payload = Path(temporary_gzip)
+            if payload.stat().st_size > 30 * 1048576:
+                raise ValueError("WDGWars upload exceeds 30 MiB limit")
+        except Exception:
+            Path(temporary_gzip).unlink(missing_ok=True)
+            raise
+    endpoint = "/api/v2/file/upload" if service == "wigle" else (
+        "/api/upload-csv" if not large_wdg else "/api/v2/upload-csv")
+    boundary = "----marauder-" + os.urandom(12).hex()
+    name = payload.name.encode("ascii", "replace").decode()
+    prefix = (f"--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{name}\"\r\n" +
+              ("Content-Type: application/gzip\r\n\r\n" if large_wdg else "Content-Type: text/csv\r\n\r\n")).encode()
+    suffix = f"\r\n--{boundary}--\r\n".encode()
+    if service == "wigle":
+        suffix = (f"\r\n--{boundary}\r\nContent-Disposition: form-data; name=\"donate\"\r\n\r\non\r\n"
+                  f"--{boundary}--\r\n").encode()
+    connection = http.client.HTTPSConnection(host, timeout=120 if service == "wdg" else 45)
+    try:
+        connection.putrequest("POST", endpoint)
+        connection.putheader("User-Agent", "Marauder-CardputerZero/" + app_version())
+        connection.putheader("Accept", "application/json")
+        connection.putheader("Content-Type", "multipart/form-data; boundary=" + boundary)
+        connection.putheader("Content-Length", str(len(prefix) + payload.stat().st_size + len(suffix)))
+        for key, value in headers.items():
+            connection.putheader(key, value)
+        connection.endheaders()
+        if phase:
+            phase(1)
+        connection.send(prefix)
+        total = payload.stat().st_size
+        sent = 0
+        if progress:
+            progress(sent, total)
+        with payload.open("rb") as source:
+            while chunk := source.read(65536):
+                connection.send(chunk)
+                sent += len(chunk)
+                if progress:
+                    progress(sent, total)
+        connection.send(suffix)
+        if phase:
+            phase(2)
+        response = connection.getresponse()
+        result = read_json(response)
+        if response.status >= 300 or (isinstance(result, dict) and
+                                      (result.get("success") is False or result.get("ok") is False)):
+            raise ValueError(f"{service.upper()} rejected upload (HTTP {response.status})")
+        if service == "wigle":
+            if response.status != 200 or not confirmed(result.get("success")):
+                raise ValueError("WiGLE response did not confirm upload")
+            return "uploaded"
+        if response.status == 202:
+            if not confirmed(result.get("ok")) or result.get("job_id") is None:
+                raise ValueError("WDGWars did not return a valid upload job")
+            return poll_wdg(result["job_id"], headers, phase)
+        if response.status not in (200, 201) or result.get("ok") is False:
+            raise ValueError("WDGWars did not confirm upload")
+        return "uploaded"
+    finally:
+        connection.close()
+        if temporary_gzip:
+            Path(temporary_gzip).unlink(missing_ok=True)
+
+
+def main(argv):
+    if len(argv) != 3 or argv[2] not in ("wigle", "wdg"):
+        raise ValueError("Invalid upload request")
+    home = Path.home()
+    if argv[1] == "--check":
+        print(check_credentials(argv[2], home))
+        return
+    root = home / "Documents" / "Marauder" / "gps"
+    source = Path(argv[1])
+    if (source.parent != root or not source.name.startswith("wardrive_") or source.suffix != ".csv" or
+            source.is_symlink() or not source.is_file()):
+        raise ValueError("Invalid wardrive log")
+    stat = source.stat()
+    if stat.st_size < 100:
+        raise ValueError("Wardrive log is empty")
+    fd, temporary = tempfile.mkstemp(prefix=".wardrive-upload-", suffix=".csv", dir=root)
+    os.close(fd)
+    converted = Path(temporary)
+    try:
+        print("PHASE 0", flush=True)
+        count = convert(source, converted)
+        state_path = Path(str(source) + ".upload")
+        current = {"wigle": "pending", "wdg": "pending"}
+        try:
+            parts = state_path.read_text().split()
+            if len(parts) == 4 and int(parts[0]) == stat.st_size and abs(int(parts[1]) - int(stat.st_mtime)) <= 1:
+                current = dict(zip(("wigle", "wdg"), parts[2:4]))
+        except (OSError, ValueError, IndexError):
+            pass
+        def save_state():
+            fd, temporary_state = tempfile.mkstemp(prefix=".wardrive-state-", dir=root)
+            with os.fdopen(fd, "w") as output:
+                output.write(f"{stat.st_size} {int(stat.st_mtime)} {current['wigle']} {current['wdg']}\n")
+                output.flush()
+                os.fsync(output.fileno())
+            os.replace(temporary_state, state_path)
+
+        try:
+            result = upload_file(converted, argv[2], home,
+                                 lambda sent, total: print(f"PROGRESS {sent} {total}", flush=True),
+                                 lambda stage: print(f"PHASE {stage}", flush=True))
+        except (OSError, ValueError, http.client.HTTPException):
+            if current[argv[2]] not in ("uploaded", "accepted"):
+                current[argv[2]] = "failed"
+                save_state()
+            raise
+        current[argv[2]] = result
+        save_state()
+        print(("WiGLE" if argv[2] == "wigle" else "WDGWars") +
+              (" accepted " if result == "accepted" else " uploaded ") + str(count) + " devices")
+    finally:
+        converted.unlink(missing_ok=True)
+
+
+if __name__ == "__main__":
+    try:
+        main(sys.argv)
+    except (OSError, ValueError, http.client.HTTPException) as error:
+        print(str(error)[:180] if not isinstance(error, OSError) else "Network or file error")
+        sys.exit(1)

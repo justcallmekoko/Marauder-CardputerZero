@@ -1,0 +1,11 @@
+#!/bin/sh
+set -eu
+
+case "${1:-}" in
+    remove|purge)
+        target=/etc/sudoers.d/marauder-monitor
+        if [ -f "$target" ] && grep -Fqx '# Managed by the marauder package; removed on package removal.' "$target"; then
+            rm -f "$target"
+        fi
+        ;;
+esac

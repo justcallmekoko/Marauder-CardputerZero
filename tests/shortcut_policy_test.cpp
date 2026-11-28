@@ -20,6 +20,8 @@ int main() {
     assert(navigation_action('x') == NavigationAction::Next);
     assert(navigation_action('c') == NavigationAction::Primary);
     assert(navigation_action('z') == NavigationAction::Back);
+    assert(navigation_action('C') == NavigationAction::Primary);
+    assert(navigation_action('Z') == NavigationAction::Back);
     assert(navigation_action('d') == NavigationAction::Details);
     for (uint32_t key = '4'; key <= '8'; ++key) {
         assert(navigation_action(key) == NavigationAction::None);

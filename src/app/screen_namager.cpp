@@ -14,6 +14,8 @@
 #include "traffic_screen.h"
 #include "pcap_files_screen.h"
 #include "remote_id_screen.h"
+#include "map_packs_screen.h"
+#include "gps_tool_screen.h"
 
 namespace app {
 namespace {
@@ -101,12 +103,23 @@ void ScreenManager::flush_requested_page() {
     }
 
     switch (requested_page_) {
+        case model::AppPage::MapPacks:
+            load_screen(std::make_unique<screen::MapPacksScreen>(view_model_, assets_));
+            loaded_page_ = requested_page_;
+            has_loaded_page_ = true;
+            return;
+        case model::AppPage::GpsTool:
+            load_screen(std::make_unique<screen::GpsToolScreen>(view_model_, assets_));
+            loaded_page_ = requested_page_;
+            has_loaded_page_ = true;
+            return;
         case model::AppPage::RemoteId:
             load_screen(std::make_unique<screen::RemoteIdScreen>(view_model_, assets_));
             loaded_page_ = requested_page_;
             has_loaded_page_ = true;
             return;
         case model::AppPage::PcapFiles:
+        case model::AppPage::WardriveFiles:
             load_screen(std::make_unique<screen::PcapFilesScreen>(view_model_, assets_));
             loaded_page_ = requested_page_;
             has_loaded_page_ = true;

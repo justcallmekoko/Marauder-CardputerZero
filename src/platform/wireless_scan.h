@@ -3,7 +3,7 @@
  */
 
 #pragma once
-#include "wifi_security.h"
+#include "raw_wifi.h"
 
 #include <functional>
 #include <string>
@@ -22,6 +22,7 @@ struct WifiNetwork {
         int rssi{};
         bool has_rssi{};
         unsigned frames{};
+        HandshakeState handshake;
     };
     std::string bssid;
     std::string ssid;

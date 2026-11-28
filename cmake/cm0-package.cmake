@@ -30,7 +30,7 @@ if(APP_INSTALL_SYSTEMD_SERVICE)
     )
 endif()
 
-install(PROGRAMS src/platform/helpers/radio-inventory src/platform/helpers/gps-session src/platform/helpers/monitor-session DESTINATION lib/marauder)
+install(PROGRAMS src/platform/helpers/radio-inventory src/platform/helpers/gps-session src/platform/helpers/monitor-session src/platform/helpers/bluetooth-session src/platform/helpers/wardrive-upload DESTINATION lib/marauder)
 
 install(TARGETS ${PROJECT_NAME}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
@@ -48,10 +48,12 @@ install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/assets/images/"
     DESTINATION "${CMAKE_INSTALL_DATADIR}/${APP_NAME}/images"
     PATTERN ".DS_Store" EXCLUDE
 )
-install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/assets/images/"
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/assets/images/jcmk-marauder-icon-v2.png"
     DESTINATION "${CMAKE_INSTALL_DATADIR}/APPLaunch/share/images"
-    FILES_MATCHING
-    PATTERN "jcmk-marauder-icon-v2.png"
+    RENAME "marauder-icon-v2.png"
+)
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/packaging/marauder-monitor.sudoers"
+    DESTINATION "${CMAKE_INSTALL_DATADIR}/${APP_NAME}"
 )
 
 install(FILES "${APP_GENERATED_DIR}/${PROJECT_NAME}.desktop"
@@ -95,12 +97,14 @@ set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "${APP_DEBIAN_ARCHITECTURE}")
 set(CPACK_DEBIAN_PACKAGE_MAINTAINER "${APP_MAINTAINER}")
 set(CPACK_DEBIAN_PACKAGE_SECTION "utils")
 set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
-set(APP_DEBIAN_DEPENDS "libc6, libstdc++6, libgcc-s1, libfreetype6, libpng16-16t64, libjpeg62-turbo, zlib1g, iw, network-manager, python3 (>= 3.12), bluez")
+set(APP_DEBIAN_DEPENDS "libc6, libstdc++6, libgcc-s1, libfreetype6, libpng16-16t64, libjpeg62-turbo, zlib1g, iw, iproute2, network-manager, python3 (>= 3.12), python3-dbus, python3-gi, bluez, gpsd, sudo, systemd, curl, unzip")
 if(FMT_INCLUDE_DIR AND FMT_LIBRARY)
     string(APPEND APP_DEBIAN_DEPENDS ", libfmt10")
 endif()
 set(CPACK_DEBIAN_PACKAGE_DEPENDS "${APP_DEBIAN_DEPENDS}")
 set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS OFF)
 set(CPACK_DEBIAN_PACKAGE_CONTROL_STRICT_PERMISSION TRUE)
+set(CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA
+    "${CMAKE_CURRENT_SOURCE_DIR}/packaging/postinst;${CMAKE_CURRENT_SOURCE_DIR}/packaging/postrm")
 
 include(CPack)

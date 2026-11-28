@@ -9,6 +9,7 @@
 #include "system_diagnostics.h"
 #include "radio_power.h"
 #include "channel_survey.h"
+#include "wardrive_plan.h"
 #include "src/misc/cache/instance/lv_image_cache.h"
 #include <chrono>
 #include <fstream>
@@ -18,6 +19,9 @@
 #include <sstream>
 #include <system_error>
 #include <iterator>
+#include <memory>
+#include <set>
+#include <tuple>
 #include <cstring>
 #if defined(__linux__) && !USE_DESKTOP
 #include <cerrno>
@@ -130,9 +134,39 @@ BaseViewModel::BaseViewModel()
     if (model_.brightness() && original_light_ >= 0 && light_max_ > 0)
         set_light(std::max(1, static_cast<int>(model_.brightness()) * light_max_ / 100));
     refresh_diagnostics();
+#if defined(__linux__) && !USE_DESKTOP
+    std::vector<std::tuple<std::string, std::string, platform::MonitorSession*>> restore;
+    for (const auto& adapter : adapters_) {
+        if (!model_.monitor_preferences().count(adapter.stable_id) ||
+            adapter.monitor_mode != platform::wireless::CapabilityState::Supported) continue;
+        const auto use = platform::wireless::connection_use(adapter.interface_name);
+        if (use == platform::wireless::ConnectionUse::Connected ||
+            use == platform::wireless::ConnectionUse::Hotspot) continue;
+        restore.emplace_back(adapter.stable_id, adapter.interface_name,
+                             &monitor_session_for(adapter.stable_id));
+    }
+    if (!restore.empty()) {
+        try {
+            monitor_restore_job_ = std::async(std::launch::async, [restore] {
+                std::vector<std::string> started;
+                for (const auto& [id, name, session] : restore)
+                    if (session->start(name) == "Monitor on") started.push_back(id);
+                return started;
+            });
+        } catch (const std::system_error&) {
+            adapter_error_ = "Saved monitor restore unavailable";
+        }
+    } else if (!model_.monitor_preferences().empty())
+        adapter_error_ = "Saved monitor adapters missing or busy";
+#endif
 }
 
 BaseViewModel::~BaseViewModel() {
+    if (map_job_.valid()) { map_progress_.cancel = true; map_job_.wait(); }
+    if (wardrive_upload_job_.valid()) wardrive_upload_job_.wait();
+    if (credential_check_job_.valid()) credential_check_job_.wait();
+    bluetooth_session_.stop();
+    gps_log_.stop();
     pcap_capture_.stop();
     if (changed_light_) set_light(original_light_);
     if (wifi_scan_timer_) {
@@ -142,7 +176,8 @@ BaseViewModel::~BaseViewModel() {
     stop_wifi_capture();
     if (radio_job_.valid()) radio_job_.wait();
     if (monitor_job_.valid()) monitor_job_.wait();
-    monitor_session_.stop();
+    if (monitor_restore_job_.valid()) monitor_restore_job_.wait();
+    for (auto& [id, session] : monitor_sessions_) session->stop();
     gps_session_.stop();
     platform::end_radio_session(radio_session_);
 }
@@ -156,9 +191,21 @@ lv_subject_t* BaseViewModel::diagnostics_generation_subject() { return diagnosti
 lv_subject_t* BaseViewModel::adapter_detail_subject() { return adapter_detail_subject_.native(); }
 lv_subject_t* BaseViewModel::wifi_scan_subject() { return wifi_scan_subject_.native(); }
 lv_subject_t* BaseViewModel::quit_requested_subject() { return quit_requested_subject_.native(); }
+platform::MonitorSession& BaseViewModel::monitor_session_for(const std::string& stable_id) {
+    auto& session = monitor_sessions_[stable_id];
+    if (!session) session = std::make_unique<platform::MonitorSession>();
+    return *session;
+}
 bool BaseViewModel::is_dark_mode() const { return model_.dark_mode(); }
 model::AppPage BaseViewModel::current_page() const { return model_.current_page(); }
-void BaseViewModel::show_dashboard_page() { stop_wifi_capture(); model_.set_current_page(model::AppPage::Dashboard); publish_navigation(); }
+void BaseViewModel::show_dashboard_page() {
+    bluetooth_session_.stop();
+    gps_log_.stop();
+    wardrive_session_ = false;
+    stop_wifi_capture();
+    model_.set_current_page(model::AppPage::Dashboard);
+    publish_navigation();
+}
 void BaseViewModel::show_diagnostics_page() {
     stop_wifi_capture();
     refresh_diagnostics();
@@ -166,6 +213,9 @@ void BaseViewModel::show_diagnostics_page() {
     publish_navigation();
 }
 void BaseViewModel::show_adapters_page() {
+    bluetooth_session_.stop();
+    gps_log_.stop();
+    wardrive_session_ = false;
     stop_wifi_capture();
     refresh_adapters();
     model_.set_current_page(model::AppPage::Adapters);
@@ -200,6 +250,85 @@ void BaseViewModel::show_remote_id_page() {
     publish_navigation();
     if (!wifi_scan_running_) start_wifi_scan();
 }
+void BaseViewModel::show_map_packs_page() {
+    map_pack_cursor_ = model_.map_pack();
+    map_preview_zoom_ = model_.map_zoom();
+    map_message_ = model_.censor_enabled() ? "Censor On: Remote ID hides tiles" : "Choose a map pack";
+    model_.set_current_page(model::AppPage::MapPacks);
+    publish_navigation();
+    map_generation_.set(map_generation_.value() + 1);
+}
+void BaseViewModel::move_map_pack(int direction) {
+    if (map_job_.valid()) return;
+    map_pack_cursor_ = direction < 0 ? (map_pack_cursor_ + platform::maps::pack_count() - 1) % platform::maps::pack_count() :
+        (map_pack_cursor_ + 1) % platform::maps::pack_count();
+    if (map_pack_cursor_ == 2 && map_preview_zoom_ < 10) map_preview_zoom_ = 14;
+    if (map_pack_cursor_ < 2 && map_preview_zoom_ > 6) map_preview_zoom_ = 6;
+    if (map_pack_cursor_ >= 3 && map_preview_zoom_ > 10) map_preview_zoom_ = 6;
+    map_generation_.set(map_generation_.value() + 1);
+}
+void BaseViewModel::select_map_pack() {
+    if (map_job_.valid()) return;
+    map_progress_.cancel = false;
+    map_progress_.done = 0;
+    map_deleting_ = false;
+    if (map_pack_cursor_ == 2) {
+        int32_t lat{}, lon{};
+        if (!remote_position(lat, lon)) map_message_ = "GPS fix required for local map";
+        else {
+            map_download_pack_ = 2;
+            map_download_zoom_ = map_preview_zoom_;
+            map_progress_.total = map_local_estimate() / platform::maps::kEstimatedTileBytes;
+            map_message_ = "Downloading nearby tiles...";
+            try { map_job_ = std::async(std::launch::async, platform::maps::install_local, lat, lon, map_download_zoom_, &map_progress_); }
+            catch (const std::system_error&) { map_message_ = "Download worker unavailable"; }
+        }
+    } else if (platform::maps::installed_zoom(map_pack_cursor_) >= map_preview_zoom_) {
+        map_message_ = model_.set_map_zoom(map_preview_zoom_) && model_.set_map_pack(map_pack_cursor_) ?
+            (model_.censor_enabled() ? "Selected; Censor hides map tiles" : "Map selected for Remote ID") : "Could not save map";
+    } else {
+        map_message_ = "Downloading map tiles...";
+        map_download_pack_ = map_pack_cursor_;
+        map_download_zoom_ = map_preview_zoom_;
+        map_progress_.total = map_download_pack_ >= 3 ? map_area_estimate() / platform::maps::kEstimatedTileBytes :
+            platform::maps::pack(map_download_pack_).archive_bytes;
+        try {
+            if (map_pack_cursor_ >= 3) map_job_ = std::async(std::launch::async, platform::maps::install_area, map_pack_cursor_, map_download_zoom_, &map_progress_);
+            else map_job_ = std::async(std::launch::async, platform::maps::install, map_pack_cursor_, &map_progress_);
+        }
+        catch (const std::system_error&) { map_message_ = "Download worker unavailable"; }
+    }
+    map_generation_.set(map_generation_.value() + 1);
+}
+void BaseViewModel::step_map_zoom(int direction) {
+    if (map_job_.valid()) return;
+    const auto zoom = static_cast<int>(map_preview_zoom_) + direction;
+    const int min_zoom = map_pack_cursor_ == 2 ? 6 : 1;
+    const int max_zoom = map_pack_cursor_ == 2 ? 16 : map_pack_cursor_ >= 3 ? 10 : 6;
+    if (zoom < min_zoom || zoom > max_zoom) {
+        map_message_ = "Zoom limit z" + std::to_string(min_zoom) + "-" + std::to_string(max_zoom);
+        map_generation_.set(map_generation_.value() + 1);
+        return;
+    }
+    map_preview_zoom_ = static_cast<unsigned>(zoom);
+    map_message_ = "Zoom saved when pack is selected";
+    map_generation_.set(map_generation_.value() + 1);
+}
+void BaseViewModel::cancel_map_download() {
+    if (!map_job_.valid() || map_deleting_) return;
+    map_progress_.cancel = true;
+    map_message_ = "Pausing download...";
+    map_generation_.set(map_generation_.value() + 1);
+}
+void BaseViewModel::delete_map_pack(unsigned index) {
+    if (map_job_.valid() || index != map_pack_cursor_ || index >= platform::maps::pack_count()) return;
+    map_deleting_ = true;
+    map_download_pack_ = index;
+    map_message_ = "Deleting map files...";
+    try { map_job_ = std::async(std::launch::async, platform::maps::erase, index); }
+    catch (const std::system_error&) { map_deleting_ = false; map_message_ = "Delete worker unavailable"; }
+    map_generation_.set(map_generation_.value() + 1);
+}
 void BaseViewModel::show_pineapple_page() {
     raw_session_ = false;
     remote_session_ = false;
@@ -209,6 +338,160 @@ void BaseViewModel::show_pineapple_page() {
     model_.set_current_page(model::AppPage::WifiScan);
     publish_navigation();
     if (!wifi_scan_running_) start_wifi_scan();
+}
+void BaseViewModel::show_gps_tool(GpsTool tool) {
+    bluetooth_session_.stop();
+    bluetooth_seen_.clear();
+    wardrive_channels_.clear();
+    wardrive_sightings_.clear();
+    wardrive_route_.clear();
+    wardrive_map_points_.clear();
+    wardrive_plotted_.clear();
+    wardrive_view_ = 0;
+    wardrive_channel_offset_ = 0;
+    gps_log_.reset();
+    stop_wifi_capture();
+    gps_tool_ = tool;
+    wardrive_session_ = tool == GpsTool::Wardrive;
+    gps_tool_message_ = gps_id_.empty() ? "Enable a GPS receiver in Device > Radio setup" :
+                        tool == GpsTool::Info ? "Live receiver information" : "Enter to start recording";
+    gps_file_name_.clear();
+    bluetooth_message_.clear();
+    gps_sample_tick_ = 0;
+    if (wardrive_session_) {
+        raw_session_ = false;
+        remote_session_ = false;
+        pineapple_session_ = false;
+        start_wifi_scan(true);
+        if (!wifi_scan_error_.empty()) gps_tool_message_ = wifi_scan_error_;
+    }
+    model_.set_current_page(model::AppPage::GpsTool);
+    publish_navigation();
+    if (wardrive_session_) toggle_gps_recording();
+    gps_tool_generation_.set(gps_tool_generation_.value() + 1);
+}
+std::string BaseViewModel::gps_receiver_name() const {
+    for (const auto& radio : radio_list_.devices)
+        if (radio.kind == "GPS" && radio.id == gps_id_)
+            return radio.name + (radio.product.empty() ? "" : " / " + radio.product);
+    return gps_id_.empty() ? "No receiver" : "Selected receiver";
+}
+void BaseViewModel::toggle_gps_recording() {
+    if (gps_tool_ == GpsTool::Info) return;
+    const auto bluetooth_radio = std::find_if(radio_list_.devices.begin(), radio_list_.devices.end(),
+        [](const auto& item) { return item.kind == "Bluetooth" && item.state == "On"; });
+    const bool bluetooth_available = bluetooth_radio != radio_list_.devices.end();
+    if (gps_log_.active()) {
+        bluetooth_session_.stop();
+        bluetooth_message_.clear();
+        const auto count = gps_log_.count();
+        gps_log_.stop();
+        if (wardrive_session_) stop_wifi_capture();
+        gps_tool_message_ = "Saved " + std::to_string(count) + " records";
+    } else if (gps_id_.empty()) {
+        gps_tool_message_ = "Enable a GPS receiver in Device > Radio setup";
+    } else {
+        if (wardrive_session_ && !wifi_scan_running_) start_wifi_scan();
+        if (wardrive_session_ && !wifi_scan_running_ && !bluetooth_available) {
+            gps_tool_message_ = wifi_scan_error_.empty() ? "Monitor capture unavailable" : wifi_scan_error_;
+            gps_tool_generation_.set(gps_tool_generation_.value() + 1);
+            return;
+        }
+        std::string error;
+        if (gps_log_.start(gps_tool_ == GpsTool::Track ? platform::gps::LogKind::Track :
+                           platform::gps::LogKind::Wardrive, model_.reserve_mib(), error)) {
+            if (gps_tool_ == GpsTool::Wardrive) {
+                bluetooth_seen_.clear();
+                wardrive_channels_.clear();
+                wardrive_channel_offset_ = 0;
+                wardrive_sightings_.clear();
+                wardrive_route_.clear();
+                wardrive_map_points_.clear();
+                wardrive_plotted_.clear();
+            }
+            gps_file_name_ = gps_log_.path().filename().string();
+            gps_tool_message_ = "Recording; waiting for GPS fix";
+            gps_sample_tick_ = 0;
+            if (gps_tool_ == GpsTool::Wardrive) {
+                bluetooth_message_ = "Enable Bluetooth in Device";
+                if (bluetooth_available)
+                    bluetooth_message_ = bluetooth_session_.start(bluetooth_radio->name) ?
+                        "" : "Bluetooth scan unavailable";
+            }
+        } else gps_tool_message_ = error;
+    }
+    gps_tool_generation_.set(gps_tool_generation_.value() + 1);
+}
+void BaseViewModel::update_gps_tool() {
+    if (model_.current_page() != model::AppPage::GpsTool) return;
+    if (wardrive_session_ && gps_log_.active()) {
+        std::string bluetooth_state;
+        const auto before = bluetooth_seen_.size();
+        for (const auto& item : bluetooth_session_.poll(bluetooth_state)) {
+            int32_t lat{}, lon{};
+            if (!gps_session_.position(lat, lon)) continue;
+            if (!gps_log_.bluetooth_device(item.address, item.name, item.rssi,
+                                            item.address_type, lat, lon)) {
+                bluetooth_session_.stop();
+                gps_tool_message_ = "GPS file write failed";
+                break;
+            }
+            if (bluetooth_seen_.insert(item.address_type + ":" + item.address).second)
+                add_wardrive_sighting(true, item.name, item.address);
+            add_wardrive_map_point(true, item.address_type + ":" + item.address, lat, lon);
+        }
+        if (!bluetooth_state.empty() && bluetooth_state != "Scanning")
+            bluetooth_message_ = bluetooth_state;
+        if (bluetooth_seen_.size() != before)
+            gps_tool_generation_.set(gps_tool_generation_.value() + 1);
+    }
+    const auto now = lv_tick_get();
+    if (gps_sample_tick_ && lv_tick_elaps(gps_sample_tick_) < 1000) return;
+    gps_sample_tick_ = now;
+    int32_t lat{}, lon{};
+    const bool fix = gps_session_.position(lat, lon);
+    if (gps_log_.active() && fix) {
+        if (wardrive_session_) {
+            if (wardrive_route_.size() == 2048) wardrive_route_.pop_front();
+            wardrive_route_.push_back({lat, lon, false});
+        }
+        bool written = true;
+        if (gps_tool_ == GpsTool::Track) written = gps_log_.position(lat, lon);
+        if (!written) gps_tool_message_ = "GPS file write failed";
+        else if (gps_tool_ == GpsTool::Track)
+            gps_tool_message_ = "Recording precise GPS coordinates";
+        else if (wifi_scan_running_ && bluetooth_session_.active())
+            gps_tool_message_ = "Recording WiFi + Bluetooth";
+        else if (wifi_scan_running_)
+            gps_tool_message_ = "WiFi only: " + bluetooth_message_;
+        else if (bluetooth_session_.active())
+            gps_tool_message_ = "Recording Bluetooth; WiFi unavailable";
+        else gps_tool_message_ = "Collection adapters unavailable";
+    } else if (gps_log_.active()) gps_tool_message_ = "Recording; waiting for GPS fix";
+    gps_tool_generation_.set(gps_tool_generation_.value() + 1);
+}
+void BaseViewModel::add_wardrive_sighting(bool bluetooth, const std::string& name, const std::string& address) {
+    if (wardrive_sightings_.size() == 16) wardrive_sightings_.pop_front();
+    wardrive_sightings_.push_back({bluetooth, name, address});
+}
+void BaseViewModel::add_wardrive_map_point(bool bluetooth, const std::string& address, int32_t lat, int32_t lon) {
+    if (!wardrive_plotted_.insert((bluetooth ? "bt:" : "wifi:") + address).second) return;
+    if (wardrive_map_points_.size() == 1024) wardrive_map_points_.pop_front();
+    wardrive_map_points_.push_back({lat, lon, bluetooth});
+    gps_tool_generation_.set(gps_tool_generation_.value() + 1);
+}
+void BaseViewModel::toggle_wardrive_view() {
+    if (gps_tool_ != GpsTool::Wardrive) return;
+    wardrive_view_ = (wardrive_view_ + 1) % 3;
+    gps_tool_generation_.set(gps_tool_generation_.value() + 1);
+}
+void BaseViewModel::scroll_wardrive_channels(int direction) {
+    if (gps_tool_ != GpsTool::Wardrive || wardrive_view_ != 2) return;
+    const auto count = wardrive_channels_.distribution().size();
+    const auto maximum = count > 5 ? count - 5 : 0;
+    if (direction > 0 && wardrive_channel_offset_ < maximum) ++wardrive_channel_offset_;
+    else if (direction < 0 && wardrive_channel_offset_) --wardrive_channel_offset_;
+    gps_tool_generation_.set(gps_tool_generation_.value() + 1);
 }
 void BaseViewModel::remote_move(int direction) {
     if (remote_view_ == 2) {
@@ -287,6 +570,199 @@ void BaseViewModel::toggle_pcap_details() {
     pcap_files_generation_.set(pcap_files_generation_.value() + 1);
 }
 
+std::string BaseViewModel::selected_pcap_name() const {
+    return pcap_cursor_ < pcap_files_.size() ? pcap_files_[pcap_cursor_].name : "";
+}
+
+std::string BaseViewModel::delete_selected_pcap() {
+    const auto name = selected_pcap_name();
+    if (name.empty()) return "No capture selected";
+    const auto path = platform::pcap::directory() / name;
+    if (pcap_capture_.active() && pcap_capture_.path() == path.string()) return "Stop recording first";
+    std::error_code ec;
+    if (!std::filesystem::is_regular_file(path, ec) || std::filesystem::is_symlink(path, ec) ||
+        !std::filesystem::remove(path, ec) || ec) return "Could not delete capture";
+    pcap_details_ = false;
+    pcap_message_ = "Capture deleted";
+    refresh_pcap_files();
+    return pcap_message_;
+}
+
+void BaseViewModel::show_wardrive_files_page() {
+    stop_wifi_capture();
+    refresh_wardrive_files();
+    wardrive_details_ = false;
+    model_.set_current_page(model::AppPage::WardriveFiles);
+    publish_navigation();
+}
+
+void BaseViewModel::refresh_wardrive_files() {
+    wardrive_files_ = platform::wardrive::list_files();
+    if (wardrive_cursor_ >= wardrive_files_.size())
+        wardrive_cursor_ = wardrive_files_.empty() ? 0 : wardrive_files_.size() - 1;
+    wardrive_files_generation_.set(wardrive_files_generation_.value() + 1);
+}
+
+void BaseViewModel::move_wardrive_file(int direction) {
+    if (wardrive_details_ || wardrive_files_.empty()) return;
+    if (direction < 0 && wardrive_cursor_) --wardrive_cursor_;
+    if (direction > 0 && wardrive_cursor_ + 1 < wardrive_files_.size()) ++wardrive_cursor_;
+    wardrive_files_generation_.set(wardrive_files_generation_.value() + 1);
+}
+
+void BaseViewModel::toggle_wardrive_details() {
+    if (wardrive_files_.empty()) return;
+    wardrive_details_ = !wardrive_details_;
+    wardrive_files_generation_.set(wardrive_files_generation_.value() + 1);
+}
+
+std::string BaseViewModel::selected_wardrive_name() const {
+    return wardrive_cursor_ < wardrive_files_.size() ? wardrive_files_[wardrive_cursor_].name : "";
+}
+
+std::string BaseViewModel::delete_selected_wardrive() {
+    const auto name = selected_wardrive_name();
+    if (name.empty()) return "No log selected";
+    if (wardrive_upload_job_.valid()) return "Upload in progress";
+    if (gps_log_.active() && gps_log_.path().filename() == name) return "Stop wardrive first";
+    std::string error;
+    if (!platform::wardrive::erase(name, error)) return error;
+    wardrive_details_ = false;
+    wardrive_message_ = "Wardrive log deleted";
+    refresh_wardrive_files();
+    return wardrive_message_;
+}
+
+std::string BaseViewModel::upload_selected_wardrive(const std::string& service) {
+    const auto name = selected_wardrive_name();
+    if (name.empty()) return "No log selected";
+    if (!wardrive_files_[wardrive_cursor_].eligible) return "Log has no devices";
+    if (service == "both") {
+        std::vector<std::pair<std::string, std::string>> tasks;
+        const auto& file = wardrive_files_[wardrive_cursor_];
+        if (file.wigle != "Uploaded" && file.wigle != "Queued") tasks.emplace_back(name, "wigle");
+        if (file.wdg != "Uploaded" && file.wdg != "Queued") tasks.emplace_back(name, "wdg");
+        return start_wardrive_upload(std::move(tasks));
+    }
+    return start_wardrive_upload({{name, service}});
+}
+
+std::size_t BaseViewModel::pending_wardrive_count() const {
+    std::size_t count{};
+    for (const auto& file : wardrive_files_) {
+        if (!file.eligible) continue;
+        count += file.wigle != "Uploaded" && file.wigle != "Queued";
+        count += file.wdg != "Uploaded" && file.wdg != "Queued";
+    }
+    return count;
+}
+
+std::string BaseViewModel::upload_pending_wardrive() {
+    if (wardrive_upload_job_.valid()) return "Upload in progress";
+    refresh_wardrive_files();
+    std::vector<std::pair<std::string, std::string>> tasks;
+    for (const auto& file : wardrive_files_) {
+        if (!file.eligible) continue;
+        if (file.wigle != "Uploaded" && file.wigle != "Queued") tasks.emplace_back(file.name, "wigle");
+        if (file.wdg != "Uploaded" && file.wdg != "Queued") tasks.emplace_back(file.name, "wdg");
+    }
+    return start_wardrive_upload(std::move(tasks));
+}
+
+unsigned BaseViewModel::wardrive_upload_percent() const {
+    const auto total = wardrive_progress_.total.load();
+    return total ? static_cast<unsigned>(std::min<std::uint64_t>(100, wardrive_progress_.sent.load() * 100 / total)) : 0;
+}
+
+std::string BaseViewModel::wardrive_upload_label() const {
+    const auto index = wardrive_upload_index_.load();
+    if (index >= wardrive_upload_tasks_.size()) return "Finishing uploads";
+    const auto& [name, service] = wardrive_upload_tasks_[index];
+    return std::to_string(index + 1) + "/" + std::to_string(wardrive_upload_tasks_.size()) + "  " +
+        (service == "wigle" ? "WiGLE" : "WDGWars") + "  " + screen_capture_name(name);
+}
+
+std::string BaseViewModel::wardrive_upload_phase_label() const {
+    const auto phase = wardrive_progress_.phase.load();
+    if (phase == 0) return "Preparing log";
+    if (phase == 1) return "Sending file";
+    const auto started = wardrive_progress_.phase_started_ms.load();
+    const auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+    const auto seconds = started > 0 && now > started ? (now - started) / 1000 : 0;
+    const auto index = wardrive_upload_index_.load();
+    const bool wdg = index < wardrive_upload_tasks_.size() && wardrive_upload_tasks_[index].second == "wdg";
+    return std::string(phase == 3 ? "WDG job processing " :
+                       wdg ? "WDG server processing " : "WiGLE server response ") +
+        std::to_string(seconds) + "s";
+}
+
+std::string BaseViewModel::start_wardrive_upload(std::vector<std::pair<std::string, std::string>> tasks) {
+    if (wardrive_upload_job_.valid()) return "Upload in progress";
+    if (tasks.empty()) return "No pending uploads";
+    for (const auto& [name, service] : tasks) {
+        if (gps_log_.active() && gps_log_.path().filename() == name) return "Stop wardrive first";
+        if (service == "wigle" && (!model::credential_saved(model::Credential::WigleName) ||
+                                    !model::credential_saved(model::Credential::WigleToken)))
+            return "Set WiGLE credentials first";
+        if (service == "wdg" && !model::credential_saved(model::Credential::WdgKey))
+            return "Set WDGWars API key first";
+    }
+    const auto active = active_wifi_profile();
+    if (active.first.empty()) return "Connect to WiFi first";
+    if (!model_.trusted_profile().empty() && active.first != model_.trusted_profile())
+        return "Connect to trusted WiFi";
+    wardrive_upload_tasks_ = std::move(tasks);
+    wardrive_upload_index_ = 0;
+    wardrive_progress_.sent = 0;
+    wardrive_progress_.total = 0;
+    wardrive_progress_.phase = 0;
+    wardrive_progress_.phase_started_ms = 0;
+    try {
+        wardrive_upload_job_ = std::async(std::launch::async, [this] {
+            unsigned uploaded{}, queued{}, failed{};
+            std::string last;
+            for (std::size_t i = 0; i < wardrive_upload_tasks_.size(); ++i) {
+                wardrive_upload_index_ = i;
+                wardrive_progress_.sent = 0;
+                wardrive_progress_.total = 0;
+                wardrive_progress_.phase = 0;
+                wardrive_progress_.phase_started_ms = 0;
+                const auto& [name, service] = wardrive_upload_tasks_[i];
+                const auto result = platform::wardrive::upload(name, service, &wardrive_progress_);
+                last = result.message;
+                if (!result.ok) ++failed;
+                else if (last.find(" accepted ") != std::string::npos) ++queued;
+                else ++uploaded;
+            }
+            wardrive_upload_index_ = wardrive_upload_tasks_.size();
+            if (wardrive_upload_tasks_.size() == 1) return last;
+            return std::to_string(uploaded) + " uploaded, " + std::to_string(queued) +
+                " queued, " + std::to_string(failed) + " failed";
+        });
+    } catch (const std::system_error&) { return "Could not start upload"; }
+    wardrive_message_ = "Uploading " + std::to_string(wardrive_upload_tasks_.size()) + " service item(s)...";
+    wardrive_files_generation_.set(wardrive_files_generation_.value() + 1);
+    return wardrive_message_;
+}
+
+void BaseViewModel::check_credentials(const std::string& service) {
+    if (credential_check_job_.valid()) { resource_error_ = "Check in progress"; return; }
+    if (service == "wigle" && (!model::credential_saved(model::Credential::WigleName) ||
+                                !model::credential_saved(model::Credential::WigleToken))) {
+        resource_error_ = "Set WiGLE credentials first"; return;
+    }
+    if (service == "wdg" && !model::credential_saved(model::Credential::WdgKey)) {
+        resource_error_ = "Set WDGWars API key first"; return;
+    }
+    credential_check_service_ = service;
+    auto& status = service == "wigle" ? wigle_check_ : wdg_check_;
+    status = "Checking";
+    try {
+        credential_check_job_ = std::async(std::launch::async, platform::wardrive::check_credentials, service);
+    } catch (const std::system_error&) { status = "Unavailable"; resource_error_ = "Could not start check"; }
+}
+
 std::string BaseViewModel::toggle_pcap_capture() {
     if (pcap_capture_.active()) {
         const auto path = pcap_capture_.stop();
@@ -303,7 +779,7 @@ std::string BaseViewModel::start_pcap_capture(platform::pcap::Filter filter) {
     const auto warning = collection_warning(model::RadioRequirement::Monitor);
     if (!warning.empty()) return warning;
     if (monitor_job_.valid()) return "Radio mode is changing";
-    const int socket = monitor_session_.capture_socket();
+    const int socket = monitor_session_for(model_.selected_adapter_id()).capture_socket();
     if (socket < 0) return "Monitor capture unavailable";
     const auto error = pcap_capture_.start(socket, model_.reserve_mib(), std::move(filter));
     if (!error.empty()) return error;
@@ -339,7 +815,7 @@ std::string BaseViewModel::toggle_selected_pcap_capture() {
     if (!mhz || std::find(wifi_frequencies_.begin(), wifi_frequencies_.end(), static_cast<unsigned>(mhz)) == wifi_frequencies_.end())
         return "AP channel not available";
     if (wifi_hop_job_.valid()) { wifi_hop_job_.wait(); wifi_hop_job_.get(); }
-    const auto tuned = monitor_session_.tune(static_cast<unsigned>(mhz));
+    const auto tuned = monitor_session_for(model_.selected_adapter_id()).tune(static_cast<unsigned>(mhz));
     if (tuned != "OK") return tuned;
     wifi_tuned_frequency_ = static_cast<unsigned>(mhz);
     wifi_tune_failed_frequency_ = 0;
@@ -382,7 +858,11 @@ void BaseViewModel::credential_key(uint32_t key) {
     if (key == LV_KEY_ESC) credential_open_ = false;
     else if (key == LV_KEY_ENTER) {
         if (credential_input_.empty() && !clear_credential_) return;
-        if (model::store_credential(credential_field_, credential_input_)) credential_open_ = false;
+        if (model::store_credential(credential_field_, credential_input_)) {
+            credential_open_ = false;
+            if (credential_field_ == model::Credential::WdgKey) wdg_check_ = "Not checked";
+            else wigle_check_ = "Not checked";
+        }
         else credential_prompt_ = "Save failed. Enter to retry.";
     } else if (key == LV_KEY_DEL && credential_input_.empty()) {
         clear_credential_ = true;
@@ -438,6 +918,8 @@ void BaseViewModel::marauder_menu_activate() {
     if (action == Action::DimDelay && !model_.cycle_dim()) resource_error_ = "Could not save preference";
     if (action == Action::Reserve && !model_.cycle_reserve()) resource_error_ = "Could not save preference";
     if (action == Action::UploadPolicy) choose_upload_policy();
+    if (action == Action::CheckWigle) check_credentials("wigle");
+    if (action == Action::CheckWdg) check_credentials("wdg");
     if (credential_action(action, credential_field_)) {
         credential_open_ = true;
         clear_credential_ = false;
@@ -465,6 +947,12 @@ void BaseViewModel::marauder_menu_activate() {
     }
     if (action == Action::CycleTrafficSource && !model_.cycle_traffic_source())
         resource_error_ = "Could not save graph source";
+    if (action == Action::CycleWardriveDwell && !model_.cycle_wardrive_dwell())
+        resource_error_ = "Could not save channel dwell";
+    if (action == Action::CycleWardrivePriority && !model_.cycle_wardrive_priority())
+        resource_error_ = "Could not save channel priority";
+    if (action == Action::CycleWardriveAdapters && !model_.cycle_wardrive_adapters())
+        resource_error_ = "Could not save adapter policy";
     marauder_menu_generation_subject_.set(marauder_menu_generation_subject_.value() + 1);
     switch (action) {
         case model::MarauderMenuAction::OpenWifiScan:
@@ -476,6 +964,9 @@ void BaseViewModel::marauder_menu_activate() {
         case model::MarauderMenuAction::OpenRemoteId:
             show_remote_id_page();
             break;
+        case Action::OpenGpsInfo: show_gps_tool(GpsTool::Info); break;
+        case Action::OpenWardrive: show_gps_tool(GpsTool::Wardrive); break;
+        case Action::OpenGpsTrack: show_gps_tool(GpsTool::Track); break;
         case model::MarauderMenuAction::OpenPineapple:
             show_pineapple_page();
             break;
@@ -492,6 +983,12 @@ void BaseViewModel::marauder_menu_activate() {
         case Action::OpenPcapFiles:
             show_pcap_files_page();
             break;
+        case Action::OpenWardriveFiles:
+            show_wardrive_files_page();
+            break;
+        case Action::OpenMapPacks:
+            show_map_packs_page();
+            break;
         case Action::OpenRadioSetup:
             model_.set_current_page(model::AppPage::RadioSetup);
             publish_navigation();
@@ -500,6 +997,8 @@ void BaseViewModel::marauder_menu_activate() {
         case Action::WigleName:
         case Action::WigleToken:
         case Action::WdgKey:
+        case Action::CheckWigle:
+        case Action::CheckWdg:
         case Action::CycleStorage:
         case Action::Brightness:
         case Action::DimDelay:
@@ -507,6 +1006,9 @@ void BaseViewModel::marauder_menu_activate() {
         case Action::UploadPolicy:
         case Action::CycleCache:
         case Action::CycleTrafficSource:
+        case Action::CycleWardriveDwell:
+        case Action::CycleWardrivePriority:
+        case Action::CycleWardriveAdapters:
         case model::MarauderMenuAction::CycleBatteryDisplay:
         case model::MarauderMenuAction::None:
             break;
@@ -525,8 +1027,17 @@ std::string BaseViewModel::setting_value(model::MarauderMenuAction action) const
     if (action == Action::DimDelay) return model_.dim_seconds() ? std::to_string(model_.dim_seconds()) + " sec" : "Never";
     if (action == Action::Reserve) return model_.reserve_mib() ? std::to_string(model_.reserve_mib()) + " MiB" : "Off";
     if (action == Action::CycleTrafficSource) return model_.traffic_monitor_source() ? "Monitor" : "Adapter";
+    if (action == Action::CycleWardriveDwell) return std::to_string(model_.wardrive_dwell_ms()) + " ms";
+    if (action == Action::CycleWardriveAdapters)
+        return model_.wardrive_all_idle_adapters() ? "All idle" : "Selected";
+    if (action == Action::CycleWardrivePriority) {
+        constexpr const char* profiles[] = {"Even", "1/6/11", "1/5/9/13", "5G low", "5G high"};
+        return profiles[model_.wardrive_priority()];
+    }
     if (action == Action::UploadPolicy) return !pending_uuid_.empty() ? screen_name(pending_network_) :
         model_.trusted_profile().empty() ? "Manual" : "Trusted WiFi";
+    if (action == Action::CheckWigle) return wigle_check_;
+    if (action == Action::CheckWdg) return wdg_check_;
     if (action == Action::CycleCensor) return model_.censor_enabled() ? "On" : "Off";
     model::Credential field;
     if (credential_action(action, field)) return model::credential_saved(field) ? "Saved" : "Not set";
@@ -661,13 +1172,16 @@ void BaseViewModel::toggle_monitor() {
     else if (monitor_owner_.empty() && adapter.monitor_mode != platform::wireless::CapabilityState::Supported)
         adapter_error_ = "Monitor support unavailable";
     else {
-        const bool start = monitor_owner_.empty();
+        const bool start = !active_monitor_ids_.count(adapter.stable_id);
         const auto name = adapter.interface_name;
+        const auto id = adapter.stable_id;
+        auto* session = &monitor_session_for(id);
         monitor_owner_ = adapter.stable_id;
         try {
-            monitor_job_ = std::async(std::launch::async, [this, name, start] {
-                return start ? monitor_session_.start(name) : monitor_session_.stop();
+            monitor_job_ = std::async(std::launch::async, [session, name, start] {
+                return start ? session->start(name) : session->stop();
             });
+            monitor_pending_id_ = id;
             monitor_pending_name_ = name;
             monitor_target_on_ = start;
             monitor_started_tick_ = lv_tick_get();
@@ -742,17 +1256,13 @@ void BaseViewModel::select_highlighted_adapter() {
     if (adapters_.empty()) return;
     const auto& adapter = adapters_[highlighted_adapter_];
     const bool changed = model_.selected_adapter_id() != adapter.stable_id;
-    if (changed && !monitor_owner_.empty()) {
-        adapter_error_ = "Turn monitor off first";
-        publish_adapter_detail();
-        return;
-    }
     if (!model_.set_selected_adapter_id(adapter.stable_id)) {
         adapter_error_ = "Could not save WiFi selection";
         publish_adapter_detail();
         return;
     }
     adapter_error_.clear();
+    monitor_owner_ = active_monitor_ids_.count(adapter.stable_id) ? adapter.stable_id : "";
     if (changed) {
         wifi_networks_.clear();
         station_refs_.clear();
@@ -772,7 +1282,165 @@ void BaseViewModel::toggle_adapter_details() {
     publish_adapter_detail();
 }
 
+void BaseViewModel::start_wardrive_capture(bool clear_results) {
+    stop_wifi_capture();
+    if (clear_results) {
+        wifi_networks_.clear();
+        station_refs_.clear();
+    }
+    wifi_scan_error_.clear();
+    wifi_list_builder_ = true;
+    wifi_capture_stop_ = false;
+    wifi_capture_failed_ = false;
+    wifi_scan_running_ = true;
+    const auto adapters = adapters_;
+    const auto selected = model_.selected_adapter_id();
+    std::unordered_map<std::string, platform::MonitorSession*> active_sessions;
+    for (const auto& id : model_.monitor_preferences())
+        active_sessions.emplace(id, &monitor_session_for(id));
+    for (const auto& id : active_monitor_ids_)
+        active_sessions.emplace(id, &monitor_session_for(id));
+    const auto all_idle = model_.wardrive_all_idle_adapters();
+    const auto dwell = model_.wardrive_dwell_ms();
+    const auto priority = model_.wardrive_priority();
+    try {
+        wifi_scan_thread_ = std::thread([this, adapters, selected, active_sessions, all_idle, dwell, priority] {
+            run_wardrive_capture(adapters, selected, active_sessions, all_idle, dwell, priority);
+        });
+    } catch (const std::system_error&) {
+        wifi_scan_running_ = false;
+        wifi_scan_error_ = "Unable to start wardrive capture";
+    }
+    publish_wifi_scan();
+}
+
+void BaseViewModel::run_wardrive_capture(std::vector<platform::wireless::AdapterInfo> adapters,
+                                          std::string selected_id,
+                                          std::unordered_map<std::string, platform::MonitorSession*> active_sessions,
+                                          bool all_idle, unsigned dwell_ms, unsigned priority) {
+#if defined(__linux__) && !USE_DESKTOP
+    using Clock = std::chrono::steady_clock;
+    struct Radio {
+        std::string id;
+        std::unique_ptr<platform::MonitorSession> lease;
+        platform::MonitorSession* session{};
+        int capture{-1};
+        std::vector<unsigned> supported;
+        std::vector<unsigned> channels;
+        std::size_t next_channel{};
+        Clock::time_point next_tune{};
+    };
+    std::stable_sort(adapters.begin(), adapters.end(), [&](const auto& a, const auto& b) {
+        return a.stable_id == selected_id && b.stable_id != selected_id;
+    });
+    std::vector<Radio> radios;
+    std::set<std::string> phys;
+    for (const auto& adapter : adapters) {
+        if (wifi_capture_stop_) break;
+        if (!all_idle && adapter.stable_id != selected_id) continue;
+        if (adapter.monitor_mode != platform::wireless::CapabilityState::Supported ||
+            adapter.frequencies.empty()) continue;
+        const auto use = platform::wireless::connection_use(adapter.interface_name);
+        if (use == platform::wireless::ConnectionUse::Connected ||
+            use == platform::wireless::ConnectionUse::Hotspot) continue;
+        const auto phy = adapter.phy_name.empty() ? adapter.interface_name : adapter.phy_name;
+        if (phys.count(phy)) continue;
+        Radio radio;
+        radio.id = adapter.stable_id;
+        if (const auto active = active_sessions.find(adapter.stable_id); active != active_sessions.end())
+            radio.session = active->second;
+        else {
+            radio.lease = std::make_unique<platform::MonitorSession>();
+            if (radio.lease->start(adapter.interface_name) != "Monitor on") continue;
+            radio.session = radio.lease.get();
+        }
+        radio.capture = radio.session->capture_socket();
+        if (radio.capture < 0 && !radio.lease) {
+            radio.lease = std::make_unique<platform::MonitorSession>();
+            if (radio.lease->start(adapter.interface_name) == "Monitor on") {
+                radio.session = radio.lease.get();
+                radio.capture = radio.session->capture_socket();
+            }
+        }
+        if (radio.capture < 0) continue;
+        phys.insert(phy);
+        radio.supported = adapter.frequencies;
+        radios.push_back(std::move(radio));
+    }
+    if (radios.empty()) {
+        if (!wifi_capture_stop_) wifi_capture_failed_ = true;
+        return;
+    }
+    const auto rebuild_plan = [&] {
+        std::vector<platform::wireless::WardriveRadioPlan> requested;
+        for (const auto& radio : radios)
+            if (radio.capture >= 0) requested.push_back({radio.id, radio.supported, {}});
+        const auto plans = platform::wireless::wardrive_channel_blocks(std::move(requested), priority);
+        std::size_t index = 0;
+        for (auto& radio : radios) {
+            radio.channels = radio.capture >= 0 ? plans[index++].channels : std::vector<unsigned>{};
+            radio.next_channel = 0;
+            radio.next_tune = {};
+        }
+        wardrive_active_radios_ = static_cast<unsigned>(plans.size());
+    };
+    rebuild_plan();
+    uint8_t bytes[65535];
+    while (!wifi_capture_stop_) {
+        const auto now = Clock::now();
+        std::vector<pollfd> ready;
+        ready.reserve(radios.size());
+        for (auto& radio : radios) {
+            if (radio.capture < 0) continue;
+            if (!radio.channels.empty() && now >= radio.next_tune) {
+                const auto mhz = radio.channels[radio.next_channel];
+                if (radio.session->tune(mhz) == "OK" &&
+                    (radio.id == selected_id || radios.size() == 1))
+                    wardrive_tuned_frequency_ = mhz;
+                radio.next_channel = (radio.next_channel + 1) % radio.channels.size();
+                radio.next_tune = Clock::now() + std::chrono::milliseconds(dwell_ms);
+            }
+            ready.push_back({radio.capture, POLLIN, 0});
+        }
+        if (ready.empty()) break;
+        const int status = poll(ready.data(), ready.size(), 100);
+        if (status < 0) { if (errno == EINTR) continue; break; }
+        if (status == 0) continue;
+        bool lost_radio = false;
+        for (auto& item : ready) {
+            if (item.revents & (POLLERR | POLLHUP | POLLNVAL)) {
+                close(item.fd);
+                for (auto& radio : radios) if (radio.capture == item.fd) radio.capture = -1;
+                lost_radio = true;
+                continue;
+            }
+            if (!(item.revents & POLLIN)) continue;
+            const auto count = read(item.fd, bytes, sizeof(bytes));
+            if (count <= 0) {
+                close(item.fd);
+                for (auto& radio : radios) if (radio.capture == item.fd) radio.capture = -1;
+                lost_radio = true;
+                continue;
+            }
+            platform::wireless::FrameObservation frame;
+            if (!platform::wireless::parse_monitor_frame(bytes, static_cast<std::size_t>(count), frame)) continue;
+            std::lock_guard<std::mutex> lock(wifi_scan_mutex_);
+            if (incoming_frames_.size() < 1024) incoming_frames_.push_back(std::move(frame));
+        }
+        if (lost_radio) rebuild_plan();
+    }
+    for (auto& radio : radios) if (radio.capture >= 0) close(radio.capture);
+    wardrive_active_radios_ = 0;
+    if (!wifi_capture_stop_) wifi_capture_failed_ = true;
+#else
+    (void)adapters; (void)selected_id; (void)active_sessions;
+    (void)all_idle; (void)dwell_ms; (void)priority;
+    if (!wifi_capture_stop_) wifi_capture_failed_ = true;
+#endif
+}
+
 void BaseViewModel::start_wifi_scan(bool clear_results) {
+    if (wardrive_session_) { start_wardrive_capture(clear_results); return; }
     stop_wifi_capture();
     if (remote_session_) { remote_view_ = 0; remote_detail_tab_ = 0; }
     const auto selected = std::find_if(adapters_.begin(), adapters_.end(), [&](const auto& adapter) {
@@ -792,7 +1460,7 @@ void BaseViewModel::start_wifi_scan(bool clear_results) {
     wifi_frequencies_.erase(std::unique(wifi_frequencies_.begin(), wifi_frequencies_.end()), wifi_frequencies_.end());
     wifi_scan_error_ = collection_warning(model::RadioRequirement::Monitor);
     if (!wifi_scan_error_.empty()) { publish_wifi_scan(); return; }
-    const int capture = monitor_session_.capture_socket();
+    const int capture = monitor_session_for(model_.selected_adapter_id()).capture_socket();
     if (capture < 0) {
         wifi_scan_error_ = "Monitor capture unavailable";
         publish_wifi_scan();
@@ -901,6 +1569,8 @@ void BaseViewModel::stop_wifi_capture() {
         wifi_hop_job_ = {}; // A later scan must not consume this session's tune result.
     }
     wifi_scan_running_ = false;
+    wardrive_active_radios_ = 0;
+    wardrive_tuned_frequency_ = 0;
     std::vector<platform::remote_id::Packet> remote;
     std::vector<platform::wireless::PineappleObservation> pineapple;
     {
@@ -917,6 +1587,7 @@ void BaseViewModel::stop_wifi_capture() {
 }
 
 void BaseViewModel::advance_wifi_channel() {
+    if (wardrive_session_) return;
     if (!wifi_scan_running_ || wifi_frequencies_.empty()) return;
     if (wifi_hop_job_.valid()) {
         if (wifi_hop_job_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return;
@@ -933,7 +1604,7 @@ void BaseViewModel::advance_wifi_channel() {
     const bool pinned = pcap_capture_.active() && recording.scope != platform::pcap::Scope::All;
     const bool raw_browsing = raw_session_ && (wifi_view_ == 0 || wifi_view_ == 7 ||
                                                  wifi_view_ == 8 || wifi_view_ == 9);
-    const bool hopping = (remote_session_ && remote_view_ != 3) ||
+    const bool hopping = wardrive_session_ || (remote_session_ && remote_view_ != 3) ||
                          (!raw_session_ && !pineapple_session_ && wifi_view_ == 0) ||
                          (pineapple_session_ && wifi_view_ == 11) ||
                          (raw_browsing && raw_auto_hop_);
@@ -959,7 +1630,8 @@ void BaseViewModel::advance_wifi_channel() {
     wifi_hop_index_ = static_cast<size_t>(found - wifi_frequencies_.begin());
     if (requested == wifi_tuned_frequency_ || requested == wifi_tune_failed_frequency_) return;
     wifi_hop_tick_ = lv_tick_get();
-    wifi_hop_job_ = std::async(std::launch::async, [this, requested] { return monitor_session_.tune(requested); });
+    auto* session = &monitor_session_for(model_.selected_adapter_id());
+    wifi_hop_job_ = std::async(std::launch::async, [session, requested] { return session->tune(requested); });
 }
 
 void BaseViewModel::previous_wifi_scan_page() {
@@ -1279,27 +1951,92 @@ void BaseViewModel::request_quit() { quit_requested_subject_.set(true); }
 void BaseViewModel::wifi_scan_timer_cb(lv_timer_t* timer) {
     auto* self = static_cast<BaseViewModel*>(lv_timer_get_user_data(timer));
     if (self) {
+        if (self->wardrive_upload_job_.valid() &&
+            self->wardrive_upload_job_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+            self->wardrive_message_ = self->wardrive_upload_job_.get();
+            self->refresh_wardrive_files();
+        } else if (self->wardrive_upload_job_.valid() &&
+                   self->model_.current_page() == model::AppPage::WardriveFiles &&
+                   lv_tick_elaps(self->wardrive_progress_tick_) >= 250) {
+            self->wardrive_progress_tick_ = lv_tick_get();
+            self->wardrive_files_generation_.set(self->wardrive_files_generation_.value() + 1);
+        }
+        if (self->credential_check_job_.valid() &&
+            self->credential_check_job_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+            const auto result = self->credential_check_job_.get();
+            auto& status = self->credential_check_service_ == "wigle" ? self->wigle_check_ : self->wdg_check_;
+            if (status == "Checking")
+                status = result.ok ? "Valid" : result.message.find("invalid") != std::string::npos ? "Invalid" : "Unavailable";
+            self->resource_error_ = result.message;
+            self->marauder_menu_generation_subject_.set(self->marauder_menu_generation_subject_.value() + 1);
+        }
+        if (self->map_job_.valid()) {
+            if (self->map_job_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+                self->map_message_ = self->map_job_.get();
+                if (self->map_deleting_) {
+                    if (self->map_message_ == "Map deleted" && self->model_.map_pack() == self->map_download_pack_) {
+                        const unsigned fallback = platform::maps::installed(0) ? 0 : platform::maps::installed(1) ? 1 : 0;
+                        if (self->model_.set_map_pack(fallback) && self->model_.set_map_zoom(6))
+                            self->map_message_ = "Map deleted; Remote ID reset";
+                    }
+                    self->map_deleting_ = false;
+                } else if ((self->map_message_ == "Map installed" || self->map_message_ == "Local map installed" || self->map_message_ == "Area map installed") &&
+                    self->model_.set_map_zoom(self->map_download_zoom_) && self->model_.set_map_pack(self->map_download_pack_))
+                    self->map_message_ = self->model_.censor_enabled() ?
+                        "Installed; Censor hides map tiles" : "Installed and selected for Remote ID";
+                ++self->map_storage_revision_;
+                self->map_generation_.set(self->map_generation_.value() + 1);
+            } else if (self->model_.current_page() == model::AppPage::MapPacks &&
+                       lv_tick_elaps(self->map_progress_tick_) >= 250) {
+                self->map_progress_tick_ = lv_tick_get();
+                self->map_generation_.set(self->map_generation_.value() + 1);
+            }
+        }
         self->idle_display();
-        if (self->monitor_busy()) {
+        if (self->monitor_restore_job_.valid() &&
+            self->monitor_restore_job_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+            for (const auto& id : self->monitor_restore_job_.get())
+                self->active_monitor_ids_.insert(id);
+            const auto& selected_id = self->model_.selected_adapter_id();
+            self->monitor_owner_ = self->active_monitor_ids_.count(selected_id) ? selected_id : "";
+            self->refresh_adapters();
+            if (self->active_monitor_ids_.size() < self->model_.monitor_preferences().size()) {
+                self->adapter_error_ = "Some saved monitors were unavailable or busy";
+                self->publish_adapter_detail();
+            }
+        }
+        if (self->monitor_job_.valid()) {
             if (self->monitor_job_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
                 const auto message = self->monitor_job_.get();
-                if (message != "Monitor on") self->monitor_owner_.clear();
                 self->refresh_pending_monitor_status();
                 const auto selected = std::find_if(self->adapters_.begin(), self->adapters_.end(), [&](const auto& adapter) {
                     return adapter.interface_name == self->monitor_pending_name_;
                 });
                 const bool confirmed = selected != self->adapters_.end() &&
                     selected->monitor_status == (message == "Monitor on" ? "On" : "Off");
+                if (message == "Monitor on") {
+                    self->active_monitor_ids_.insert(self->monitor_pending_id_);
+                    if (!self->model_.set_monitor_preference(self->monitor_pending_id_, true))
+                        self->adapter_error_ = "Monitor on; preference not saved";
+                } else if (message == "Monitor off") {
+                    self->active_monitor_ids_.erase(self->monitor_pending_id_);
+                    if (!self->model_.set_monitor_preference(self->monitor_pending_id_, false))
+                        self->adapter_error_ = "Monitor off; preference not saved";
+                }
+                self->monitor_owner_ = self->active_monitor_ids_.count(self->model_.selected_adapter_id()) ?
+                    self->model_.selected_adapter_id() : "";
                 self->monitor_pending_name_.clear();
-                if (message == "Monitor on" && !confirmed) self->monitor_owner_.clear();
-                self->adapter_error_ = message == "Monitor on" && !confirmed ? "Monitor mode unconfirmed" :
-                    message == "Monitor off" && !confirmed ? "Check adapter restore" : message;
+                self->monitor_pending_id_.clear();
+                if (self->adapter_error_.find("preference not saved") == std::string::npos)
+                    self->adapter_error_ = message == "Monitor on" && !confirmed ? "Monitor mode unconfirmed" :
+                        message == "Monitor off" && !confirmed ? "Check adapter restore" : message;
                 self->publish_adapter_detail();
             } else if (!self->monitor_status_tick_ || lv_tick_elaps(self->monitor_status_tick_) >= 500) {
                 self->monitor_status_tick_ = lv_tick_get();
                 self->refresh_pending_monitor_status();
             }
         }
+        self->update_gps_status();
         self->finish_wifi_scan_if_ready();
         const auto pcap_error = self->pcap_capture_.take_error();
         if (!pcap_error.empty()) {
@@ -1324,7 +2061,7 @@ void BaseViewModel::wifi_scan_timer_cb(lv_timer_t* timer) {
         }
         self->advance_wifi_channel();
         self->finish_radio_setting();
-        self->update_gps_status();
+        self->update_gps_tool();
     }
 }
 
@@ -1375,7 +2112,38 @@ void BaseViewModel::finish_wifi_scan_if_ready() {
             if (wifi_feed_offset_) wifi_feed_offset_ = std::min(wifi_feed_offset_ + 1, wifi_feed_frames_.size() - 1);
         }
     }
+    bool wardrive_feed_changed = false;
     for (const auto& frame : incoming) {
+        // The bounded recon list must not limit a wardrive's counts or CSV rows.
+        if (wardrive_session_ && gps_log_.active() && frame.beacon) {
+            int32_t lat{}, lon{};
+            if (gps_session_.position(lat, lon)) {
+                const auto frequency = frame.advertised_frequency_mhz ?
+                    frame.advertised_frequency_mhz : frame.frequency_mhz;
+                if (!gps_log_.access_point(frame.bssid,
+                                           frame.ssid.empty() ? "[hidden/unknown]" : frame.ssid,
+                                           platform::wireless::channel_number(frequency),
+                                           frequency,
+                                           frame.has_rssi ? frame.rssi : -128, frame.security, lat, lon))
+                    gps_tool_message_ = "GPS file write failed";
+                else {
+                    if (wardrive_channels_.observe(frame.bssid, frequency,
+                                                   frame.advertised_frequency_mhz != 0)) {
+                        add_wardrive_sighting(false, frame.ssid.empty() ? "[hidden/unknown]" : frame.ssid,
+                                              frame.bssid);
+                        wardrive_feed_changed = true;
+                    } else if (!frame.ssid.empty()) {
+                        for (auto& sighting : wardrive_sightings_)
+                            if (!sighting.bluetooth && sighting.address == frame.bssid &&
+                                sighting.name == "[hidden/unknown]") {
+                                sighting.name = frame.ssid;
+                                wardrive_feed_changed = true;
+                            }
+                    }
+                    add_wardrive_map_point(false, frame.bssid, lat, lon);
+                }
+            }
+        }
         auto ap = std::find_if(wifi_networks_.begin(), wifi_networks_.end(), [&](const auto& item) { return item.bssid == frame.bssid; });
         if (ap == wifi_networks_.end()) {
             if (wifi_networks_.size() >= 512) continue;
@@ -1388,7 +2156,9 @@ void BaseViewModel::finish_wifi_scan_if_ready() {
         }
         ++ap->frames;
         if (frame.beacon) {
-            if (!frame.ssid.empty()) ap->ssid = frame.ssid;
+            if (!frame.ssid.empty()) {
+                ap->ssid = frame.ssid;
+            }
             ap->security = frame.security;
             ap->security_info = frame.security_info;
             if (frame.has_rssi) { ap->rssi = frame.rssi; ap->has_rssi = true; }
@@ -1413,9 +2183,12 @@ void BaseViewModel::finish_wifi_scan_if_ready() {
                                       static_cast<size_t>(client - ap->clients.begin()));
         }
         ++client->frames;
+        client->handshake.observe(frame.eapol, frame.client_transmitted);
         if (frame.client_transmitted && frame.has_rssi) { client->rssi = frame.rssi; client->has_rssi = true; }
     }
     publish_wifi_scan();
+    if (wardrive_feed_changed)
+        gps_tool_generation_.set(gps_tool_generation_.value() + 1);
 }
 void BaseViewModel::finish_pineapple_observations(std::vector<platform::wireless::PineappleObservation>& incoming) {
     const auto now = lv_tick_get();

@@ -4,11 +4,13 @@
 #include "pineapple_wifi.h"
 #include <algorithm>
 #include <cstdio>
+#include <limits>
 
 namespace platform::wireless {
 namespace {
 unsigned le16(const uint8_t* p) { return unsigned(p[0]) | (unsigned(p[1]) << 8); }
 unsigned le32(const uint8_t* p) { return le16(p) | (le16(p + 2) << 16); }
+unsigned be16(const uint8_t* p) { return (unsigned(p[0]) << 8) | p[1]; }
 std::size_t aligned(std::size_t n, std::size_t alignment) { return (n + alignment - 1) & ~(alignment - 1); }
 bool individual(const uint8_t* mac) {
     if (mac[0] & 1) return false;
@@ -19,6 +21,45 @@ std::string address(const uint8_t* mac) {
     std::snprintf(text, sizeof(text), "%02X:%02X:%02X:%02X:%02X:%02X",
                   mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
     return text;
+}
+bool eapol_key(const uint8_t* frame, std::size_t length, unsigned control, EapolEvidence& out) {
+    const unsigned subtype = (control >> 4) & 15;
+    const std::size_t payload = 24 + ((control & 0x0300) == 0x0300 ? 6 : 0) +
+        ((subtype & 8) ? 2 : 0) + ((subtype & 8) && (control & 0x8000) ? 4 : 0);
+    if ((control & 0x4000) || payload + 12 > length ||
+        frame[payload] != 0xAA || frame[payload + 1] != 0xAA || frame[payload + 2] != 3 ||
+        frame[payload + 6] != 0x88 || frame[payload + 7] != 0x8E) return false;
+    const auto* key = frame + payload + 8;
+    const auto available = length - payload - 8;
+    if (key[1] != 3 || available < 99) return true;
+    const auto eapol_length = be16(key + 2);
+    if (eapol_length < 95 || eapol_length + 4 > available ||
+        (key[4] != 2 && key[4] != 254)) return true;
+    const auto data_length = be16(key + 97);
+    if (99 + data_length > eapol_length + 4) return true;
+    const auto info = be16(key + 5);
+    const bool pairwise = info & 0x0008, install = info & 0x0040;
+    const bool ack = info & 0x0080, mic = info & 0x0100, secure = info & 0x0200;
+    if (pairwise && !(info & (0x0400 | 0x0800 | 0x2000))) {
+        const bool from_ap = (control & 0x0300) == 0x0200;
+        const bool from_client = (control & 0x0300) == 0x0100;
+        if (from_ap && ack && !mic && !install) out.message = 1;
+        else if (from_client && !ack && mic && !secure && !install) out.message = 2;
+        else if (from_ap && ack && mic && install) out.message = 3;
+        else if (from_client && !ack && mic && secure && !install) out.message = 4;
+        for (unsigned i = 0; i < 8; ++i) out.replay = (out.replay << 8) | key[9 + i];
+        std::copy_n(key + 17, out.nonce.size(), out.nonce.begin());
+    }
+    const auto end = 99 + data_length;
+    for (std::size_t pos = 99; pos + 2 <= end;) {
+        const auto item_length = key[pos + 1];
+        if (pos + 2 + item_length > end) break;
+        if (pairwise && key[pos] == 221 && item_length >= 20 && key[pos + 2] == 0 &&
+            key[pos + 3] == 0x0F && key[pos + 4] == 0xAC && key[pos + 5] == 4)
+            out.pmkid = true;
+        pos += 2 + item_length;
+    }
+    return true;
 }
 
 bool radiotap(const uint8_t* bytes, std::size_t size, std::size_t& header,
@@ -47,6 +88,23 @@ bool radiotap(const uint8_t* bytes, std::size_t size, std::size_t& header,
     }
     return true;
 }
+}
+
+void HandshakeState::observe(const EapolEvidence& evidence, bool client_transmitted) {
+    pmkid_seen |= evidence.pmkid;
+    if (evidence.message == 1 && !client_transmitted) {
+        if (stage && (first_replay != evidence.replay || anonce != evidence.nonce)) stage = 0;
+        first_replay = evidence.replay;
+        anonce = evidence.nonce;
+        stage = std::max(stage, 1u);
+    } else if (evidence.message == 2 && client_transmitted && stage == 1 &&
+               evidence.replay == first_replay) stage = 2;
+    else if (evidence.message == 3 && !client_transmitted && stage == 2 &&
+             first_replay != std::numeric_limits<uint64_t>::max() &&
+             evidence.replay == first_replay + 1 &&
+             evidence.nonce == anonce) stage = 3;
+    else if (evidence.message == 4 && client_transmitted && stage == 3 &&
+             evidence.replay == first_replay + 1) { stage = 4; complete = true; }
 }
 
 const char* frame_kind_label(FrameKind kind) {
@@ -79,30 +137,11 @@ bool parse_frame_summary(const uint8_t* bytes, std::size_t size, FrameSummary& o
         if (type == 2) {
             out.type = subtype == 4 || subtype == 12 ? "Null" : subtype >= 8 ? "QoS data" : "Data";
             out.kind = FrameKind::Data;
-            const bool protected_payload = (control & 0x4000) != 0;
-            const std::size_t payload = 24 + ((control & 0x0300) == 0x0300 ? 6 : 0) +
-                ((subtype & 8) ? 2 : 0);
-            if (!protected_payload && payload + 8 <= length &&
-                frame[payload] == 0xAA && frame[payload + 1] == 0xAA && frame[payload + 2] == 0x03 &&
-                frame[payload + 6] == 0x88 && frame[payload + 7] == 0x8E) {
-                out.type = "EAPOL";
+            EapolEvidence evidence;
+            if (eapol_key(frame, length, control, evidence)) {
+                out.type = evidence.pmkid ? "PMKID" : evidence.message ?
+                    "EAPOL M" + std::to_string(evidence.message) : "EAPOL";
                 out.kind = FrameKind::Eapol;
-                // PMKID KDE in the EAPOL key data: vendor IE, OUI 00:0F:AC, type 4.
-                // Check the bounded key-data region; payload bytes are never retained.
-                const auto eapol = payload + 8;
-                if (eapol + 99 <= length && frame[eapol + 1] == 3) {
-                    const auto key_start = eapol + 99;
-                    const auto key_length = (unsigned(frame[eapol + 97]) << 8) | frame[eapol + 98];
-                    const auto end = std::min(length, key_start + key_length);
-                    for (auto pos = key_start; pos + 22 <= end;) {
-                        const auto item_length = frame[pos + 1];
-                        if (pos + 2 + item_length > end) break;
-                        if (frame[pos] == 221 && item_length >= 20 && frame[pos + 2] == 0 &&
-                            frame[pos + 3] == 0x0F && frame[pos + 4] == 0xAC && frame[pos + 5] == 4)
-                            { out.type = "PMKID"; break; }
-                        pos += 2 + item_length;
-                    }
-                }
             }
         } else {
             static constexpr const char* names[] = {"Assoc req", "Assoc resp", "Reassoc req", "Reassoc resp",
@@ -192,6 +231,7 @@ bool parse_monitor_frame(const uint8_t* bytes, std::size_t size, FrameObservatio
         bssid = to_ds ? frame + 4 : frame + 10;
         client = to_ds ? frame + 10 : frame + 4;
         out.client_transmitted = to_ds;
+        eapol_key(frame, length, control, out.eapol);
     } else return false;
     if (!bssid || !individual(bssid)) return false;
     out.bssid = address(bssid);
