@@ -243,7 +243,7 @@ void BaseViewModel::show_raw_capture_page() {
     publish_navigation();
     if (!wifi_scan_running_) start_wifi_scan();
 }
-void BaseViewModel::show_bluetooth_page(uint32_t filter) {
+void BaseViewModel::show_bluetooth_page(uint32_t filter, bool device_list) {
     stop_wifi_capture();
     gps_log_.stop();
     wardrive_session_ = false;
@@ -262,8 +262,8 @@ void BaseViewModel::show_bluetooth_page(uint32_t filter) {
     bluetooth_fox_.reset();
     bluetooth_feed_offset_ = 0;
     bluetooth_filter_ = filter;
-    bluetooth_builder_ = filter != 0;
-    bluetooth_view_ = 0;
+    bluetooth_builder_ = filter != 0 || device_list;
+    bluetooth_view_ = device_list ? 2 : 0;
     bluetooth_cursor_ = bluetooth_action_cursor_ = 0;
     bluetooth_filter_cursor_ = 0;
     bluetooth_status_ = "Starting";
@@ -1232,6 +1232,7 @@ void BaseViewModel::marauder_menu_activate() {
             show_raw_capture_page();
             break;
         case Action::OpenBluetoothRaw: show_bluetooth_page(0); break;
+        case Action::OpenBluetoothDevices: show_bluetooth_page(0, true); break;
         case Action::OpenBluetoothAdapters: show_bluetooth_adapters_page(); break;
         case Action::OpenBluetoothFindMy: show_bluetooth_page(platform::ble::bit(platform::ble::Kind::FindMy)); break;
         case Action::OpenBluetoothIBeacon: show_bluetooth_page(platform::ble::bit(platform::ble::Kind::IBeacon)); break;

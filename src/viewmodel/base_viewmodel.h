@@ -149,7 +149,7 @@ public:
         uint64_t sightings{};
         uint32_t last_seen{};
     };
-    void show_bluetooth_page(uint32_t filter);
+    void show_bluetooth_page(uint32_t filter, bool device_list = false);
     void show_bluetooth_adapters_page();
     void move_bluetooth_adapter(int direction);
     void select_bluetooth_adapter();
