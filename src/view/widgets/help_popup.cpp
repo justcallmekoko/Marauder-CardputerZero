@@ -236,7 +236,7 @@ void HelpPopup::update_rows(model::AppPage page) {
     lv_label_set_text(page_badge_, bluetooth ? "BLUETOOTH" : remote ? "REMOTE ID" : pcap ? "CAPTURES" : traffic ? "ACTIVITY" : list ? "DEVICE" : radios ? "RADIO SETUP" : adapters ? "ADAPTERS" : raw_capture ? "RAW CAPTURE" : wifi_scan ? "WIFI SCAN" : diagnostics ? "SYSTEM INFO" : "MENU");
     for (std::size_t i = 0; i < rows_.size(); ++i) {
         lv_obj_remove_flag(rows_[i].row, LV_OBJ_FLAG_HIDDEN);
-        const auto& row = bluetooth ? kBluetoothRows[i] : remote ? kRemoteIdRows[i] : pcap ? kPcapRows[i] : traffic ? kTrafficRows[i] : list ? kDeviceRows[i] : radios ? kRadioRows[i] : adapters ? kAdapterRows[i] : raw_capture ? kRawCaptureRows[i] : wifi_scan ? kWifiScanRows[i] : diagnostics ? kDashboardRows[i];
+        const auto& row = bluetooth ? kBluetoothRows[i] : remote ? kRemoteIdRows[i] : pcap ? kPcapRows[i] : traffic ? kTrafficRows[i] : list ? kDeviceRows[i] : radios ? kRadioRows[i] : adapters ? kAdapterRows[i] : raw_capture ? kRawCaptureRows[i] : wifi_scan ? kWifiScanRows[i] : diagnostics ? kDiagnosticsRows[i] : kDashboardRows[i];
         lv_label_set_text(rows_[i].key, row.key);
         lv_label_set_text(rows_[i].action, row.action);
         if (list && !*row.key) lv_obj_add_flag(rows_[i].row, LV_OBJ_FLAG_HIDDEN);

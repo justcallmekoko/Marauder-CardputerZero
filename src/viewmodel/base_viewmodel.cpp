@@ -299,6 +299,7 @@ const BaseViewModel::BluetoothRecord* BaseViewModel::bluetooth_selected() const 
     return bluetooth_cursor_ < visible.size() ? &bluetooth_devices_[visible[bluetooth_cursor_]] : nullptr;
 }
 void BaseViewModel::bluetooth_move(int direction) {
+    if (bluetooth_view_ >= 4) return;
     if (bluetooth_view_ == 0) {
         if (direction < 0 && bluetooth_feed_offset_ + 1 < bluetooth_feed_.size()) ++bluetooth_feed_offset_;
         if (direction > 0 && bluetooth_feed_offset_) --bluetooth_feed_offset_;
