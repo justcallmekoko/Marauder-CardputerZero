@@ -29,8 +29,8 @@ constexpr std::array<HelpRow, 5> kDashboardRows = {{
     {"ESC", "Back / exit at root"},
 }};
 
-constexpr std::array<HelpRow, 5> kDeviceRows = {{
-    {"F / X", "Browse settings"},
+constexpr std::array<HelpRow, 5> kListMenuRows = {{
+    {"F / X", "Browse items"},
     {"ENTER", "Open or change highlighted item"},
     {"ESC", "Back one menu"},
     {"HELP", "Close help"},
@@ -83,7 +83,7 @@ constexpr std::array<HelpRow, 5> kRemoteIdRows = {{
 }};
 
 constexpr std::array<HelpRow, 5> kTrafficRows = {{
-    {"Z / C", "Tune monitor channel"}, {"ESC", "Back to Activity"}, {"HELP", "Close help"}, {"", ""}, {"", ""}
+    {"Z / C", "Tune monitor channel"}, {"ESC", "Back to Monitor"}, {"HELP", "Close help"}, {"", ""}, {"", ""}
 }};
 
 constexpr std::array<HelpRow, 5> kDiagnosticsRows = {{
@@ -97,9 +97,23 @@ constexpr std::array<HelpRow, 5> kDiagnosticsRows = {{
 constexpr std::array<HelpRow, 5> kPcapRows = {{
     {"F / X", "Browse captures"},
     {"ENTER", "File information"},
-    {"D", "Refresh file list"},
+    {"DEL", "Remove selected capture"},
     {"P", "Start / stop PCAP"},
     {"ESC", "Back to Device"},
+}};
+constexpr std::array<HelpRow, 5> kWardriveFileRows = {{
+    {"F / X", "Browse wardrive logs"},
+    {"ENTER", "File and upload information"},
+    {"U / W / B", "Upload to WiGLE / WDGWars / both"},
+    {"A / DEL", "Upload all / remove selected"},
+    {"ESC", "Back to Device"},
+}};
+constexpr std::array<HelpRow, 5> kMapRows = {{
+    {"F / X", "Browse map packs"},
+    {"Z / C", "Decrease / increase zoom"},
+    {"ENTER", "Download, resume, or select"},
+    {"DEL", "Remove selected map pack"},
+    {"ESC", "Back to Location"},
 }};
 
 } // namespace
@@ -231,12 +245,21 @@ void HelpPopup::update_rows(model::AppPage page) {
     const bool raw_capture = wifi_scan && view_model_.raw_session();
     const bool diagnostics = page == model::AppPage::Diagnostics;
     const bool pcap = page == model::AppPage::PcapFiles;
+    const bool wardrive_files = page == model::AppPage::WardriveFiles;
+    const bool maps = page == model::AppPage::MapPacks;
     const bool remote = page == model::AppPage::RemoteId;
     const bool bluetooth = page == model::AppPage::BluetoothCapture;
-    lv_label_set_text(page_badge_, bluetooth ? "BLUETOOTH" : remote ? "REMOTE ID" : pcap ? "CAPTURES" : traffic ? "ACTIVITY" : list ? "DEVICE" : radios ? "RADIO SETUP" : adapters ? "ADAPTERS" : raw_capture ? "RAW CAPTURE" : wifi_scan ? "WIFI SCAN" : diagnostics ? "SYSTEM INFO" : "MENU");
+    lv_label_set_text(page_badge_, bluetooth ? "BLUETOOTH" : remote ? "REMOTE ID" : maps ? "MAPS" :
+        wardrive_files ? "WARDRIVE LOGS" : pcap ? "CAPTURES" : traffic ? "MONITOR" : list ? "MENU" :
+        radios ? "RADIO SETUP" : adapters ? "ADAPTERS" : raw_capture ? "RAW FRAMES" :
+        wifi_scan ? "WIFI DISCOVER" : diagnostics ? "SYSTEM INFO" : "MENU");
     for (std::size_t i = 0; i < rows_.size(); ++i) {
         lv_obj_remove_flag(rows_[i].row, LV_OBJ_FLAG_HIDDEN);
-        const auto& row = bluetooth ? kBluetoothRows[i] : remote ? kRemoteIdRows[i] : pcap ? kPcapRows[i] : traffic ? kTrafficRows[i] : list ? kDeviceRows[i] : radios ? kRadioRows[i] : adapters ? kAdapterRows[i] : raw_capture ? kRawCaptureRows[i] : wifi_scan ? kWifiScanRows[i] : diagnostics ? kDiagnosticsRows[i] : kDashboardRows[i];
+        const auto& row = bluetooth ? kBluetoothRows[i] : remote ? kRemoteIdRows[i] : maps ? kMapRows[i] :
+            wardrive_files ? kWardriveFileRows[i] : pcap ? kPcapRows[i] : traffic ? kTrafficRows[i] :
+            list ? kListMenuRows[i] : radios ? kRadioRows[i] : adapters ? kAdapterRows[i] :
+            raw_capture ? kRawCaptureRows[i] : wifi_scan ? kWifiScanRows[i] :
+            diagnostics ? kDiagnosticsRows[i] : kDashboardRows[i];
         lv_label_set_text(rows_[i].key, row.key);
         lv_label_set_text(rows_[i].action, row.action);
         if (list && !*row.key) lv_obj_add_flag(rows_[i].row, LV_OBJ_FLAG_HIDDEN);

@@ -143,6 +143,6 @@ void MapPacksScreen::render() {
     lv_obj_set_style_text_color(zoom_, colors.info, 0);
     lv_label_set_text(message_, view_model().map_message().c_str());
     lv_obj_set_style_text_color(message_, colors.text_disabled, 0);
-    set_key_guide("F/X Maps  Z/C Zoom  Enter Get/Use  D Delete  Esc Back");
+    set_key_guide("F/X Maps  Z/C Zoom  Enter Get/Use  DEL Remove  Esc Back");
 }
 }

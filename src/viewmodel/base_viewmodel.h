@@ -533,6 +533,7 @@ private:
     std::size_t raw_channel_index_{};
     bool remote_session_{};
     bool pineapple_session_{};
+    platform::wireless::PineappleBehaviorTracker pineapple_tracker_;
     std::vector<platform::wireless::PineappleObservation> pineapple_items_;
     std::size_t pineapple_cursor_{};
     std::size_t pineapple_action_cursor_{};

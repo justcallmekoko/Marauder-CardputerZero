@@ -605,7 +605,8 @@ void BaseViewModel::show_pineapple_page() {
     wifi_scan_details_expanded_ = true;
     model_.set_current_page(model::AppPage::WifiScan);
     publish_navigation();
-    if (!wifi_scan_running_) start_wifi_scan();
+    if (wifi_scan_running_) stop_wifi_capture();
+    start_wifi_scan(true);
 }
 void BaseViewModel::show_gps_tool(GpsTool tool) {
     bluetooth_session_.stop();
@@ -1760,6 +1761,7 @@ void BaseViewModel::start_wifi_scan(bool clear_results) {
         wifi_networks_.clear();
         station_refs_.clear();
         pineapple_items_.clear();
+        pineapple_tracker_.clear();
     }
     wifi_scan_detail_index_ = 0;
     wifi_client_index_ = 0;
@@ -1819,8 +1821,9 @@ void BaseViewModel::start_wifi_scan(bool clear_results) {
                     summary.kind == platform::wireless::FrameKind::RemoteId &&
                     platform::remote_id::decode_monitor_frame(bytes, static_cast<size_t>(count), remote_packet);
                 platform::wireless::PineappleObservation pineapple;
-                const bool has_pineapple = (raw_mode || pineapple_mode) && has_summary &&
-                    summary.kind == platform::wireless::FrameKind::Pineapple &&
+                const bool has_pineapple = pineapple_mode ?
+                    platform::wireless::inspect_pineapple_beacon(bytes, static_cast<size_t>(count), pineapple) :
+                    raw_mode && has_summary && summary.kind == platform::wireless::FrameKind::Pineapple &&
                     platform::wireless::detect_pineapple_beacon(bytes, static_cast<size_t>(count), pineapple);
                 const bool has_observation = wifi_list_builder_ &&
                     platform::wireless::parse_monitor_frame(bytes, static_cast<size_t>(count), observation);
@@ -2484,6 +2487,7 @@ void BaseViewModel::finish_pineapple_observations(std::vector<platform::wireless
     const auto now = lv_tick_get();
     bool changed = false;
     for (auto& seen : incoming) {
+        if (!pineapple_tracker_.observe(seen, now)) continue;
         auto item = std::find_if(pineapple_items_.begin(), pineapple_items_.end(),
                                  [&](const auto& candidate) { return candidate.mac == seen.mac; });
         if (item == pineapple_items_.end()) {
@@ -2496,8 +2500,7 @@ void BaseViewModel::finish_pineapple_observations(std::vector<platform::wireless
         ++item->beacons;
         item->last_seen_ms = now;
         item->clues |= seen.clues;
-        item->evidence = item->clues == 3 ? "OUI + beacon pattern" :
-            item->clues == 1 ? "Marauder OUI clue" : "Short beacon pattern";
+        item->evidence = platform::wireless::pineapple_evidence(item->clues);
         if (!seen.ssid.empty() && seen.ssid != "[hidden/unknown]") item->ssid = std::move(seen.ssid);
         if (seen.frequency_mhz) item->frequency_mhz = seen.frequency_mhz;
         if (seen.has_rssi) { item->rssi = seen.rssi; item->has_rssi = true; }

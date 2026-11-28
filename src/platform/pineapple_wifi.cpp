@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "pineapple_wifi.h"
 #include "raw_wifi.h"
+#include <algorithm>
+#include <cctype>
 #include <cstdio>
+#include <iterator>
+#include <string_view>
 
 namespace platform::wireless {
 namespace {
@@ -18,6 +22,22 @@ constexpr VendorClue clues[] = {
     {0x9CEFD5, "Panda Wireless Inc", 3}, {0x9CE5D5, "Panda Wireless Inc", 3},
     {0xDEADBE, "Unassigned / spoofed", 3},
 };
+constexpr uint32_t kPagerOui = 0x061337;
+constexpr uint32_t kBehaviorWindowMs = 60000;
+constexpr std::size_t kBehaviorSsidThreshold = 5;
+
+std::string lower(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    return value;
+}
+bool pager_ssid(std::string_view ssid) {
+    // Defaults corroborated by the MIT-licensed PineDetect project and Hak5's official Find Hackers payload.
+    const auto name = lower(std::string(ssid));
+    return name == "pager" || name == "pager-open" || name == "pager_open" ||
+           name == "pager-wpa" || name == "pinepager" || name.rfind("pineapple_", 0) == 0;
+}
 std::string mac_text(const uint8_t* mac) {
     char text[18];
     std::snprintf(text, sizeof(text), "%02X:%02X:%02X:%02X:%02X:%02X",
@@ -26,7 +46,20 @@ std::string mac_text(const uint8_t* mac) {
 }
 }
 
-bool detect_pineapple_beacon(const uint8_t* bytes, std::size_t size, PineappleObservation& out) {
+std::string pineapple_evidence(uint8_t clues) {
+    if ((clues & PineappleMultiSsid) && (clues & (PineapplePagerSsid | PineapplePagerAddress)))
+        return "Pager clue + multi-SSID behavior";
+    if ((clues & PineapplePagerSsid) && (clues & PineapplePagerAddress)) return "Pager SSID + address clue";
+    if (clues & PineapplePagerAddress) return "Pineapple Pager address clue";
+    if (clues & PineapplePagerSsid) return "Pineapple Pager SSID clue";
+    if (clues & PineappleMultiSsid) return "PineAP-style multi-SSID behavior";
+    if ((clues & PineappleLegacyAddress) && (clues & PineappleShortBeacon)) return "OUI + beacon pattern";
+    if (clues & PineappleLegacyAddress) return "Marauder OUI clue";
+    if (clues & PineappleShortBeacon) return "Short beacon pattern";
+    return "Unclassified beacon";
+}
+
+bool inspect_pineapple_beacon(const uint8_t* bytes, std::size_t size, PineappleObservation& out) {
     out = {};
     std::size_t header{};
     int frequency{}, rssi{};
@@ -54,19 +87,52 @@ bool detect_pineapple_beacon(const uint8_t* bytes, std::size_t size, PineappleOb
         short_beacon = ds + 3 <= length && frame[ds] == 3 && frame[ds + 1] == 1 &&
                        (ds + 3 == length || ds + 7 == length); // Some drivers retain a 4-byte FCS.
     }
-    if (!matched_vendor && !short_beacon) return false;
     FrameObservation beacon;
     if (!parse_monitor_frame(bytes, size, beacon) || !beacon.beacon) return false;
     out.mac = mac_text(frame + 10);
     out.ssid = beacon.ssid.empty() ? "[hidden/unknown]" : beacon.ssid;
-    out.vendor = matched_vendor ? matched_vendor : "Unknown";
-    out.clues = static_cast<uint8_t>((matched_vendor ? 1 : 0) | (short_beacon ? 2 : 0));
-    out.evidence = out.clues == 3 ? "OUI + beacon pattern" :
-                   matched_vendor ? "Marauder OUI clue" : "Short beacon pattern";
+    const bool pager_address = oui == kPagerOui;
+    const bool pager_name = pager_ssid(out.ssid);
+    out.vendor = pager_address ? "Hak5 local address" : matched_vendor ? matched_vendor : "Unknown";
+    out.clues = static_cast<uint8_t>((matched_vendor ? PineappleLegacyAddress : 0) |
+                                     (short_beacon ? PineappleShortBeacon : 0) |
+                                     (pager_name ? PineapplePagerSsid : 0) |
+                                     (pager_address ? PineapplePagerAddress : 0));
+    out.evidence = pineapple_evidence(out.clues);
     out.security = beacon.security;
     out.frequency_mhz = beacon.advertised_frequency_mhz ? beacon.advertised_frequency_mhz : frequency;
     out.rssi = rssi;
     out.has_rssi = has_rssi;
     return true;
+}
+
+bool detect_pineapple_beacon(const uint8_t* bytes, std::size_t size, PineappleObservation& out) {
+    return inspect_pineapple_beacon(bytes, size, out) && out.clues != 0;
+}
+
+bool PineappleBehaviorTracker::observe(PineappleObservation& observation, uint32_t now_ms) {
+    auto entry = std::find_if(entries_.begin(), entries_.end(), [&](const auto& candidate) {
+        return candidate.mac == observation.mac;
+    });
+    if (entry == entries_.end()) {
+        if (entries_.size() >= 128) entries_.erase(entries_.begin());
+        entries_.push_back({observation.mac, {}});
+        entry = std::prev(entries_.end());
+    }
+    auto& names = entry->ssids;
+    names.erase(std::remove_if(names.begin(), names.end(), [&](const auto& seen) {
+        return now_ms - seen.second > kBehaviorWindowMs;
+    }), names.end());
+    if (!observation.ssid.empty() && observation.ssid != "[hidden/unknown]") {
+        const auto name = lower(observation.ssid);
+        auto found = std::find_if(names.begin(), names.end(), [&](const auto& seen) { return seen.first == name; });
+        if (found == names.end()) {
+            if (names.size() >= 16) names.erase(names.begin());
+            names.emplace_back(name, now_ms);
+        } else found->second = now_ms;
+    }
+    if (names.size() >= kBehaviorSsidThreshold) observation.clues |= PineappleMultiSsid;
+    observation.evidence = pineapple_evidence(observation.clues);
+    return observation.clues != 0;
 }
 }

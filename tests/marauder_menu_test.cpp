@@ -5,9 +5,9 @@
 #include "marauder_menu.h"
 
 #include <string>
+#include <vector>
 
 using model::MarauderMenuAction;
-using model::MarauderMenuColor;
 using model::MarauderMenuModel;
 
 namespace {
@@ -17,188 +17,170 @@ bool select_index(MarauderMenuModel& menu, std::size_t index) {
     return menu.selected_index() == index;
 }
 
+bool expect_actions(MarauderMenuModel& menu,
+                    const std::vector<MarauderMenuAction>& actions,
+                    int& failure,
+                    int first_failure) {
+    if (menu.item_count() != actions.size()) {
+        failure = first_failure;
+        return false;
+    }
+    for (std::size_t i = 0; i < actions.size(); ++i) {
+        if (!select_index(menu, i) || menu.activate() != actions[i]) {
+            failure = first_failure + static_cast<int>(i) + 1;
+            return false;
+        }
+    }
+    return true;
+}
+
 } // namespace
 
 int main() {
     MarauderMenuModel menu;
-    MarauderMenuModel wardrive_settings;
-    select_index(wardrive_settings, 3); // Device.
-    if (wardrive_settings.activate() != MarauderMenuAction::None) return 60;
-    if (wardrive_settings.activate() != MarauderMenuAction::None) return 61; // Radios and GPS.
-    select_index(wardrive_settings, 4); // Wardrive setup.
-    if (wardrive_settings.activate() != MarauderMenuAction::None ||
-        wardrive_settings.columns() != 1 || wardrive_settings.item_count() != 3) return 62;
-    if (wardrive_settings.activate() != MarauderMenuAction::CycleWardriveDwell) return 63;
-    select_index(wardrive_settings, 1);
-    if (wardrive_settings.activate() != MarauderMenuAction::CycleWardrivePriority) return 64;
-    select_index(wardrive_settings, 2);
-    if (wardrive_settings.activate() != MarauderMenuAction::CycleWardriveAdapters) return 65;
-    wardrive_settings.move(0, 1);
-    if (wardrive_settings.selected_index() != 0) return 66;
-    wardrive_settings.move(0, -1);
-    if (wardrive_settings.selected_index() != 2) return 67;
-
-    MarauderMenuModel gps;
-    MarauderMenuModel bluetooth;
-    select_index(bluetooth, 1);
-    if (bluetooth.activate() != MarauderMenuAction::None || bluetooth.columns() != 2 ||
-        bluetooth.item_count() != 4 || std::string(bluetooth.title()) != "Bluetooth") return 76;
-    if (std::string(bluetooth.item(0).label) != "Recon" ||
-        std::string(bluetooth.item(1).label) != "Collection" ||
-        std::string(bluetooth.item(2).label) != "Attacks" ||
-        std::string(bluetooth.item(3).label) != "General") return 77;
-    if (bluetooth.activate() != MarauderMenuAction::None || bluetooth.depth() != 3 ||
-        bluetooth.item_count() != 2 || std::string(bluetooth.title()) != "Bluetooth > Recon") return 78;
-    if (bluetooth.activate() != MarauderMenuAction::OpenBluetoothDevices) return 79;
-    bluetooth.next();
-    if (bluetooth.activate() != MarauderMenuAction::None || bluetooth.depth() != 4 ||
-        bluetooth.columns() != 1 || bluetooth.item_count() != 6 ||
-        std::string(bluetooth.title()) != "Bluetooth > Device types") return 80;
-    const MarauderMenuAction device_actions[] = {
-        MarauderMenuAction::OpenBluetoothFindMy, MarauderMenuAction::OpenBluetoothIBeacon,
-        MarauderMenuAction::OpenBluetoothFlipper, MarauderMenuAction::OpenBluetoothFlock,
-        MarauderMenuAction::OpenBluetoothMeta, MarauderMenuAction::OpenBluetoothSerial
-    };
-    for (std::size_t i = 0; i < 6; ++i) {
-        if (bluetooth.depth() != 4 || bluetooth.activate() != device_actions[i]) return 81;
-        bluetooth.next();
+    if (menu.item_count() != 4 || menu.columns() != 2 || menu.depth() != 1) return 1;
+    const char* roots[] = {"WiFi", "Bluetooth", "Location", "Device"};
+    for (std::size_t i = 0; i < 4; ++i) {
+        if (std::string(menu.item(i).label) != roots[i] || !menu.item(i).opens_submenu) return 2 + static_cast<int>(i);
     }
-    bluetooth.move(0, -1);
-    if (bluetooth.selected_index() != 5 || !bluetooth.back() ||
-        bluetooth.selected_index() != 1 || !bluetooth.back() ||
-        bluetooth.selected_index() != 0) return 82;
-    select_index(bluetooth, 1);
-    if (bluetooth.activate() != MarauderMenuAction::None ||
-        std::string(bluetooth.title()) != "Bluetooth > Collection" ||
-        bluetooth.activate() != MarauderMenuAction::OpenBluetoothRaw) return 83;
-    bluetooth.back();
-    select_index(bluetooth, 2);
-    if (bluetooth.activate() != MarauderMenuAction::None ||
-        std::string(bluetooth.title()) != "Bluetooth > Attacks" ||
-        bluetooth.item(0).available || bluetooth.item(1).available) return 84;
-    bluetooth.back();
-    select_index(bluetooth, 3);
-    if (bluetooth.activate() != MarauderMenuAction::None ||
-        std::string(bluetooth.title()) != "Bluetooth > General" ||
-        bluetooth.activate() != MarauderMenuAction::OpenBluetoothAdapters) return 85;
-    select_index(gps, 2);
-    gps.activate();
-    gps.move(0, -1);
-    if (gps.selected_index() != 2) return 68;
-    gps.move(0, 1);
-    if (gps.selected_index() != 0) return 69;
-    gps.move(1, 0);
-    gps.move(0, 1); // The last row has no right-hand tile.
-    if (gps.selected_index() != 1) return 70;
-    if (menu.item_count() != 4 || menu.selected_index() != 0 || menu.depth() != 1) return 1;
-    if (std::string(menu.title()) != "MARAUDER") return 21;
-    const MarauderMenuColor root_colors[] = {
-        MarauderMenuColor::Green,
-        MarauderMenuColor::Cyan,
-        MarauderMenuColor::Red,
-        MarauderMenuColor::Blue,
-    };
-    for (std::size_t index = 0; index < menu.item_count(); ++index) {
-        if (menu.item(index).color != root_colors[index]) return 22;
-    }
-    menu.move(-1, 0);
-    if (menu.selected_index() != 1) return 30;
-    menu.move(1, 0);
-    if (menu.selected_index() != 0) return 33;
-    menu.move(0, -1);
-    if (menu.selected_index() != 2) return 34;
-    menu.move(0, 1);
-    if (menu.selected_index() != 0) return 35;
-    menu.move(0, 1);
-    menu.move(1, 0);
-    if (menu.selected_index() != 3 || menu.depth() != 1) return 31;
-    menu.move(1, 0);
-    if (menu.selected_index() != 2) return 36;
-    menu.move(-1, 0);
-    if (menu.selected_index() != 3) return 37;
-    menu.move(0, 1);
-    if (menu.selected_index() != 1) return 38;
-    menu.move(0, -1);
-    menu.move(-1, 0);
-    menu.move(0, -1);
-    if (menu.selected_index() != 0) return 32;
-    menu.previous();
-    if (menu.selected_index() != 3) return 2;
-    menu.next();
-    if (menu.selected_index() != 0) return 3;
 
-    // WiFi > Recon > Access Points routes to live monitor capture.
-    if (menu.activate() != MarauderMenuAction::None || menu.depth() != 2) return 4;
-    if (std::string(menu.item(0).label) != "Recon" ||
-        std::string(menu.item(1).label) != "Collection") return 73;
-    if (menu.activate() != MarauderMenuAction::None || menu.depth() != 3) return 5;
-    if (std::string(menu.title()) != "WiFi > Recon") return 74;
-    if (menu.activate() != MarauderMenuAction::OpenWifiScan) return 6;
-
-    if (menu.item_count() != 1) return 7;
-    menu.back();
-    menu.move(1, 0); // WiFi Collection.
-    if (menu.activate() != MarauderMenuAction::None) return 42;
-    if (std::string(menu.title()) != "WiFi > Collection") return 75;
-    menu.move(1, 0); // Raw capture.
-    if (menu.activate() != MarauderMenuAction::OpenRawCapture) return 43;
-    menu.move(-1, 0); // Pineapple scan.
-    menu.move(0, 1);
-    if (menu.activate() != MarauderMenuAction::OpenPineapple) return 45;
-    menu.move(1, 0);
-    if (menu.selected_index() != 3) return 46;
-    menu.move(0, 1);
-    if (menu.selected_index() != 1) return 47;
-    menu.move(0, -1); // Remote ID.
-    if (menu.activate() != MarauderMenuAction::OpenRemoteId) return 44;
-    menu.back();
+    // Tile navigation wraps while preserving valid cells in uneven rows.
     menu.move(-1, 0);
+    if (menu.selected_index() != 1) return 10;
+    menu.move(0, -1);
+    if (menu.selected_index() != 3) return 11;
+    menu.move(1, 0);
+    if (menu.selected_index() != 2) return 12;
+    select_index(menu, 0);
+
+    // WiFi is organized by intent. Attack placeholders remain visible.
     menu.activate();
-
-    // Back restores the selection in each parent frame.
-    if (!menu.back() || menu.depth() != 2 || menu.selected_index() != 0) return 9;
-    if (!menu.back() || menu.depth() != 1 || menu.selected_index() != 0) return 10;
-    if (menu.back()) return 11;
-
-    // Every root category opens a non-empty submenu and returns to its root selection.
-    for (std::size_t root_index = 0; root_index < 4; ++root_index) {
-        if (!select_index(menu, root_index)) return 12;
-        if (!menu.item(root_index).opens_submenu || !menu.item(root_index).available) return 13;
-        if (menu.activate() != MarauderMenuAction::None || menu.depth() != 2 || menu.item_count() == 0) return 14;
-        if (!menu.back() || menu.depth() != 1 || menu.selected_index() != root_index) return 15;
-    }
-
-    // Device and Settings expose the currently implemented actions.
+    if (menu.depth() != 2 || menu.item_count() != 4 || std::string(menu.item(0).label) != "Discover" ||
+        std::string(menu.item(1).label) != "Monitor" || std::string(menu.item(2).label) != "Attacks" ||
+        std::string(menu.item(3).label) != "Setup") return 20;
+    menu.activate();
+    if (menu.depth() != 3 || menu.item_count() != 2 || std::string(menu.title()) != "WiFi > Discover") return 21;
+    if (menu.activate() != MarauderMenuAction::OpenWifiScan) return 22;
+    menu.next();
+    if (menu.activate() != MarauderMenuAction::OpenPineapple) return 23;
+    menu.back();
+    select_index(menu, 1);
+    menu.activate();
+    if (menu.item_count() != 2 || menu.activate() != MarauderMenuAction::OpenRawCapture) return 24;
+    menu.next();
+    if (menu.activate() != MarauderMenuAction::OpenTraffic) return 25;
+    menu.back();
+    select_index(menu, 2);
+    menu.activate();
+    if (menu.item_count() != 3 || menu.item(0).available || menu.item(1).available || menu.item(2).available) return 26;
+    menu.back();
     select_index(menu, 3);
     menu.activate();
-    if (menu.columns() != 1 || menu.item_count() != 5) return 16;
-    menu.move(0, -1);
-    if (menu.selected_index() != 4) return 71;
-    menu.move(0, 1);
-    if (menu.selected_index() != 0) return 72;
-    const std::vector<std::vector<MarauderMenuAction>> groups = {
-        {MarauderMenuAction::OpenRadioSetup, MarauderMenuAction::OpenAdapters,
-         MarauderMenuAction::OpenBluetoothAdapters, MarauderMenuAction::CycleTrafficSource,
-         MarauderMenuAction::None},
-        {MarauderMenuAction::Brightness, MarauderMenuAction::DimDelay, MarauderMenuAction::CycleBatteryDisplay,
-         MarauderMenuAction::CycleCensor},
-        {MarauderMenuAction::CycleStorage, MarauderMenuAction::OpenPcapFiles, MarauderMenuAction::OpenWardriveFiles,
-         MarauderMenuAction::OpenMapPacks,
-         MarauderMenuAction::Reserve, MarauderMenuAction::CycleCache},
-        {MarauderMenuAction::UploadPolicy, MarauderMenuAction::WigleName, MarauderMenuAction::WigleToken,
-         MarauderMenuAction::WdgKey, MarauderMenuAction::CheckWigle, MarauderMenuAction::CheckWdg}
+    if (menu.item_count() != 3 || menu.activate() != MarauderMenuAction::OpenAdapters) return 27;
+    menu.next();
+    if (menu.activate() != MarauderMenuAction::CycleTrafficSource) return 28;
+    menu.next();
+    if (menu.item(2).available || menu.activate() != MarauderMenuAction::None) return 29;
+    menu.back();
+    menu.back();
+
+    // Bluetooth filtered discovery is flattened into one keyboard-reachable list.
+    select_index(menu, 1);
+    menu.activate();
+    if (menu.item_count() != 4 || std::string(menu.item(0).label) != "Discover" ||
+        std::string(menu.item(1).label) != "Monitor" || std::string(menu.item(2).label) != "Attacks" ||
+        std::string(menu.item(3).label) != "Setup") return 40;
+    menu.activate();
+    if (menu.columns() != 1 || menu.item_count() != 7 || std::string(menu.title()) != "Bluetooth > Discover") return 41;
+    const MarauderMenuAction bluetooth_actions[] = {
+        MarauderMenuAction::OpenBluetoothDevices,
+        MarauderMenuAction::OpenBluetoothFindMy,
+        MarauderMenuAction::OpenBluetoothIBeacon,
+        MarauderMenuAction::OpenBluetoothFlipper,
+        MarauderMenuAction::OpenBluetoothFlock,
+        MarauderMenuAction::OpenBluetoothMeta,
+        MarauderMenuAction::OpenBluetoothSerial,
     };
-    for (const auto& group : groups) {
-        menu.activate();
-        if (menu.item_count() != group.size() || menu.columns() != 1) return 17;
-        for (auto action : group) {
-            if (menu.activate() != action) return 18;
-            if (action == MarauderMenuAction::None) menu.back();
-            menu.next();
-        }
-        menu.back();
-        menu.next();
+    for (std::size_t i = 0; i < 7; ++i) {
+        if (!select_index(menu, i) || menu.activate() != bluetooth_actions[i]) return 42 + static_cast<int>(i);
     }
-    if (menu.activate() != MarauderMenuAction::OpenDiagnostics) return 41;
+    menu.move(0, 1);
+    if (menu.selected_index() != 0) return 50;
+    menu.move(0, -1);
+    if (menu.selected_index() != 6) return 51;
+    menu.back();
+    if (menu.selected_index() != 0) return 52;
+    select_index(menu, 1);
+    menu.activate();
+    if (menu.item_count() != 1 || menu.activate() != MarauderMenuAction::OpenBluetoothRaw) return 53;
+    menu.back();
+    select_index(menu, 2);
+    menu.activate();
+    if (menu.item_count() != 2 || menu.item(0).available || menu.item(1).available) return 54;
+    menu.back();
+    select_index(menu, 3);
+    menu.activate();
+    if (menu.item_count() != 2 || menu.activate() != MarauderMenuAction::OpenBluetoothAdapters || menu.item(1).available) return 55;
+    menu.back();
+    menu.back();
+
+    // Cross-radio and GPS/map workflows live together under Location.
+    select_index(menu, 2);
+    menu.activate();
+    if (menu.columns() != 1 || menu.item_count() != 6 || std::string(menu.title()) != "Location") return 60;
+    const MarauderMenuAction location_actions[] = {
+        MarauderMenuAction::OpenRemoteId,
+        MarauderMenuAction::OpenWardrive,
+        MarauderMenuAction::OpenGpsTrack,
+        MarauderMenuAction::OpenGpsInfo,
+        MarauderMenuAction::OpenMapPacks,
+    };
+    for (std::size_t i = 0; i < 5; ++i) {
+        if (!select_index(menu, i) || menu.activate() != location_actions[i]) return 61 + static_cast<int>(i);
+    }
+    select_index(menu, 5);
+    if (menu.activate() != MarauderMenuAction::None || menu.depth() != 3 || menu.item_count() != 3) return 66;
+    const MarauderMenuAction wardrive_actions[] = {
+        MarauderMenuAction::CycleWardriveDwell,
+        MarauderMenuAction::CycleWardrivePriority,
+        MarauderMenuAction::CycleWardriveAdapters,
+    };
+    for (std::size_t i = 0; i < 3; ++i) {
+        if (!select_index(menu, i) || menu.activate() != wardrive_actions[i]) return 67 + static_cast<int>(i);
+    }
+    menu.back();
+    if (menu.selected_index() != 5) return 70;
+    menu.back();
+
+    // Device contains hardware, presentation/privacy, files, accounts, and diagnostics.
+    select_index(menu, 3);
+    menu.activate();
+    if (menu.columns() != 1 || menu.item_count() != 5) return 80;
+    if (menu.activate() != MarauderMenuAction::OpenRadioSetup) return 81;
+    select_index(menu, 1);
+    menu.activate();
+    int failure = 0;
+    if (!expect_actions(menu, {MarauderMenuAction::Brightness, MarauderMenuAction::DimDelay,
+                               MarauderMenuAction::CycleBatteryDisplay, MarauderMenuAction::CycleCensor},
+                        failure, 82)) return failure;
+    menu.back();
+    select_index(menu, 2);
+    menu.activate();
+    if (!expect_actions(menu, {MarauderMenuAction::CycleStorage, MarauderMenuAction::OpenPcapFiles,
+                               MarauderMenuAction::OpenWardriveFiles, MarauderMenuAction::Reserve,
+                               MarauderMenuAction::CycleCache}, failure, 90)) return failure;
+    menu.back();
+    select_index(menu, 3);
+    menu.activate();
+    if (!expect_actions(menu, {MarauderMenuAction::UploadPolicy, MarauderMenuAction::WigleName,
+                               MarauderMenuAction::WigleToken, MarauderMenuAction::WdgKey,
+                               MarauderMenuAction::CheckWigle, MarauderMenuAction::CheckWdg},
+                        failure, 100)) return failure;
+    menu.back();
+    select_index(menu, 4);
+    if (menu.activate() != MarauderMenuAction::OpenDiagnostics) return 110;
+
+    // Back restores the selected row in every parent frame.
+    if (!menu.back() || menu.selected_index() != 3 || menu.depth() != 1 || menu.back()) return 120;
     return 0;
 }

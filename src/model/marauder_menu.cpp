@@ -19,80 +19,73 @@ const std::vector<Item>& items_for(Id menu) {
     static const std::vector<Item> main = {
         {"WiFi", Color::Green, Action::None, Id::Wifi, true, true},
         {"Bluetooth", Color::Cyan, Action::None, Id::Bluetooth, true, true},
-        {"GPS", Color::Red, Action::None, Id::Gps, true, true},
+        {"Location", Color::Red, Action::None, Id::Location, true, true},
         {"Device", Color::Blue, Action::None, Id::Device, true, true},
     };
     static const std::vector<Item> wifi = {
-        {"Recon", Color::Orange, Action::None, Id::WifiNetworks, true, true},
-        {"Collection", Color::Yellow, Action::None, Id::WifiActivity, true, true},
+        {"Discover", Color::Orange, Action::None, Id::WifiDiscover, true, true},
+        {"Monitor", Color::Yellow, Action::None, Id::WifiMonitor, true, true},
         {"Attacks", Color::Red, Action::None, Id::WifiAttacks, true, true},
-        {"General", Color::Purple, Action::None, Id::WifiGeneral, true, true},
+        {"Setup", Color::Purple, Action::None, Id::WifiSetup, true, true},
     };
-    static const std::vector<Item> wifi_networks = {
+    static const std::vector<Item> wifi_discover = {
         {"Access Points", Color::Orange, Action::OpenWifiScan, Id::Main, false, true, RadioRequirement::Monitor},
+        {"Pineapple Detector", Color::Yellow, Action::OpenPineapple, Id::Main, false, true, RadioRequirement::Monitor},
     };
-    static const std::vector<Item> wifi_activity = {
-        {"Traffic graph", Color::Green, Action::OpenTraffic, Id::Main, false, true, RadioRequirement::Selected},
-        {"Raw capture", Color::Orange, Action::OpenRawCapture, Id::Main, false, true, RadioRequirement::Monitor},
-        {"Pineapple scan", Color::Yellow, Action::OpenPineapple, Id::Main, false, true, RadioRequirement::Monitor},
-        {"Remote ID", Color::Magenta, Action::OpenRemoteId, Id::Main, false, true},
+    static const std::vector<Item> wifi_monitor = {
+        {"Raw Frames", Color::Orange, Action::OpenRawCapture, Id::Main, false, true, RadioRequirement::Monitor},
+        {"Traffic Graph", Color::Green, Action::OpenTraffic, Id::Main, false, true, RadioRequirement::Selected},
     };
     static const std::vector<Item> wifi_attacks = {
         {"Deauth", Color::Red, Action::None, Id::Main, false, false},
         {"Beacon Spam", Color::Orange, Action::None, Id::Main, false, false},
         {"Evil Portal", Color::Magenta, Action::None, Id::Main, false, false},
     };
-    static const std::vector<Item> wifi_general = {
-        {"Adapter Setup", Color::Purple, Action::OpenAdapters, Id::Main, false, true},
+    static const std::vector<Item> wifi_setup = {
+        {"WiFi Adapter", Color::Purple, Action::OpenAdapters, Id::Main, false, true},
+        {"Traffic Source", Color::Yellow, Action::CycleTrafficSource, Id::Main, false, true},
         {"Saved Networks", Color::LightGrey, Action::None, Id::Main, false, false},
     };
     static const std::vector<Item> bluetooth = {
-        {"Recon", Color::Orange, Action::None, Id::BluetoothRecon, true, true},
-        {"Collection", Color::Yellow, Action::None, Id::BluetoothCollection, true, true},
+        {"Discover", Color::Orange, Action::None, Id::BluetoothDiscover, true, true},
+        {"Monitor", Color::Yellow, Action::None, Id::BluetoothMonitor, true, true},
         {"Attacks", Color::Red, Action::None, Id::BluetoothAttacks, true, true},
-        {"General", Color::Purple, Action::None, Id::BluetoothGeneral, true, true},
+        {"Setup", Color::Purple, Action::None, Id::BluetoothSetup, true, true},
     };
-    static const std::vector<Item> bluetooth_recon = {
-        {"Nearby devices", Color::Cyan, Action::OpenBluetoothDevices, Id::Main, false, true},
-        {"Device types", Color::Magenta, Action::None, Id::BluetoothDevices, true, true},
-    };
-    static const std::vector<Item> bluetooth_collection = {
-        {"Raw feed", Color::Cyan, Action::OpenBluetoothRaw, Id::Main, false, true},
-    };
-    static const std::vector<Item> bluetooth_attacks = {
-        {"Advertisement tools", Color::Orange, Action::None, Id::Main, false, false},
-        {"Spoofing tools", Color::Red, Action::None, Id::Main, false, false},
-    };
-    static const std::vector<Item> bluetooth_general = {
-        {"Adapter Setup", Color::Purple, Action::OpenBluetoothAdapters, Id::Main, false, true},
-        {"Saved devices", Color::LightGrey, Action::None, Id::Main, false, false},
-    };
-    static const std::vector<Item> bluetooth_devices = {
+    static const std::vector<Item> bluetooth_discover = {
+        {"Nearby Devices", Color::Cyan, Action::OpenBluetoothDevices, Id::Main, false, true},
         {"Find My", Color::Green, Action::OpenBluetoothFindMy, Id::Main, false, true},
         {"iBeacon", Color::Blue, Action::OpenBluetoothIBeacon, Id::Main, false, true},
         {"Flipper", Color::Magenta, Action::OpenBluetoothFlipper, Id::Main, false, true},
         {"Flock", Color::Orange, Action::OpenBluetoothFlock, Id::Main, false, true},
         {"Meta", Color::Purple, Action::OpenBluetoothMeta, Id::Main, false, true},
-        {"Serial modules", Color::Red, Action::OpenBluetoothSerial, Id::Main, false, true},
+        {"Serial Modules", Color::Red, Action::OpenBluetoothSerial, Id::Main, false, true},
     };
-    static const std::vector<Item> gps = {
-        {"GPS Info", Color::Red, Action::OpenGpsInfo, Id::Main, false, true},
+    static const std::vector<Item> bluetooth_monitor = {
+        {"Raw Advertisements", Color::Cyan, Action::OpenBluetoothRaw, Id::Main, false, true},
+    };
+    static const std::vector<Item> bluetooth_attacks = {
+        {"Advertisement tools", Color::Orange, Action::None, Id::Main, false, false},
+        {"Spoofing tools", Color::Red, Action::None, Id::Main, false, false},
+    };
+    static const std::vector<Item> bluetooth_setup = {
+        {"Bluetooth Adapter", Color::Purple, Action::OpenBluetoothAdapters, Id::Main, false, true},
+        {"Saved Devices", Color::LightGrey, Action::None, Id::Main, false, false},
+    };
+    static const std::vector<Item> location = {
+        {"Remote ID", Color::Magenta, Action::OpenRemoteId, Id::Main, false, true},
         {"Wardrive", Color::Green, Action::OpenWardrive, Id::Main, false, true},
-        {"Track", Color::Orange, Action::OpenGpsTrack, Id::Main, false, true},
+        {"GPS Track", Color::Orange, Action::OpenGpsTrack, Id::Main, false, true},
+        {"GPS Status", Color::Red, Action::OpenGpsInfo, Id::Main, false, true},
+        {"Offline Maps", Color::Cyan, Action::OpenMapPacks, Id::Main, false, true},
+        {"Wardrive Settings", Color::Yellow, Action::None, Id::WardriveSettings, true, true},
     };
     static const std::vector<Item> device = {
-        {"Radios and GPS", Color::Cyan, Action::None, Id::Radios, true, true},
-        {"Display and power", Color::Green, Action::None, Id::Display, true, true},
-        {"Storage and memory", Color::Blue, Action::None, Id::FilesAndMemory, true, true},
-        {"Accounts and uploads", Color::Magenta, Action::None, Id::Accounts, true, true},
+        {"Radio Setup", Color::Cyan, Action::OpenRadioSetup, Id::Main, false, true},
+        {"Display & Privacy", Color::Green, Action::None, Id::Display, true, true},
+        {"Files & Storage", Color::Blue, Action::None, Id::FilesAndMemory, true, true},
+        {"Accounts & Uploads", Color::Magenta, Action::None, Id::Accounts, true, true},
         {"System Info", Color::Purple, Action::OpenDiagnostics, Id::Main, false, true},
-    };
-    static const std::vector<Item> radios = {
-        {"Radio setup", Color::Cyan, Action::OpenRadioSetup, Id::Main, false, true},
-        {"WiFi adapter", Color::Green, Action::OpenAdapters, Id::Main, false, true},
-        {"Bluetooth adapter", Color::Blue, Action::OpenBluetoothAdapters, Id::Main, false, true},
-        {"Graph source", Color::Yellow, Action::CycleTrafficSource, Id::Main, false, true},
-        {"Wardrive setup", Color::Orange, Action::None, Id::WardriveSettings, true, true},
     };
     static const std::vector<Item> wardrive_settings = {
         {"Channel dwell", Color::Green, Action::CycleWardriveDwell, Id::Main, false, true},
@@ -118,7 +111,6 @@ const std::vector<Item>& items_for(Id menu) {
         {"Screenshots", Color::Blue, Action::CycleStorage, Id::Main, false, true},
         {"Saved captures", Color::Red, Action::OpenPcapFiles, Id::Main, false, true},
         {"Wardrive logs", Color::Green, Action::OpenWardriveFiles, Id::Main, false, true},
-        {"Offline maps", Color::Cyan, Action::OpenMapPacks, Id::Main, false, true},
         {"Keep free", Color::Blue, Action::Reserve, Id::Main, false, true},
         {"Image cache", Color::Purple, Action::CycleCache, Id::Main, false, true},
     };
@@ -126,19 +118,17 @@ const std::vector<Item>& items_for(Id menu) {
         case Id::FilesAndMemory: return files_memory;
         case Id::Main: return main;
         case Id::Wifi: return wifi;
-        case Id::WifiNetworks: return wifi_networks;
-        case Id::WifiActivity: return wifi_activity;
+        case Id::WifiDiscover: return wifi_discover;
+        case Id::WifiMonitor: return wifi_monitor;
         case Id::WifiAttacks: return wifi_attacks;
-        case Id::WifiGeneral: return wifi_general;
+        case Id::WifiSetup: return wifi_setup;
         case Id::Bluetooth: return bluetooth;
-        case Id::BluetoothRecon: return bluetooth_recon;
-        case Id::BluetoothCollection: return bluetooth_collection;
+        case Id::BluetoothDiscover: return bluetooth_discover;
+        case Id::BluetoothMonitor: return bluetooth_monitor;
         case Id::BluetoothAttacks: return bluetooth_attacks;
-        case Id::BluetoothGeneral: return bluetooth_general;
-        case Id::BluetoothDevices: return bluetooth_devices;
-        case Id::Gps: return gps;
+        case Id::BluetoothSetup: return bluetooth_setup;
+        case Id::Location: return location;
         case Id::Device: return device;
-        case Id::Radios: return radios;
         case Id::WardriveSettings: return wardrive_settings;
         case Id::Display: return display;
         case Id::Accounts: return accounts;
@@ -150,23 +140,21 @@ const char* title_for(Id menu) {
     switch (menu) {
         case Id::Main: return "MARAUDER";
         case Id::Wifi: return "WiFi";
-        case Id::WifiNetworks: return "WiFi > Recon";
-        case Id::WifiActivity: return "WiFi > Collection";
+        case Id::WifiDiscover: return "WiFi > Discover";
+        case Id::WifiMonitor: return "WiFi > Monitor";
         case Id::WifiAttacks: return "WiFi > Attacks";
-        case Id::WifiGeneral: return "WiFi > General";
+        case Id::WifiSetup: return "WiFi > Setup";
         case Id::Bluetooth: return "Bluetooth";
-        case Id::BluetoothRecon: return "Bluetooth > Recon";
-        case Id::BluetoothCollection: return "Bluetooth > Collection";
+        case Id::BluetoothDiscover: return "Bluetooth > Discover";
+        case Id::BluetoothMonitor: return "Bluetooth > Monitor";
         case Id::BluetoothAttacks: return "Bluetooth > Attacks";
-        case Id::BluetoothGeneral: return "Bluetooth > General";
-        case Id::BluetoothDevices: return "Bluetooth > Device types";
-        case Id::Gps: return "GPS";
+        case Id::BluetoothSetup: return "Bluetooth > Setup";
+        case Id::Location: return "Location";
         case Id::Device: return "Device";
-        case Id::Radios: return "Radios and GPS";
-        case Id::WardriveSettings: return "Wardrive setup";
-        case Id::Display: return "Display and power";
-        case Id::Accounts: return "Accounts and uploads";
-        case Id::FilesAndMemory: return "Storage and memory";
+        case Id::WardriveSettings: return "Wardrive Settings";
+        case Id::Display: return "Display & Privacy";
+        case Id::Accounts: return "Accounts & Uploads";
+        case Id::FilesAndMemory: return "Files & Storage";
     }
     return "MARAUDER";
 }
@@ -187,13 +175,13 @@ const MarauderMenuItem& MarauderMenuModel::item(std::size_t index) const {
 }
 std::size_t MarauderMenuModel::columns() const {
     switch (current_menu()) {
-        case MarauderMenuId::Radios:
         case MarauderMenuId::WardriveSettings:
         case MarauderMenuId::Display:
         case MarauderMenuId::Device:
         case MarauderMenuId::FilesAndMemory:
-        case MarauderMenuId::Accounts: return 1;
-        case MarauderMenuId::BluetoothDevices: return 1;
+        case MarauderMenuId::Accounts:
+        case MarauderMenuId::BluetoothDiscover:
+        case MarauderMenuId::Location: return 1;
         default: return 2;
     }
 }
